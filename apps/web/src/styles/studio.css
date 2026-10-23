@@ -37,7 +37,7 @@
 .cx-acc .av{display:block;width:34px;height:34px;border-radius:50%;background:conic-gradient(from 200deg,#ff7a90,#ffd46b,#7cf0a8,#6bb7ff,#c38bff,#ff7a90)}
 
 /* Panneau d'outils */
-.cx-panel{min-height:0;display:flex;flex-direction:column;gap:14px;padding:4px 4px 0;overflow:hidden}
+.cx-panel{min-height:0;display:flex;flex-direction:column;gap:14px;padding:12px 12px 0;border:1px solid var(--edge);border-radius:18px;background:var(--panel);overflow:hidden}
 .cx-tabs{flex:none;display:flex;gap:4px}
 .cx-tabs button{min-height:40px;padding:0 16px;border:0;border-radius:999px;background:none;color:var(--ink-3);font-size:15px;font-weight:600;cursor:pointer}
 .cx-tabs button:hover{color:var(--ink)}
@@ -75,7 +75,7 @@
 .cx-panel .cn .cn-model,.cx-panel .cn-model{max-width:100%}
 /* Le panneau partagé de l'écran Vidéo : sans son propre défilement, c'est la colonne qui défile ; Générer reste collé en bas. */
 .cx-panel .ep{flex:1;display:flex;flex-direction:column;gap:14px}
-.cx-panel .ep-gen{background:linear-gradient(transparent,#0f1012 28%)}
+.cx-panel .ep-gen{background:linear-gradient(transparent,var(--panel) 28%)}
 /* Fidélité de l'éditeur : libellés en capitales, vignettes en pointillés, invite encadrée, réglages compacts. */
 .cx-panel .ep-sec>h2,.cx-panel .ep-sec>div>h2,.cx-panel .ep-row h2{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .cx-panel .ep-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
