@@ -1,4 +1,3 @@
-import { RECIPES } from '@studio/catalog/recipes'
 import { PREVIEW } from '../../lib/templatePreviews.js'
 import montage from '../../assets/hero/montage.jpg'
 import portrait from '../../assets/hero/influenceur.jpg'
@@ -15,12 +14,34 @@ export const THUMBS = Object.fromEntries(Object.entries(PREVIEW).map(([id, p]) =
 export const TOOLS = {
   image: [
     { id: 'image', icon: 'img', title: 'Générateur d’images', desc: 'Créez des images à partir d’un texte' },
+    { id: 'editor', icon: 'edit', title: 'Éditeur d’images', desc: 'Éditez et modifiez des images existantes' },
+    { id: 'upscaler', icon: 'upscale', title: 'Améliorateur d’images', desc: 'Améliorez la résolution et les détails' },
+    { id: 'cinematic', icon: 'film', title: 'Plan cinématographique', desc: 'Générez des compositions cinématographiques' },
+    { id: 'variations', icon: 'layers', title: 'Variations', desc: 'Créez des variations d’une image' },
+    { id: 'skin-enhancer', icon: 'sparkles', title: 'Améliorateur de peau', desc: 'Retouchez et améliorez les détails de la peau' },
+    { id: 'change-camera', icon: 'camera', title: 'Changer de caméra', desc: 'Ajustez l’angle de la caméra et l’objectif' },
+    { id: 'mockup-generator', icon: 'mockup', title: 'Générateur de maquettes', desc: 'Placez des designs sur des maquettes de produits' },
+    { id: 'remove-background', icon: 'scissors', title: 'Supprimer l’arrière-plan', desc: 'Isolez les sujets des arrière-plans' },
+    { id: 'relight', icon: 'sun', title: 'Rééclairage', desc: 'Modifiez l’éclairage et l’atmosphère' },
   ],
   video: [
-    { id: 'video-gen', icon: 'vid', title: 'Générateur vidéo', desc: 'Créez une vidéo à partir d’un texte ou d’une image' },
     { id: 'video-refs', icon: 'layers', title: 'Références et montage', desc: 'Citez images, vidéos et sons ; prolongez ou modifiez une vidéo' },
+    { id: 'video-gen', icon: 'video', title: 'Générateur de vidéos', desc: 'Créez des vidéos à partir de descriptions textuelles' },
+    { id: 'clip-editor', icon: 'edit', title: 'Éditeur de clips', desc: 'Réglez, coupez et éditez des clips vidéo' },
+    { id: 'video-upscaler', icon: 'upscale', title: 'Améliorateur de vidéos', desc: 'Améliorez la résolution vidéo' },
+    { id: 'modify-video', icon: 'sparkles', title: 'Modifier la vidéo', desc: 'Modifiez votre vidéo avec l’IA' },
+    { id: 'video-project-editor', icon: 'project', title: 'Éditeur de projet vidéo', desc: 'Éditez des projets vidéo multi-clips' },
+    { id: 'speak', icon: 'speak', title: 'Parler', desc: 'Générez des vidéos de discussion réalistes' },
+    { id: 'video-relight', icon: 'sun', title: 'Rééclairage vidéo', desc: 'Modifiez l’éclairage et l’atmosphère' },
   ],
-  recipe: RECIPES.map((r) => ({ id: r.id, thumb: THUMBS[r.id], title: r.name, desc: r.blurb })),
+  audio: [
+    { id: 'voice-generator', icon: 'mic', title: 'Générateur de voix', desc: 'Générez des voix off réalistes' },
+    { id: 'music-generator', icon: 'music', title: 'Générateur de musique', desc: 'Créez de la musique à partir de descriptions textuelles' },
+    { id: 'audio-generator', icon: 'audio', title: 'Générateur audio', desc: 'Créez de l’audio à partir de descriptions textuelles' },
+    { id: 'sound-effect-generator', icon: 'effect', title: 'Générateur d’effets sonores', desc: 'Créez des effets sonores personnalisés' },
+    { id: 'voice-changer', icon: 'changer', title: 'Changeur de voix', desc: 'Transformez les caractéristiques de la voix' },
+    { id: 'audio-isolation', icon: 'isolation', title: 'Isolation audio', desc: 'Supprimez le bruit de fond de l’audio' },
+  ]
 }
 export const TAB_LABEL = { image: 'Image', video: 'Vidéo', recipe: 'Modèles' }
 export const toolById = (id) => Object.values(TOOLS).flat().find((t) => t.id === id)
