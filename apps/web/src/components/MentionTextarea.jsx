@@ -16,7 +16,7 @@ const OPEN = /(^|\s)@([^\s@]*)$/ // « @ » en début de texte ou après un espa
  * (dont le texte est transparent), la zone grandit avec son contenu pour que les deux restent alignées.
  * Retour arrière juste après une référence : elle part en entier. Expose `focus()` et `insertAt(text?)`.
  */
-const MentionTextarea = forwardRef(function MentionTextarea({ value, onChange, items = [], pattern = '[\\w-]+', isRef, roles = {}, onPick, emptyHint, ...rest }, ref) {
+const MentionTextarea = forwardRef(function MentionTextarea({ value, onChange, items = [], pattern = '[\\w-]+', isRef, roles = {}, onPick, emptyHint, mentions = true, ...rest }, ref) {
   const ta = useRef(null)
   const back = useRef(null)
   const wrap = useRef(null)
@@ -45,6 +45,7 @@ const MentionTextarea = forwardRef(function MentionTextarea({ value, onChange, i
   }, [menu, items])
 
   const detect = (text, caret) => {
+    if (!mentions) return setMenu(null)
     const m = OPEN.exec(text.slice(0, caret))
     if (!m) return setMenu(null)
     const r = ta.current.getBoundingClientRect()
