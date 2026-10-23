@@ -17,6 +17,7 @@ import { TOOLS, tabOf } from '../components/cinema/tools.js'
 import BalanceChip from '../components/BalanceChip.jsx'
 import ProjectPicker from '../components/cinema/ProjectPicker.jsx'
 import { CreateLeft } from './video/CreateTab.jsx'
+import SpeakPanel from './video/SpeakPanel.jsx'
 import { AccountMenu } from '../lib/auth.jsx'
 import { RechargeButton } from '../lib/rechargeDialog.jsx'
 import AssetModal from '../components/cinema/AssetModal.jsx'
@@ -276,6 +277,7 @@ export default function Cinema() {
               <div className="cn-field" id="cn-plan" role={video && s.multi ? 'tabpanel' : undefined} aria-labelledby={video && s.multi ? `plan-tab-${s.active}` : undefined}>
                 <MentionTextarea
                   ref={area}
+                  mentions={video}
                   value={text}
                   onChange={(t) => { setText(t); setError('') }}
                   items={video ? items : []}
@@ -367,6 +369,7 @@ export default function Cinema() {
       <ToolPanel tab={tab} onTab={openTab} tool={tool} onTool={openTool} onTemplates={() => setView('templates')}>
       {tool === 'video-gen'   && <CreateLeft key="generate" mode="generate" banner={false} addLabel="Ajouter un média" />}
       {tool === 'modify-video' && <CreateLeft key="edit"    mode="edit"     banner={false} />}
+      {tool === 'speak'       && <SpeakPanel />}
       {(tool === 'image' || tool === 'video-refs') && composer}
         {recipe && recipeId && (runBusy
           ? <p className="cx-note">Le modèle « {recipeById(recipeId).name} » est en cours : suivez-le dans Créations.</p>
