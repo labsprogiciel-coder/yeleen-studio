@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Icon from '../lib/icons.jsx'  
-import Menu from '../../components/Menu.jsx'
+import Menu from '../components/Menu.jsx'
 import { Section, DropTile, AddMedia, PlanSection, OptionChips, GenerateBar } from '../../components/GenPanel.jsx'
 import useGenSettings from '../../lib/useGenSettings.js'
 import { VIDEO_MODELS, findModel, priceLabel } from '@studio/catalog'
