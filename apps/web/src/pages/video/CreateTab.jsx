@@ -11,7 +11,7 @@ import { useAssets } from '../../lib/assets.jsx'
 import { useHandoff } from '../../lib/handoff.jsx'
 import { useToast } from '../../lib/toasts.jsx'
 import { gradient } from '../../lib/gradients.js'
-
+import { useEffect, useMemo, useState } from 'react'
 const g = (i) => gradient(i, 'video')
 const PRESETS = ['Travelling avant', 'Orbite 360°', 'Zoom explosif', 'Plan drone', 'Ralenti', 'Plongée', 'Caméra épaule', 'Ambiance néon']
 
