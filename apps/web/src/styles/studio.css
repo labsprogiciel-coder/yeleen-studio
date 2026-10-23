@@ -37,12 +37,12 @@
 .cx-acc .av{display:block;width:34px;height:34px;border-radius:50%;background:conic-gradient(from 200deg,#ff7a90,#ffd46b,#7cf0a8,#6bb7ff,#c38bff,#ff7a90)}
 
 /* Panneau d'outils */
-.cx-panel{min-height:0;display:flex;flex-direction:column;gap:14px;padding:4px 4px 0;overflow:hidden}
+.cx-panel{min-height:0;display:flex;flex-direction:column;gap:14px;padding:12px 12px 0;border:1px solid var(--edge);border-radius:18px;background:var(--panel);overflow:hidden}
 .cx-tabs{flex:none;display:flex;gap:4px}
 .cx-tabs button{min-height:40px;padding:0 16px;border:0;border-radius:999px;background:none;color:var(--ink-3);font-size:15px;font-weight:600;cursor:pointer}
 .cx-tabs button:hover{color:var(--ink)}
 .cx-tabs button[aria-selected="true"]{background:var(--chip);color:var(--ink)}
-.cx-tool{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;overflow-y:auto;margin:0 -6px;padding:0 6px 4px;scrollbar-width:thin}
+.cx-tool{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;overflow-y:auto;margin:0 -6px;padding:0 6px 4px;scrollbar-width:none}
 .cx-head{flex:none;display:flex;align-items:stretch;justify-content:space-between;gap:10px;padding:14px;border-radius:16px;background:#1c2540}
 .cx-head-video{background:#183428}
 .cx-head-recipe{background:#272c12}
@@ -75,7 +75,7 @@
 .cx-panel .cn .cn-model,.cx-panel .cn-model{max-width:100%}
 /* Le panneau partagé de l'écran Vidéo : sans son propre défilement, c'est la colonne qui défile ; Générer reste collé en bas. */
 .cx-panel .ep{flex:1;display:flex;flex-direction:column;gap:14px}
-.cx-panel .ep-gen{background:linear-gradient(transparent,#0f1012 28%)}
+.cx-panel .ep-gen{background:linear-gradient(transparent,var(--panel) 28%)}
 /* Fidélité de l'éditeur : libellés en capitales, vignettes en pointillés, invite encadrée, réglages compacts. */
 .cx-panel .ep-sec>h2,.cx-panel .ep-sec>div>h2,.cx-panel .ep-row h2{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .cx-panel .ep-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
@@ -85,7 +85,9 @@
 .cx-panel .ep-add{min-height:56px;border:1px dashed var(--line-strong);border-radius:14px;background:none}
 .cx-panel .ep-chips>i{display:grid;place-items:center;width:30px;height:30px;border-radius:50%}
 .cx-panel .ep-prompt{min-height:200px;border:1px solid var(--line-strong);border-radius:14px;background:var(--card)}
-.cx-panel .ep-pfoot{justify-content:flex-end}
+.cx-panel .ep-pfoot{margin-top:auto}
+/* Le panneau et la vitrine défilent sans barre visible. */
+.cx-tool::-webkit-scrollbar,.cx-view::-webkit-scrollbar{display:none}
 .cx-panel .ep-opts{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px}
 .cx-panel .ep-opts .ep-chip{flex:none;min-height:34px;padding:0 12px;border-radius:999px}
 .cx-panel .ep-gen .gen{justify-content:space-between;padding:0 18px}
@@ -104,7 +106,7 @@
 .cx-tools{display:flex;gap:8px}
 .cx-ib{display:grid;place-items:center;width:42px;height:42px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink);cursor:pointer}
 .cx-ib:hover{background:var(--chip)}
-.cx-view{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:28px;padding:4px 20px 28px}
+.cx-view{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:28px;padding:4px 20px 28px}
 .cx-tray{width:100%}
 .cx-view>.vs{flex:none;min-height:min(60vh,520px)}
 
