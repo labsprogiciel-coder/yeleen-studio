@@ -201,7 +201,7 @@ export function OptionChips({ s, fixedSecs = null }) {
         type="button"
         className="ep-chip"
         disabled={s.multi || s.fromAudio || fixed}
-        title={fixed ? 'La durée suit la vidéo source' : (s.fromAudio ? `La durée est celle de votre audio (${s.caps.duration.fromAudio.min} à ${s.caps.duration.fromAudio.max} s)` : 'Durée')}
+        title={fixed ? 'La durée suit la vidéo source' : (s.fromAudio ? `La durée est celle de votre audio (${s.caps?.duration?.fromAudio?.min ?? 2} à ${s.caps?.duration?.fromAudio?.max ?? 10} s)` : 'Durée')}
         aria-label={fixed ? `Durée : celle de la vidéo source${fixedSecs ? `, ${fixedSecs} secondes` : ''}` : (s.fromAudio ? `Durée : celle de l’audio${s.total ? `, ${s.total} secondes` : ''}` : durationLabel)}
         onClick={() => s.patch(0, { dur: next(s.picks, s.plans[0].dur) })}
       >
@@ -250,17 +250,17 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
   const [error, setError] = useState('')
   const { assets, getFile } = useAssets()
   // Modèle à références (Seedance) : les vidéos citées sont facturées en entrée, le prix affiché en tient compte.
-  const preview = live?.model.caps.references ? resolveMentions({ plans: s.plans, refs: s.refs, assets, caps: live.model.caps, files: live.files }) : null
+  const preview = live?.model?.caps?.references ? resolveMentions({ plans: s.plans, refs: s.refs, assets, caps: live.model.caps, files: live.files }) : null
   const sourceSecs = live?.sourceSecs ?? 0
   const inputSecs = (preview ? preview.references.filter((r) => r.kind === 'video').reduce((n, r) => n + (r.asset.secs || 0), 0) : 0) + sourceSecs
-  const price = preview ? videoCost(live.model, secs, s.resolutions ? s.res : undefined, { inputSecs, sound: s.sound }) : cost
+  const price = (preview && live?.model) ? videoCost(live.model, secs, s.resolutions ? s.res : undefined, { inputSecs, sound: s.sound }) : cost
   const onClick = async () => {
     const prompt = s.plans.map((p) => p.text.trim()).filter(Boolean).join(' / ')
     const base = meta ?? `${s.total} s · ${s.ratio} · ${s.draft ? '480p' : s.res}`
     // Demande réelle : le modèle choisi, les options retenues et les fichiers d'entrée que ce modèle accepte.
-    const c = live?.model.caps
+    const c = live?.model?.caps
     // Assets cités par « @ » : ce que le modèle peut en faire (image de départ, élément…) et leurs fichiers.
-    const ref = live ? resolveMentions({ plans: s.plans, refs: s.refs, assets, caps: c, files: live.files }) : null
+    const ref = (live && c) ? resolveMentions({ plans: s.plans, refs: s.refs, assets, caps: c, files: live.files }) : null
     let extra = {}
     if (ref) {
       try {
@@ -276,10 +276,10 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
     }
     const references = [...(live?.source ? [{ kind: 'video', file: live.source }] : []), ...(extra.references ?? [])]
     const liveSpec = live && {
-      kind: 'video', modelId: live.model.id, plans: s.plans.map(({ dur }, i) => ({ text: ref ? ref.texts[i] : s.plans[i].text, dur })), secs: Math.round(secs * 10) / 10,
-      resolution: s.resolutions ? s.res : undefined, ratio: s.ratios ? s.ratio : undefined, fps: c.fps ? s.fps : undefined, sound: s.sound, camera: s.camera,
+      kind: 'video', modelId: live.model?.id, plans: s.plans.map(({ dur }, i) => ({ text: ref ? ref.texts[i] : s.plans[i].text, dur })), secs: Math.round(secs * 10) / 10,
+      resolution: s.resolutions ? s.res : undefined, ratio: s.ratios ? s.ratio : undefined, fps: c?.fps ? s.fps : undefined, sound: s.sound, camera: s.camera,
       brandStyle: styled ? style : undefined,
-      files: { start: c.startFrame !== 'none' ? (live.files.start ?? extra.start) : null, end: c.endFrame ? (live.files.end ?? extra.end) : null, audio: c.audioRef ? (live.files.audio ?? extra.audio) : null },
+      files: c ? { start: c.startFrame !== 'none' ? (live.files?.start ?? extra.start) : null, end: c.endFrame ? (live.files?.end ?? extra.end) : null, audio: c.audioRef ? (live.files?.audio ?? extra.audio) : null } : (live.files ?? {}),
       elements: extra.elements?.length ? extra.elements : undefined,
       references: references.length ? references : undefined,
       task: live?.task,
