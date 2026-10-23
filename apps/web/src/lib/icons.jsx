@@ -65,6 +65,20 @@ const P = {
   pause: <path d="M8 5v14M16 5v14" />,
   mute: <path d="M4 10v4h4l5 4V6L8 10zM17 9l5 6M22 9l-5 6" />,
   sound: <path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11" />,
+  edit: <><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5" /><path d="M18.5 3.5a2.1 2.1 0 013 3L12 16l-4 1 1-4z" /></>,
+  sparkles: <><path d="M10 4l1.8 5.2L17 11l-5.2 1.8L10 18l-1.8-5.2L3 11l5.2-1.8z" /><path d="M18 3v4M16 5h4M18 16v4M16 18h4" /></>,
+  video: <><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M4 10l1.5-5.5 15 3L19 10M9 6.5l2 3.5M14 7.5l2 3" /></>,
+  music: <><circle cx="8" cy="17" r="3" /><path d="M11 17V4c0 3 3 3 6 5" /></>,
+  audio: <><path d="M4 15v-3a8 8 0 0116 0v3" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></>,
+  camera: <><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></>,
+  mockup: <><rect x="3" y="5" width="14" height="14" rx="2" /><rect x="14" y="8" width="7" height="12" rx="1.5" /><path d="M16.5 17h2" /></>,
+  scissors: <><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8 7.5L20 18M8 16.5L20 6" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" /></>,
+  project: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h6M7 13h10M7 17h4" /></>,
+  speak: <><path d="M4 5h16v11H11l-4 4v-4H4z" /><path d="M8 10h8M8 13h5" /></>,
+  effect: <path d="M13 3L5 13h6l-1 8 8-10h-6z" />,
+  changer: <path d="M4 8h13l-3-3M20 16H7l3 3" />,
+  isolation: <><path d="M7 10v4M11 7v10M15 9v6" /><path d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3" /></>,
 }
 
 export default function Icon({ name, size = 18, color = 'currentColor', fill = 'none' }) {
