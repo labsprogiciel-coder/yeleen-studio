@@ -74,6 +74,7 @@ const P = {
   mockup: <><rect x="3" y="5" width="14" height="14" rx="2" /><rect x="14" y="8" width="7" height="12" rx="1.5" /><path d="M16.5 17h2" /></>,
   scissors: <><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8 7.5L20 18M8 16.5L20 6" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" /></>,
+  moon: <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />,
   project: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h6M7 13h10M7 17h4" /></>,
   speak: <><path d="M4 5h16v11H11l-4 4v-4H4z" /><path d="M8 10h8M8 13h5" /></>,
   effect: <path d="M13 3L5 13h6l-1 8 8-10h-6z" />,
