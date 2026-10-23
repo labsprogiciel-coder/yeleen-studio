@@ -1,75 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
 import Icon from '../../lib/icons.jsx'
 import AssetThumb from '../AssetThumb.jsx'
 import Menu from '../Menu.jsx'
 import MentionTextarea from '../MentionTextarea.jsx'
 import { ATTACH_PATTERN } from '../../lib/mentions.js'
 import { jetons } from '../../lib/jobs.jsx'
-import { PREVIEW } from '../../lib/templatePreviews.js'
 import { RECIPES, recipeCost, recipeIssue } from '@studio/catalog/recipes'
 import Cauri from '../Cauri.jsx'
 
 const STEP_LABEL = { IN_QUEUE: 'En attente', IN_PROGRESS: 'En cours', COMPLETED: 'Terminé', FAILED: 'Échec', CANCELED: 'Annulé' }
-
-/** Aperçu d'un modèle : l'image, et la vidéo au survol ou au focus. */
-function Preview({ id }) {
-  const p = PREVIEW[id]
-  if (!p) return <span className="rc-pv" aria-hidden="true" />
-  const play = (e) => e.currentTarget.querySelector('video')?.play().catch(() => {})
-  const stop = (e) => e.currentTarget.querySelector('video')?.pause()
-  return (
-    <span className="rc-pv" onMouseEnter={play} onMouseLeave={stop}>
-      <img src={p.poster} alt="" loading="lazy" />
-      {p.video && <video src={p.video} poster={p.poster} muted loop playsInline preload="none" aria-hidden="true" />}
-    </span>
-  )
-}
-
-/** Rangée de cartes qui défile à l'horizontale, avec des flèches qui s'éteignent aux extrémités. */
-function Row({ children, label }) {
-  const box = useRef(null)
-  const [end, setEnd] = useState({ start: true, end: false })
-  const measure = () => {
-    const el = box.current
-    if (!el) return
-    const next = { start: el.scrollLeft < 4, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4 }
-    setEnd((e) => (e.start === next.start && e.end === next.end ? e : next))
-  }
-  useEffect(() => {
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(box.current)
-    return () => ro.disconnect()
-  }, [children])
-  const by = (dir) => box.current.scrollBy({ left: dir * Math.max(240, box.current.clientWidth * 0.8), behavior: 'smooth' })
-  return (
-    <div className="rc-row">
-      <button type="button" className="rc-nav" aria-label="Modèles précédents" disabled={end.start} onClick={() => by(-1)}><Icon name="chevL" size={18} /></button>
-      <ul className="rc-cards" aria-label={label} ref={box} onScroll={measure}>{children}</ul>
-      <button type="button" className="rc-nav" aria-label="Modèles suivants" disabled={end.end} onClick={() => by(1)}><Icon name="chevR" size={18} /></button>
-    </div>
-  )
-}
-
-/** La galerie des modèles, comme la vitrine de fal : une grande vignette par workflow, en rangée. */
-export function RecipeCards({ value, onPick }) {
-  return (
-    <div className="rc-gal">
-      <Row label="Modèles">
-        {RECIPES.map((e) => (
-          <li key={e.id}>
-            <button type="button" className="rc-card" aria-pressed={value === e.id} onClick={() => onPick(e.id)}>
-              <Preview id={e.id} />
-              <b>{e.name}</b>
-              <span className="rc-d">{e.blurb}</span>
-              <span className="rc-m"><Cauri size={15} />{jetons(recipeCost(e.id))}</span>
-            </button>
-          </li>
-        ))}
-      </Row>
-    </div>
-  )
-}
 
 /** Avancement du lancement en cours. Un workflow fal peut durer plusieurs minutes : on le dit tant qu'il n'est pas terminé. */
 export function RunStrip({ jobs, onDone }) {

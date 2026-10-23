@@ -18,6 +18,7 @@ const P = {
   chevL: <path d="M15 5l-7 7 7 7" />,
   chevR: <path d="M9 5l7 7-7 7" />,
   chevD: <path d="M6 9l6 6 6-6" />,
+  updown: <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />,
   clock: <><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></>,
   ratio: <rect x="6" y="4" width="12" height="16" rx="2" />,
   screen: <rect x="3" y="6" width="18" height="12" rx="2" />,
