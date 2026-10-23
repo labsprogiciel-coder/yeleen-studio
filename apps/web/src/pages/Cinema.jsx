@@ -92,7 +92,7 @@ export default function Cinema() {
   const area = useRef(null)
   // Onglet du panneau (image, video, recipe), outil ouvert (null : la liste des outils) et vue de la zone principale.
   const [tab, setTab] = useState('video')
-  const [tool, setTool] = useState('video-gen')
+  const [tool, setTool] = useState(null)
   const [view, setView] = useState('creations')
   const mode = tab === 'recipe' ? 'recipe' : tool === 'image' ? 'image' : 'video'
   const [itext, setItext] = useState('') // texte de l'image ; en vidéo, chaque plan porte le sien (s.plans)
@@ -132,7 +132,7 @@ export default function Cinema() {
     if (t === 'recipe') pickRecipe(id)
   }
   // Changer d'onglet ouvre son premier outil : un seul clic pour commencer, la liste reste à un clic (« Outils »).
-  const openTab = (t) => openTool(TOOLS[t][0].id)
+  const openTab = (t) => { setError(''); setTab(t); setTool(null) }  
   useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ, même si Cinéma est déjà ouvert
     if (pending?.target !== 'cinema.recipe') return
     const h = take('cinema.recipe')
