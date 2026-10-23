@@ -5,7 +5,6 @@ import { jetons, useJobs } from '../lib/jobs.jsx'
 import { CAMERA_MOTIONS, videoCost } from '@studio/catalog'
 import { useAssets } from '../lib/assets.jsx'
 import AssetPicker from './AssetPicker.jsx'
-import BrandToggle from './BrandToggle.jsx'
 import MentionTextarea from './MentionTextarea.jsx'
 import PlanTabs from './PlanTabs.jsx'
 import { ROLE_LABEL, resolveMentions, tokenFor, tokensIn } from '../lib/mentions.js'
@@ -181,7 +180,8 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
 }
 
 /** Résolution, durée (totale si plusieurs plans), format, son : chaque puce suit ce que le modèle accepte. */
-export function OptionChips({ s }) {
+export function OptionChips({ s, fixedSecs = null }) {
+  const fixed = fixedSecs !== null
   const durationLabel = `Durée ${s.multi ? 'totale' : ''} : ${s.total} secondes`
   const sound = s.soundMode === 'always' ? { text: 'ON', off: true, why: 'Ce modèle génère toujours une piste sonore' }
     : s.soundMode === 'provided' ? { text: 'Audio', off: true, why: 'La piste sonore est celle que vous fournissez' }
@@ -200,12 +200,12 @@ export function OptionChips({ s }) {
       <button
         type="button"
         className="ep-chip"
-        disabled={s.multi || s.fromAudio}
-        title={s.fromAudio ? `La durée est celle de votre audio (${s.caps.duration.fromAudio.min} à ${s.caps.duration.fromAudio.max} s)` : 'Durée'}
-        aria-label={s.fromAudio ? `Durée : celle de l’audio${s.total ? `, ${s.total} secondes` : ''}` : durationLabel}
+        disabled={s.multi || s.fromAudio || fixed}
+        title={fixed ? 'La durée suit la vidéo source' : (s.fromAudio ? `La durée est celle de votre audio (${s.caps.duration.fromAudio.min} à ${s.caps.duration.fromAudio.max} s)` : 'Durée')}
+        aria-label={fixed ? `Durée : celle de la vidéo source${fixedSecs ? `, ${fixedSecs} secondes` : ''}` : (s.fromAudio ? `Durée : celle de l’audio${s.total ? `, ${s.total} secondes` : ''}` : durationLabel)}
         onClick={() => s.patch(0, { dur: next(s.picks, s.plans[0].dur) })}
       >
-        <Icon name="clock" size={16} />{s.fromAudio && !s.total ? '— s' : `${String(s.total).replace('.', ',')} s`}
+        <Icon name="clock" size={16} />{fixed ? (fixedSecs ? `${String(fixedSecs).replace('.', ',')} s` : '— s') : (s.fromAudio && !s.total ? '— s' : `${String(s.total).replace('.', ',')} s`)}
       </button>
       {s.ratios ? (
         <button type="button" className="ep-chip" aria-label={`Format : ${s.ratio === 'auto' ? 'suit l’image de départ' : s.ratio}`} title={s.ratio === 'auto' ? 'Format : suit l’image de départ' : 'Format'} onClick={() => s.setRatio(next(s.ratios, s.ratio))}>
@@ -228,6 +228,17 @@ export function OptionChips({ s }) {
   )
 }
 
+export function GenerateButton({ price, disabled, error, title, onClick }) {
+  return (
+    <div className="ep-gen">
+      {error && <p className="ep-gerr" role="alert">{error}</p>}
+      <button type="button" className="gen" disabled={disabled} title={title} onClick={onClick}>
+        Générer<span><Cauri size={18} />{jetons(price)}</span>
+      </button>
+    </div>
+  )
+}
+
 /**
  * Bouton Générer collé en bas du panneau défilant : soumet une génération vidéo et affiche le coût en jetons.
  * `blocker` : raison pour laquelle le modèle choisi ne peut pas encore générer (ex. image de départ requise).
@@ -240,7 +251,8 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
   const { assets, getFile } = useAssets()
   // Modèle à références (Seedance) : les vidéos citées sont facturées en entrée, le prix affiché en tient compte.
   const preview = live?.model.caps.references ? resolveMentions({ plans: s.plans, refs: s.refs, assets, caps: live.model.caps, files: live.files }) : null
-  const inputSecs = preview ? preview.references.filter((r) => r.kind === 'video').reduce((n, r) => n + (r.asset.secs || 0), 0) : 0
+  const sourceSecs = live?.sourceSecs ?? 0
+  const inputSecs = (preview ? preview.references.filter((r) => r.kind === 'video').reduce((n, r) => n + (r.asset.secs || 0), 0) : 0) + sourceSecs
   const price = preview ? videoCost(live.model, secs, s.resolutions ? s.res : undefined, { inputSecs, sound: s.sound }) : cost
   const onClick = async () => {
     const prompt = s.plans.map((p) => p.text.trim()).filter(Boolean).join(' / ')
@@ -262,25 +274,21 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
         return
       }
     }
+    const references = [...(live?.source ? [{ kind: 'video', file: live.source }] : []), ...(extra.references ?? [])]
     const liveSpec = live && {
-      kind: 'video', modelId: live.model.id, plans: s.plans.map(({ dur }, i) => ({ text: ref.texts[i], dur })), secs: Math.round(secs * 10) / 10,
+      kind: 'video', modelId: live.model.id, plans: s.plans.map(({ dur }, i) => ({ text: ref ? ref.texts[i] : s.plans[i].text, dur })), secs: Math.round(secs * 10) / 10,
       resolution: s.resolutions ? s.res : undefined, ratio: s.ratios ? s.ratio : undefined, fps: c.fps ? s.fps : undefined, sound: s.sound, camera: s.camera,
       brandStyle: styled ? style : undefined,
       files: { start: c.startFrame !== 'none' ? (live.files.start ?? extra.start) : null, end: c.endFrame ? (live.files.end ?? extra.end) : null, audio: c.audioRef ? (live.files.audio ?? extra.audio) : null },
       elements: extra.elements?.length ? extra.elements : undefined,
-      references: extra.references?.length ? extra.references : undefined,
+      references: references.length ? references : undefined,
+      task: live?.task,
       inputSecs: inputSecs || undefined,
     }
     const r = submit({ kind: 'video', title, prompt, cost: price, secs, brandStyle: styled ? style : undefined, live: liveSpec, meta: styled ? `${base} · style de la marque` : base })
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
   }
   return (
-    <div className="ep-gen">
-      {error && <p className="ep-gerr" role="alert">{error}</p>}
-      {/* {blocker && <p className="ep-ghint">{blocker}</p>} */}
-      <button type="button" className="gen" disabled={(needsText && !s.ready) || Boolean(blocker)} onClick={onClick}>
-        Générer<span><Cauri size={18} />{jetons(price)}</span>
-      </button>
-    </div>
+    <GenerateButton price={price} error={error} title={blocker ?? undefined} disabled={(needsText && !s.ready) || Boolean(blocker)} onClick={onClick} />
   )
 }
