@@ -10,6 +10,7 @@ import { RechargeDialogProvider, RechargeRoute } from './lib/rechargeDialog.jsx'
 import { SpotsProvider } from './lib/spots.jsx'
 import { BrandProvider } from './lib/brand.jsx'
 import { ToastProvider } from './lib/toasts.jsx'
+import { ThemeProvider } from './lib/theme.jsx'
 import { Protected, SignInPage, SignUpPage } from './lib/auth.jsx'
 import { features } from './lib/features.js'
 // Écrans éteints par drapeau (lib/features.js) : on revient au studio Cinéma. Les écrans d'outils sont chargés à la demande : l'accueil n'embarque pas leur code.
@@ -32,6 +33,7 @@ function useDeadLinkGuard() {
 export default function App() {
   useDeadLinkGuard()
   return (
+    <ThemeProvider>
     <ToastProvider>
     <JobsProvider>
     <AssetsProvider>
@@ -65,5 +67,6 @@ export default function App() {
     </AssetsProvider>
     </JobsProvider>
     </ToastProvider>
+    </ThemeProvider>
   )
 }
