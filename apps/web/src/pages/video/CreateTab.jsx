@@ -2,6 +2,7 @@ import Icon from '../../lib/icons.jsx'
 import Menu from '../../components/Menu.jsx'
 import { Section, DropTile, AddMedia, PlanSection, OptionChips, GenerateBar } from '../../components/GenPanel.jsx'
 import useGenSettings from '../../lib/useGenSettings.js'
+import useMediaSecs from '../../lib/useMediaSecs.js'
 import { VIDEO_MODELS, findModel, priceLabel } from '@studio/catalog'
 import { modelItem } from '../../lib/modelItem.js'
 import { logoFor } from '../../lib/modelLogos.js'
@@ -11,13 +12,13 @@ import { useHandoff } from '../../lib/handoff.jsx'
 import { useToast } from '../../lib/toasts.jsx'
 import { gradient } from '../../lib/gradients.js'
 import { useEffect, useMemo, useState } from 'react'
+
 const g = (i) => gradient(i, 'video')
 const PRESETS = ['Travelling avant', 'Orbite 360°', 'Zoom explosif', 'Plan drone', 'Ralenti', 'Plongée', 'Caméra épaule', 'Ambiance néon']
 
 const HINT = 'Décrivez le changement visuel souhaité, par exemple « Il neige » ou « Il fait nuit ».'
 
-
-const MODES = {
+const PANEL_MODES = {
   generate: {
     title: 'Générateur de vidéos',
     tiles: { source: 'off', start: 'auto', end: 'auto', audio: 'auto' }, // 'auto' = follow model caps
@@ -42,20 +43,13 @@ const modelFor = (slot, current) => {
   return { start: 'ltx-2-5-fast', end: 'ltx-2-3-pro', audio: 'ltx-2-3-a2v' }[slot]
 }
 
-const tileState = (cfg, key, capsOn, capsRequired) =>
-  cfg === 'off' ? { disabled: true, reason: 'Non disponible' }
-  : cfg === 'required' ? { required: true }
-  : { disabled: !capsOn, required: capsRequired }
-
 /** Panneau de création vidéo. `banner` : la carte du preset en tête (l'écran Vidéo) ; Cinéma a son propre en-tête d'outil. */
 export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel = 'Plus' }) {
-
-  const cfg = MODES[mode]
+  const cfg = PANEL_MODES[mode]
   const models = useMemo(() => VIDEO_MODELS.filter(cfg.modelFilter ?? (() => true)), [cfg])
 
-  const [modelId, setModelId] = useState(models[0].id)              // was VIDEO_MODELS[0].id
-  const model = findModel(models, modelId)                          // was findModel(VIDEO_MODELS, modelId)
-  // ...
+  const [modelId, setModelId] = useState(models[0].id)
+  const model = findModel(models, modelId)
   const { caps } = model
   const [files, setFiles] = useState({})
   const setFile = (key) => (f) => setFiles((o) => ({ ...o, [key]: f }))
@@ -79,28 +73,18 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending])
 
-  // Durée de l'audio fourni (modèles audio → vidéo : elle fixe la durée et le coût de la vidéo).
-  const [audioSecs, setAudioSecs] = useState(null)
-  useEffect(() => {
-    const f = files.audio
-    if (!f) return setAudioSecs(null)
-    const url = URL.createObjectURL(f)
-    const a = new Audio()
-    a.preload = 'metadata'
-    a.onloadedmetadata = () => setAudioSecs(Math.round(a.duration * 10) / 10)
-    a.onerror = () => setAudioSecs(NaN)
-    a.src = url
-    return () => URL.revokeObjectURL(url)
-  }, [files.audio])
+  const audioSecs = useMediaSecs(files.audio)
+  const sourceSecs = useMediaSecs(files.source, 'video')
   const s = useGenSettings(model, { audioSecs })
 
-  const items = models.map((m) => modelItem(m, 'video'))      
+  const items = models.map((m) => modelItem(m, 'video'))
   const range = caps.duration.fromAudio
-  const blocker = caps.startFrame === 'required' && !files.start ? 'Ce modèle exige une image de départ.'
+  const blocker = mode === 'edit' && !files.source ? 'Joignez une vidéo à modifier.'
+    : caps.startFrame === 'required' && !files.start ? 'Ce modèle exige une image de départ.'
     : caps.audioRef === 'required' && !files.audio ? `Ce modèle exige un fichier audio${range ? ` de ${range.min} à ${range.max} s` : ''}.`
-      : range && files.audio && (Number.isNaN(audioSecs) ? true : audioSecs !== null && (audioSecs < range.min || audioSecs > range.max))
-        ? (Number.isNaN(audioSecs) ? 'Ce fichier audio n’a pas pu être lu.' : `Votre audio dure ${String(audioSecs).replace('.', ',')} s : il doit durer entre ${range.min} et ${range.max} s.`)
-        : null
+    : range && files.audio && (Number.isNaN(audioSecs) ? true : audioSecs !== null && (audioSecs < range.min || audioSecs > range.max))
+      ? (Number.isNaN(audioSecs) ? 'Ce fichier audio n’a pas pu être lu.' : `Votre audio dure ${String(audioSecs).replace('.', ',')} s : il doit durer entre ${range.min} et ${range.max} s.`)
+      : null
   const needsText = !(caps.startFrame === 'optional' && caps.audioRef === 'required' && files.start) // avec une image, le prompt devient facultatif
   const meta = `${model.name} · ${String(s.total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}${s.ratios && s.ratio !== 'auto' ? ` · ${s.ratio}` : ''}${caps.fps ? ` · ${s.fps} i/s` : ''}`
 
@@ -119,12 +103,18 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
       </Section>
 
       <Section id="ep-ref" title="Références">
-        <div className="ep-tiles">
-          <DropTile icon="img" label="Départ" accept="image/*" file={files.start ?? null} onFile={setFile('start')} required={caps.startFrame === 'required'} disabled={caps.startFrame === 'none'} reason="Ce modèle part du texte seul : pas d’image de départ" />
-          <DropTile icon="img" label="Fin" accept="image/*" file={files.end ?? null} onFile={setFile('end')} disabled={!caps.endFrame} reason={caps.startFrame === 'none' ? 'Texte seul : pas d’images en entrée' : 'Ce modèle n’accepte pas d’image de fin'} />
-          <DropTile icon="mus" label="Piste audio" accept="audio/*" file={files.audio ?? null} onFile={setFile('audio')} required={caps.audioRef === 'required'} disabled={!caps.audioRef} reason="Ce modèle n’accepte pas de piste audio en entrée" />
+        <div className={`ep-tiles${mode === 'edit' ? ' one' : ''}`}>
+          {mode === 'edit' ? (
+            <DropTile icon="vid" label="Vidéo source" accept="video/*" file={files.source ?? null} onFile={setFile('source')} required reason="Vidéo à modifier" />
+          ) : (
+            <>
+              <DropTile icon="img" label="Départ" accept="image/*" file={files.start ?? null} onFile={setFile('start')} required={caps.startFrame === 'required'} disabled={caps.startFrame === 'none'} reason="Ce modèle part du texte seul : pas d’image de départ" />
+              <DropTile icon="img" label="Fin" accept="image/*" file={files.end ?? null} onFile={setFile('end')} disabled={!caps.endFrame} reason={caps.startFrame === 'none' ? 'Texte seul : pas d’images en entrée' : 'Ce modèle n’accepte pas d’image de fin'} />
+              <DropTile icon="mus" label="Piste audio" accept="audio/*" file={files.audio ?? null} onFile={setFile('audio')} required={caps.audioRef === 'required'} disabled={!caps.audioRef} reason="Ce modèle n’accepte pas de piste audio en entrée" />
+            </>
+          )}
         </div>
-        {caps.elements && (
+        {mode !== 'edit' && caps.elements && (
           <AddMedia
             key={model.id}
             label={addLabel}
@@ -132,9 +122,24 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
         )}
       </Section>
 
-      <PlanSection s={s} mentions={{ files }} hint={caps.audioRef === 'required' ? 'Décrivez la scène (obligatoire sans image de départ), ou comment animer votre image au rythme de l’audio.' : caps.startFrame === 'required' ? HINT : caps.startFrame === 'none' ? 'Décrivez la scène : sujet, décor, lumière, mouvement de caméra.' : 'Décrivez la scène, ou ajoutez une image de départ pour l’animer.'} />
-      <OptionChips s={s} />
-      <GenerateBar s={s} title={model.name} meta={meta} blocker={blocker} needsText={needsText} brand live={{ model, files }} />
+      <PlanSection
+        s={s}
+        mentions={{ files }}
+        single={mode === 'edit'}
+        singleReason="La durée suit la vidéo source"
+        hint={cfg.hint ?? (caps.audioRef === 'required' ? 'Décrivez la scène (obligatoire sans image de départ), ou comment animer votre image au rythme de l’audio.' : caps.startFrame === 'required' ? HINT : caps.startFrame === 'none' ? 'Décrivez la scène : sujet, décor, lumière, mouvement de caméra.' : 'Décrivez la scène, ou ajoutez une image de départ pour l’animer.')}
+      />
+      <OptionChips s={s} fixedSecs={mode === 'edit' ? (sourceSecs ?? 0) : null} />
+      <GenerateBar
+        s={s}
+        title={model.name}
+        meta={meta}
+        blocker={blocker}
+        needsText={needsText}
+        brand
+        secs={mode === 'edit' ? Math.max(4, Math.ceil(sourceSecs || 0)) : s.total}
+        live={{ model, files, source: files.source, sourceSecs: sourceSecs || 0, task: mode === 'edit' ? 'editing' : undefined }}
+      />
     </div>
   )
 }
