@@ -105,7 +105,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
       <Section id="ep-ref" title="Références">
         <div className={`ep-tiles${mode === 'edit' ? ' one' : ''}`}>
           {mode === 'edit' ? (
-            <DropTile icon="vid" label="Vidéo source" accept="video/*" file={files.source ?? null} onFile={setFile('source')} required reason="Vidéo à modifier" />
+            <DropTile icon="vid" label="Vidéo source" accept="video/*" file={files.source ?? null} onFile={setFile('source')} required />
           ) : (
             <>
               <DropTile icon="img" label="Départ" accept="image/*" file={files.start ?? null} onFile={setFile('start')} required={caps.startFrame === 'required'} disabled={caps.startFrame === 'none'} reason="Ce modèle part du texte seul : pas d’image de départ" />
