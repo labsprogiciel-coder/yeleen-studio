@@ -26,7 +26,8 @@ const modelFor = (slot, current) => {
   return { start: 'ltx-2-5-fast', end: 'ltx-2-3-pro', audio: 'ltx-2-3-a2v' }[slot]
 }
 
-export function CreateLeft({ panel }) {
+/** Panneau de création vidéo. `banner` : la carte du preset en tête (l'écran Vidéo) ; Cinéma a son propre en-tête d'outil. */
+export function CreateLeft({ panel, banner = true, addLabel = 'Plus' }) {
   const [modelId, setModelId] = useState(VIDEO_MODELS[0].id)
   const model = findModel(VIDEO_MODELS, modelId)
   const { caps } = model
@@ -79,11 +80,11 @@ export function CreateLeft({ panel }) {
 
   return (
     <div className="ep" {...panel}>
-      <div className="mc" style={{ background: g(3) }}>
+      {banner && <div className="mc" style={{ background: g(3) }}>
         <button type="button" className="chg" onClick={() => document.querySelector('[aria-label="Modèle"]')?.click()}><Icon name="pencil" size={13} />Changer</button>
         <h3>Général</h3>
         <span>{model.name}</span>
-      </div>
+      </div>}
 
       <Section id="ep-model" title="Modèle">
         <Menu items={items} value={modelId} onChange={setModelId} label="Modèle" menuWidth={420} search="Rechercher un modèle…">
@@ -100,7 +101,7 @@ export function CreateLeft({ panel }) {
         {caps.elements && (
           <AddMedia
             key={model.id}
-            label="Plus"
+            label={addLabel}
           />
         )}
       </Section>

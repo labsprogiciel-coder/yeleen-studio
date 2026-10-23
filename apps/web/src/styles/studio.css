@@ -1,0 +1,172 @@
+/*
+ * Studio (Cinéma) : barre d'icônes, barre du haut, panneau d'outils et zone principale, chacun dans un panneau arrondi.
+ * Le panneau d'outils reçoit le compositeur (cinema.css) ou le panneau partagé de l'écran Vidéo (edit-panel.css).
+ */
+.cx{--panel:#141517;--card:var(--raised);--chip:var(--fill-hover);--edge:#232427;display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;height:100vh;height:100dvh;padding:10px;box-sizing:border-box;background:#08090a}
+.cx button{font-family:inherit}
+
+/* Barre d'icônes */
+.cx-rail{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0;border-radius:20px;background:var(--panel);overflow-y:auto;scrollbar-width:none}
+.cx-logo{display:grid;place-items:center;width:44px;height:44px}
+.cx-logo img{display:block}
+.cx-new{display:grid;place-items:center;width:44px;height:44px;margin-bottom:6px;border:0;border-radius:12px;background:var(--lime);color:var(--on-lime);cursor:pointer}
+.cx-new:hover{filter:brightness(.92)}
+.cx-rl{display:flex;flex-direction:column;align-items:center;gap:4px;margin:0;padding:0;list-style:none}
+.cx-ri{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:12px;background:none;color:var(--ink-3);cursor:pointer;text-decoration:none}
+.cx-ri:hover{background:var(--card);color:var(--ink)}
+.cx-ri[aria-current="true"]{background:var(--chip);color:var(--ink)}
+.cx-sep{width:28px;height:1px;margin:6px 0;background:var(--edge)}
+.cx-end{margin-top:auto}
+
+/* Barre du haut */
+.cx-shell{min-width:0;min-height:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:22px;background:#0f1012;overflow:hidden}
+.cx-body{flex:1;min-height:0;display:grid;grid-template-columns:380px minmax(0,1fr);gap:10px;padding:0 10px 10px}
+.cx-top{flex:none;height:60px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px 0 10px;border-bottom:1px solid var(--edge);margin-bottom:10px}
+.cx-proj{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 6px 0 10px;border:0;border-radius:12px;background:none;color:var(--ink);font-size:15px;font-weight:600;cursor:pointer}
+.cx-proj:hover{background:var(--card)}
+.cx-proj>svg:last-child{display:none}
+.cx-proj-dot{flex:none;width:14px;height:14px;border-radius:4px}
+.cx-proj-ud{display:grid;place-items:center;width:26px;height:26px;border:1px solid var(--edge);border-radius:8px;color:var(--ink-3)}
+.cx-acc{display:flex;align-items:center;gap:10px}
+.cx-price{min-height:40px;padding:0 14px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--lime);font-size:15px;font-weight:700;cursor:pointer}
+.cx-price:hover{background:var(--chip)}
+.cx-acc .bal{border-color:var(--edge);background:var(--card);color:var(--ink);min-height:40px;border-radius:12px}
+.cx-acc .bal:hover{background:var(--chip)}
+.cx-acc .bal-busy{border-color:var(--edge)}
+.cx-acc .bal-busy i{background:var(--lime)}
+.cx-acc .av{display:block;width:34px;height:34px;border-radius:50%;background:conic-gradient(from 200deg,#ff7a90,#ffd46b,#7cf0a8,#6bb7ff,#c38bff,#ff7a90)}
+
+/* Panneau d'outils */
+.cx-panel{min-height:0;display:flex;flex-direction:column;gap:14px;padding:4px 4px 0;overflow:hidden}
+.cx-tabs{flex:none;display:flex;gap:4px}
+.cx-tabs button{min-height:40px;padding:0 16px;border:0;border-radius:999px;background:none;color:var(--ink-3);font-size:15px;font-weight:600;cursor:pointer}
+.cx-tabs button:hover{color:var(--ink)}
+.cx-tabs button[aria-selected="true"]{background:var(--chip);color:var(--ink)}
+.cx-tool{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;overflow-y:auto;margin:0 -6px;padding:0 6px 4px;scrollbar-width:thin}
+.cx-head{flex:none;display:flex;align-items:stretch;justify-content:space-between;gap:10px;padding:14px;border-radius:16px;background:#1c2540}
+.cx-head-video{background:#183428}
+.cx-head-recipe{background:#272c12}
+.cx-head h2{margin:6px 0 0;font-size:19px;font-weight:700;line-height:1.2}
+.cx-back{display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:0;border:0;background:none;color:rgba(255,255,255,.62);font-size:14px;cursor:pointer}
+.cx-back:hover{color:#fff}
+.cx-tpl{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:88px;border:0;border-radius:12px;background:rgba(255,255,255,.07);color:var(--ink);font-size:12.5px;cursor:pointer}
+.cx-tpl:hover{background:rgba(255,255,255,.12)}
+.cx-list{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.cx-list button{display:flex;align-items:center;gap:14px;width:100%;padding:10px;border:0;border-radius:14px;background:none;color:var(--ink);text-align:left;cursor:pointer}
+.cx-list button:hover{background:var(--card)}
+.cx-list b{display:block;font-size:15.5px;font-weight:600}
+.cx-list small{display:block;margin-top:3px;font-size:13.5px;line-height:1.35;color:var(--ink-3)}
+.cx-li-ic{flex:none;display:grid;place-items:center;width:48px;height:48px;border-radius:12px;background:#1c2540;color:#8fa8ff}
+.cx-li-ic.video{background:#183428;color:#5fe0a0}
+.cx-li-ic.img{object-fit:cover;background:var(--card)}
+.cx-note{margin:0;padding:14px;border-radius:14px;background:var(--card);font-size:14px;line-height:1.5;color:var(--ink-2)}
+
+/* Le compositeur, empilé dans la colonne : texte, réglages (qui passent à la ligne), puis Générer sur toute la largeur. */
+.cx-panel .cn-comp{flex:none;border-radius:18px}
+.cx-panel .cn-edit{grid-template-columns:minmax(0,1fr);gap:10px}
+.cx-panel .cn-field{--mt-min:120px}
+.cx-panel .cn-bar{grid-row:2;flex-wrap:wrap}
+.cx-panel .cn-scroll{display:contents}
+.cx-panel .cn-more{display:none}
+.cx-panel .cn-gen{grid-column:1;grid-row:3;justify-content:space-between;width:100%;height:50px;padding:0 18px;border-radius:14px;box-shadow:none}
+.cx-panel .cn-gen b{font-family:inherit;font-stretch:normal;font-size:16px;font-weight:700;text-transform:none;letter-spacing:0}
+.cx-panel .cn-gen span{font-size:15px}
+.cx-panel .cn-gen:disabled{background:var(--card);border:1px solid var(--edge);color:var(--ink-3)}
+.cx-panel .cn .cn-model,.cx-panel .cn-model{max-width:100%}
+/* Le panneau partagé de l'écran Vidéo : sans son propre défilement, c'est la colonne qui défile ; Générer reste collé en bas. */
+.cx-panel .ep{flex:1;display:flex;flex-direction:column;gap:14px}
+.cx-panel .ep-gen{background:linear-gradient(transparent,#0f1012 28%)}
+/* Fidélité de l'éditeur : libellés en capitales, vignettes en pointillés, invite encadrée, réglages compacts. */
+.cx-panel .ep-sec>h2,.cx-panel .ep-sec>div>h2,.cx-panel .ep-row h2{font-size:12.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.cx-panel .ep-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cx-panel .ep-tile{min-height:84px;border:1px dashed var(--line-strong);border-radius:14px;background-color:var(--card)}
+.cx-panel .ep-tile.has{border-style:solid}
+.cx-panel .ep-tile.off{display:none}
+.cx-panel .ep-add{min-height:56px;border:1px dashed var(--line-strong);border-radius:14px;background:none}
+.cx-panel .ep-chips>i{display:grid;place-items:center;width:30px;height:30px;border-radius:50%}
+.cx-panel .ep-prompt{min-height:200px;border:1px solid var(--line-strong);border-radius:14px;background:var(--card)}
+.cx-panel .ep-pfoot{justify-content:flex-end}
+.cx-panel .ep-opts{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px}
+.cx-panel .ep-opts .ep-chip{flex:none;min-height:34px;padding:0 12px;border-radius:999px}
+.cx-panel .ep-gen .gen{justify-content:space-between;padding:0 18px}
+.cx-panel .ep-gen .gen{height:50px;border:0;border-radius:14px;background:var(--lime);color:var(--on-lime);font-size:16px;font-weight:700;align-items:center;cursor:pointer}
+.cx-panel .ep-gen .gen:hover:not(:disabled){filter:brightness(.92)}
+.cx-panel .ep-gen .gen:disabled{background:var(--card);border:1px solid var(--edge);color:var(--ink-3);cursor:not-allowed}
+
+/* Zone principale */
+.cx-main{min-height:0;min-width:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:18px;background:var(--panel);overflow:hidden}
+.cx-main:focus{outline:0}
+.cx-mbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px}
+.cx-views{display:flex;gap:4px}
+.cx-views button{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border:0;border-radius:12px;background:none;color:var(--ink-3);font-size:15px;font-weight:600;cursor:pointer}
+.cx-views button:hover{color:var(--ink)}
+.cx-views button[aria-selected="true"]{background:var(--chip);color:var(--ink)}
+.cx-tools{display:flex;gap:8px}
+.cx-ib{display:grid;place-items:center;width:42px;height:42px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink);cursor:pointer}
+.cx-ib:hover{background:var(--chip)}
+.cx-view{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:28px;padding:4px 20px 28px}
+.cx-tray{width:100%}
+.cx-view>.vs{flex:none;min-height:min(60vh,520px)}
+
+/* Visite guidée de l'outil */
+.cx-intro{display:flex;flex-direction:column;align-items:center;gap:10px;padding:34px 20px 24px;border-radius:20px;background:#101113;text-align:center}
+.cx-intro-h{display:flex;align-items:center;gap:12px}
+.cx-intro-h h2{margin:0;font-size:24px;font-weight:600}
+.cx-intro-ic{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#183428;color:#5fe0a0;overflow:hidden}
+.cx-intro-ic.image{background:#1c2540;color:#8fa8ff}
+.cx-intro-ic img{width:100%;height:100%;object-fit:cover}
+.cx-need{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.cx-need i{padding:4px 10px;border-radius:999px;background:var(--chip);font-style:normal;font-size:13px;color:var(--ink-2)}
+.cx-intro-p{margin:0 0 14px;font-size:16px;color:var(--ink-2)}
+.cx-deck{position:relative;display:flex;justify-content:center;width:100%}
+.cx-peek{position:absolute;top:8%;width:min(420px,40%);height:70%;object-fit:cover;border-radius:16px;opacity:.35;filter:blur(1px)}
+.cx-peek.prev{left:0}
+.cx-peek.next{right:0}
+.cx-step{position:relative;z-index:1;width:min(580px,100%);margin:0;border:1px solid var(--edge);border-radius:18px;background:var(--panel);overflow:hidden;text-align:left}
+.cx-step img{display:block;width:100%;aspect-ratio:16/8;object-fit:cover}
+.cx-step figcaption{display:flex;flex-direction:column;gap:4px;padding:16px 20px 18px}
+.cx-step b{font-size:18px}
+.cx-step span{font-size:14.5px;line-height:1.45;color:var(--ink-3)}
+.cx-pager{display:flex;align-items:center;gap:18px;margin-top:8px;font-size:15px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.cx-pager button{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:10px;background:none;color:var(--ink);cursor:pointer}
+.cx-pager button:disabled{opacity:.35;cursor:default}
+
+/* Modèles en cartes : le titre à gauche, la vignette à droite */
+.cx-sec{display:flex;flex-direction:column;gap:14px}
+.cx-sec-h{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cx-sec-h h2{margin:0;font-size:20px;font-weight:600}
+.cx-sub{margin:-8px 0 0;font-size:15px;color:var(--ink-3)}
+.cx-all{display:flex;align-items:center;gap:4px;min-height:36px;padding:0 6px;border:0;background:none;color:var(--ink);font-size:14.5px;font-weight:600;cursor:pointer}
+.cx-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin:0;padding:0;list-style:none}
+.cx-card{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;width:100%;height:100%;padding:18px;border:1px solid transparent;border-radius:18px;background:var(--card);color:var(--ink);text-align:left;cursor:pointer}
+.cx-card:hover{border-color:var(--line-strong)}
+.cx-card-t{display:flex;flex-direction:column;justify-content:flex-end;gap:8px;min-width:0}
+.cx-card-t b{font-size:clamp(19px,1.6vw,25px);line-height:1.15;font-weight:700;hyphens:auto;-webkit-hyphens:auto}
+.cx-card-t small{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--lime);font-variant-numeric:tabular-nums}
+.cx-card-img{position:relative;aspect-ratio:5/4;border-radius:14px;overflow:hidden;background:#101113}
+.cx-card-img>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .3s}
+.cx-card:hover .cx-card-img>img{transform:scale(1.04)}
+.cx-by{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:rgba(0,0,0,.6);font-size:12.5px;font-weight:600;color:#fff}
+.cx-by img{border-radius:50%}
+@media (prefers-reduced-motion:reduce){.cx-card-img>img{transition:none}}
+
+/* L'avancement d'un modèle lancé, en tête des créations */
+.cx-view .rc-runbar{width:100%}
+
+@media (max-width:1100px){.cx-body{grid-template-columns:340px minmax(0,1fr)}}
+/* Téléphone et tablette : une seule colonne qui défile ; la barre d'icônes passe en haut, à l'horizontale. */
+@media (max-width:900px){
+  .cx{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;height:auto;min-height:100dvh;gap:8px;padding:8px}
+  .cx-rail{grid-row:auto;flex-direction:row;padding:8px 10px;overflow-x:auto;overflow-y:hidden}
+  .cx-rl{flex-direction:row}
+  .cx-sep{width:1px;height:28px;margin:0 4px}
+  .cx-new{margin:0 4px 0 0}
+  .cx-end{margin:0 0 0 auto}
+  .cx-body{grid-template-columns:minmax(0,1fr)}
+  .cx-shell{overflow:visible}
+  .cx-acc{margin-left:auto}
+  .cx-panel,.cx-main{overflow:visible}
+  .cx-tool,.cx-view{overflow:visible}
+  .cx-card{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:14px}
+  .cx-cards{grid-template-columns:minmax(0,1fr)}
+}

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
+import { currentProject } from './projects.js'
 import { dueJobs } from './pollDelay.js'
 import { useAuthState } from './auth.jsx'
 import { api, apiEnabled } from './api.js'
@@ -180,7 +181,8 @@ export function JobsProvider({ children }) {
     return () => clearInterval(id)
   }, [active])
 
-  const make = useCallback((spec, attempt = 1) => {
+  const make = useCallback((raw, attempt = 1) => {
+    const spec = raw.project ? raw : { ...raw, project: currentProject() } // la génération reste dans le projet où elle a été lancée
     const kind = spec.kind
     const count = spec.count ?? 1
     const moderated = /interdit|violence|nsfw|sang/i.test(spec.prompt)

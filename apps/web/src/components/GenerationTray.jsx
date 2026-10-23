@@ -1,4 +1,5 @@
 import { useJobs } from '../lib/jobs.jsx'
+import { inProject, useProjects } from '../lib/projects.js'
 import ImageBatch from './generation/ImageBatch.jsx'
 import VideoStage from './generation/VideoStage.jsx'
 import VoiceStrip from './generation/VoiceStrip.jsx'
@@ -10,7 +11,8 @@ import '../styles/generation.css'
  */
 export default function GenerationTray({ kind, className = '' }) {
   const { jobs, clearDone } = useJobs()
-  const list = jobs.filter((j) => j.kind === kind)
+  const { current } = useProjects()
+  const list = jobs.filter((j) => j.kind === kind && inProject(j, current))
   if (!list.length) return null
   if (kind === 'video') return <VideoStage jobs={list} />
 

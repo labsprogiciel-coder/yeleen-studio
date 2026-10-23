@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../lib/icons.jsx'
 import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, videoCost } from '@studio/catalog'
-import { RECIPES, recipeById, recipeCost } from '@studio/catalog/recipes'
+import { recipeById, recipeCost } from '@studio/catalog/recipes'
 import { SkipLink } from '../components/Headers.jsx'
 import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
@@ -9,12 +9,18 @@ import PlanTabs from '../components/PlanTabs.jsx'
 import AssetThumb from '../components/AssetThumb.jsx'
 import BrandToggle from '../components/BrandToggle.jsx'
 import { features } from '../lib/features.js'
-import GenerationTray from '../components/GenerationTray.jsx'
 import ModelLogo from '../components/ModelLogo.jsx'
-import Sidebar from '../components/cinema/Sidebar.jsx'
-import HeroStack from '../components/cinema/HeroStack.jsx'
+import Rail from '../components/cinema/Rail.jsx'
+import ToolPanel from '../components/cinema/ToolPanel.jsx'
+import Showcase from '../components/cinema/Showcase.jsx'
+import { TOOLS, tabOf } from '../components/cinema/tools.js'
+import BalanceChip from '../components/BalanceChip.jsx'
+import ProjectPicker from '../components/cinema/ProjectPicker.jsx'
+import { CreateLeft } from './video/CreateTab.jsx'
+import { AccountMenu } from '../lib/auth.jsx'
+import { RechargeButton } from '../lib/rechargeDialog.jsx'
 import AssetModal from '../components/cinema/AssetModal.jsx'
-import { RecipeCards, RecipeForm, RunStrip } from '../components/cinema/Recipes.jsx'
+import { RecipeForm, RunStrip } from '../components/cinema/Recipes.jsx'
 import { useAssets } from '../lib/assets.jsx'
 import { useBrand } from '../lib/brand.jsx'
 import { useHandoff } from '../lib/handoff.jsx'
@@ -29,6 +35,7 @@ import '../styles/shell.css'
 import '../styles/library.css'
 import '../styles/cinema.css'
 import Cauri from '../components/Cauri.jsx'
+import '../styles/studio.css'
 
 // Le modèle audio vers vidéo se pilote par un fichier audio : il a sa place dans l'écran Vidéo, pas ici.
 const VIDEO_LIST = VIDEO_MODELS.filter((m) => m.input !== 'audio')
@@ -80,11 +87,14 @@ export default function Cinema() {
   const toast = useToast()
   const { jobs, submit, balance } = useJobs()
   const { assets, pool, adopt, getFile } = useAssets()
-  const { sendTo, take } = useHandoff()
+  const { pending, sendTo, take } = useHandoff()
   const { brand: kit, style } = useBrand()
   const area = useRef(null)
-  const [collapsed, setCollapsed] = useState(false)
-  const [mode, setMode] = useState('video')
+  // Onglet du panneau (image, video, recipe), outil ouvert (null : la liste des outils) et vue de la zone principale.
+  const [tab, setTab] = useState('video')
+  const [tool, setTool] = useState('video-gen')
+  const [view, setView] = useState('creations')
+  const mode = tab === 'recipe' ? 'recipe' : tool === 'image' ? 'image' : 'video'
   const [itext, setItext] = useState('') // texte de l'image ; en vidéo, chaque plan porte le sien (s.plans)
   const [error, setError] = useState('')
   const [picking, setPicking] = useState(null) // 'recent' | 'video' : la fenêtre des références est ouverte
@@ -111,15 +121,25 @@ export default function Cinema() {
   const [run, setRun] = useState(null) // { id, recipeId, shots } : le modèle en cours
   const [rerror, setRerror] = useState('')
   const recipe = mode === 'recipe'
-  const changeMode = (m) => { setMode(m); setError(''); if (m === 'recipe' && !recipeId) pickRecipe(RECIPES[0].id) }
   const examples = (id) => Object.fromEntries(recipeById(id).texts.map((t) => [t.key, t.example ?? '']))
   const pickRecipe = (id) => { setRecipeId(id); setRtext(examples(id)); setRerror('') }
-  useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ
+  // Un outil s'ouvre dans son onglet ; un modèle (workflow) prépare aussi son formulaire.
+  const openTool = (id) => {
+    setError('')
+    if (!id) return setTool(null)
+    const t = tabOf(id)
+    setTab(t); setTool(id)
+    if (t === 'recipe') pickRecipe(id)
+  }
+  // Changer d'onglet ouvre son premier outil : un seul clic pour commencer, la liste reste à un clic (« Outils »).
+  const openTab = (t) => openTool(TOOLS[t][0].id)
+  useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ, même si Cinéma est déjà ouvert
+    if (pending?.target !== 'cinema.recipe') return
     const h = take('cinema.recipe')
-    const a = h && assets.find((x) => x.id === h.assetId)
+    const a = h && pool.find((x) => x.id === h.assetId)
     if (!a) return
-    setMode('recipe'); setRecipeId(h.recipeId); setPhotos({ [recipeById(h.recipeId).photos[0].key]: a }); setRtext(examples(h.recipeId))
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    openTool(h.recipeId); setPhotos({ [recipeById(h.recipeId).photos[0].key]: a })
+  }, [pending]) // eslint-disable-line react-hooks/exhaustive-deps
   const runJobs = run ? jobs.filter((j) => j.spec?.recipe?.runId === run.id) : []
   const video = mode === 'video'
   const text = video ? s.current.text : itext
@@ -138,7 +158,6 @@ export default function Cinema() {
   const clipSecs = ref.references.filter((r) => r.kind === 'video').reduce((n, r) => n + (r.asset.secs || 0), 0) // durée des vidéos jointes : facturée en entrée
   const secs = activeTask === 'edit' ? Math.max(4, Math.ceil(clipSecs)) : s.total // modifier : la sortie dure autant que la vidéo
   const cost = video ? (native ? videoCost(vmodel, secs, s.res, { inputSecs: clipSecs, sound: s.sound }) : s.cost) : imageCost(imodel, iRes2, iN)
-  const busy = recipe ? Boolean(run) : jobs.some((j) => j.kind === mode)
 
   // Ce qui manque pour lancer, dit en clair sous le texte.
   const needsStart = video && caps.startFrame === 'required' && !ref.slots.start
@@ -235,22 +254,8 @@ export default function Cinema() {
   const logo = logoFor(model.id)
   const durations = s.picks.map((d) => ({ id: d, title: `${d} s` }))
 
-  return (
-    <div className={`cn${collapsed ? ' min' : ''}`}>
-      <SkipLink />
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} mode={mode} onMode={changeMode} />
-
-      <main className={`cn-main${busy ? ' busy' : ''}`} id="main" tabIndex={-1}>
-        <div className="cn-stage">
-          <h1 className={busy ? 'sr-only' : 'cn-h1'}>{recipe ? 'Choisissez un modèle' : 'Racontez vos histoires'}</h1>
-          {recipe && busy && <RunStrip jobs={runJobs} onDone={() => { setRun(null); pickRecipe(RECIPES[0].id) }} />}
-          {recipe && !busy ? <RecipeCards value={recipeId} onPick={pickRecipe} /> : busy ? <GenerationTray kind={recipe ? 'video' : mode} className="cn-tray" /> : <HeroStack />}
-        </div>
-
-        <div className="cn-dock">
-          {recipe ? (recipeId && !busy && (
-            <RecipeForm id={recipeId} texts={rtext} onText={(k, v) => { setRtext((x) => ({ ...x, [k]: v })); setRerror('') }} photos={photos} onAdd={() => setPicking('photo')} onRemove={(k) => setPhotos((x) => ({ ...x, [k]: undefined }))} onPick={pickRecipe} error={rerror} onRun={runRecipe} />
-          )) : (
+  // Le compositeur (texte, pièces jointes, réglages) : formulaire des outils « Générateur d'images » et « Références et montage ».
+  const composer = (
           <div className="cn-comp">
             {video && attached.length > 0 && (
               <ul className="cn-strip" aria-label="Références jointes">
@@ -340,9 +345,42 @@ export default function Cinema() {
               </div>
             </div>
           </div>
-          )}
+  )
+
+  const runBusy = recipe && Boolean(run)
+  return (
+    <div className="cx cn">
+      <SkipLink />
+      <Rail tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} />
+
+      <div className="cx-shell">
+      <header className="cx-top">
+        <ProjectPicker />
+        <div className="cx-acc">
+          <RechargeButton className="cx-price">Tarifs</RechargeButton>
+          <BalanceChip />
+          <AccountMenu fallback={<span className="av" aria-hidden="true" />} />
         </div>
-      </main>
+      </header>
+
+      <div className="cx-body">
+      <ToolPanel tab={tab} onTab={openTab} tool={tool} onTool={openTool} onTemplates={() => setView('templates')}>
+        {tool === 'video-gen' && <CreateLeft banner={false} addLabel="Ajouter un média" />}
+        {(tool === 'image' || tool === 'video-refs') && composer}
+        {recipe && recipeId && (runBusy
+          ? <p className="cx-note">Le modèle « {recipeById(recipeId).name} » est en cours : suivez-le dans Créations.</p>
+          : <RecipeForm id={recipeId} texts={rtext} onText={(k, v) => { setRtext((x) => ({ ...x, [k]: v })); setRerror('') }} photos={photos} onAdd={() => setPicking('photo')} onRemove={(k) => setPhotos((x) => ({ ...x, [k]: undefined }))} onPick={openTool} error={rerror} onRun={() => { runRecipe(); setView('creations') }} />)}
+      </ToolPanel>
+
+      <Showcase
+        view={view}
+        onView={setView}
+        tool={tool}
+        onPickTemplate={(id) => { openTool(id); setView('creations') }}
+        top={runBusy ? <RunStrip jobs={runJobs} onDone={() => setRun(null)} /> : null}
+      />
+      </div>
+      </div>
 
       <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={picking === 'photo' ? pickPhoto : attach} />
     </div>
