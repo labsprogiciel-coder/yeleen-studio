@@ -11,7 +11,7 @@ import { RECIPES, recipeById, recipeCost } from '@studio/catalog/recipes'
 import { THUMBS, TOURS, toolById } from './tools.js'
 
 const VIEWS = [{ id: 'creations', icon: 'sparkle', label: 'Créations' }, { id: 'templates', icon: 'layers', label: 'Modèles' }]
-const KINDS = ['video', 'image'] // ordre d'affichage des créations en cours
+const KINDS = ['video', 'image', 'audio'] // ordre d'affichage des créations en cours
 
 /** Carte d'un workflow : le titre à gauche, la vignette à droite. */
 function TemplateCard({ r, onPick }) {

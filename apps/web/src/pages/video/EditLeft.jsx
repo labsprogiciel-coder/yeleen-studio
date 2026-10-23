@@ -19,6 +19,7 @@ const HINTS = {
   extend: 'Décrivez la suite : « elle se retourne et s’éloigne »…',
   reframe: 'Précisez le cadrage : « garde le sujet à gauche »…',
   upscale: 'Précisez le rendu : « peau naturelle, textures nettes »…',
+  relight: 'Décrivez l’ambiance lumineuse : « soleil couchant », « néon cyberpunk »…',
   bg: 'Décrivez le sujet à garder : « la danseuse au centre »…',
   hdr: 'Précisez le rendu HDR : « hautes lumières préservées »…',
   fps: 'Précisez le mouvement à fluidifier…',
@@ -42,7 +43,7 @@ function ExtendChips({ dur, setDur, picks, context, setContext, contexts }) {
   )
 }
 
-export function EditLeft({ tool, setTool, panel }) {
+export function EditLeft({ tool, setTool, banner = true, panel }) {
   const t = EDIT_TOOLS.find((x) => x.id === tool) ?? EDIT_TOOLS[0]
   const s = useGenSettings()
   const [motion, setMotion] = useState(null)
@@ -73,10 +74,12 @@ export function EditLeft({ tool, setTool, panel }) {
 
   return (
     <div className="ep" {...panel}>
-      <div className="mc" style={{ background: gradient(1, 'video') }}>
-        <h3>Outils d'édition</h3>
-        <span>Modifiez, restylez, changez les angles, transformez</span>
-      </div>
+      {banner && (
+        <div className="mc" style={{ background: gradient(1, 'video') }}>
+          <h3>Outils d'édition</h3>
+          <span>Modifiez, restylez, changez les angles, transformez</span>
+        </div>
+      )}
 
       <Section id="ep-tool" title="Outil">
         <div className="ep-pair">
@@ -126,7 +129,12 @@ export function EditLeft({ tool, setTool, panel }) {
           meta={`+ ${extDur} s ${direction === 'end' ? 'à la fin' : 'au début'}${context ? ` · contexte ${context} s` : ''}`}
         />
       ) : (
-        <GenerateBar s={s} title={t.name} />
+        <GenerateBar
+          s={s}
+          title={t.name}
+          blocker={source ? null : 'Ajoutez la vidéo à modifier.'}
+          live={{ source, task: 'editing' }}
+        />
       )}
     </div>
   )
