@@ -43,7 +43,7 @@ export const TOOLS = {
     { id: 'audio-isolation', icon: 'isolation', title: 'Isolation audio', desc: 'Supprimez le bruit de fond de l’audio' },
   ]
 }
-export const TAB_LABEL = { image: 'Image', video: 'Vidéo', recipe: 'Modèles' }
+export const TAB_LABEL = { image: 'Image', video: 'Vidéo', recipe: 'Modèles', audio: 'Audio' }
 export const toolById = (id) => Object.values(TOOLS).flat().find((t) => t.id === id)
 export const tabOf = (id) => Object.keys(TOOLS).find((k) => TOOLS[k].some((t) => t.id === id))
 
