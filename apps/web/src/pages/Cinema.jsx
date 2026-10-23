@@ -277,7 +277,7 @@ export default function Cinema() {
               <div className="cn-field" id="cn-plan" role={video && s.multi ? 'tabpanel' : undefined} aria-labelledby={video && s.multi ? `plan-tab-${s.active}` : undefined}>
                 <MentionTextarea
                   ref={area}
-                  mentions={video}
+                  mentions={Boolean(video)}
                   value={text}
                   onChange={(t) => { setText(t); setError('') }}
                   items={video ? items : []}
