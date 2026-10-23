@@ -17,6 +17,23 @@ const PRESETS = ['Travelling avant', 'Orbite 360°', 'Zoom explosif', 'Plan dron
 
 const HINT = 'Décrivez le changement visuel souhaité, par exemple « Il neige » ou « Il fait nuit ».'
 
+
+const MODES = {
+  generate: {
+    title: 'Générateur de vidéos',
+    tiles: { source: 'off', start: 'auto', end: 'auto', audio: 'auto' }, // 'auto' = follow model caps
+    plans: true, duration: true,
+    reasonOff: 'Non disponible pour ce mode',
+  },
+  edit: {
+    title: 'Modifier la vidéo',
+    tiles: { source: 'required', start: 'off', end: 'off', audio: 'off' },
+    plans: false, duration: false,           // output length follows the source clip
+    modelFilter: (m) => Boolean(m.caps.references || m.caps.edit),
+    hint: 'Décrivez le changement visuel souhaité, par exemple « Il neige » ou « Il fait nuit ».',
+  },
+}
+
 /** Modèle à utiliser pour qu'un asset reçu trouve sa place : on garde le modèle courant s'il convient. */
 const modelFor = (slot, current) => {
   const c = current.caps
@@ -26,10 +43,20 @@ const modelFor = (slot, current) => {
   return { start: 'ltx-2-5-fast', end: 'ltx-2-3-pro', audio: 'ltx-2-3-a2v' }[slot]
 }
 
+const tileState = (cfg, key, capsOn, capsRequired) =>
+  cfg === 'off' ? { disabled: true, reason: 'Non disponible' }
+  : cfg === 'required' ? { required: true }
+  : { disabled: !capsOn, required: capsRequired }
+
 /** Panneau de création vidéo. `banner` : la carte du preset en tête (l'écran Vidéo) ; Cinéma a son propre en-tête d'outil. */
-export function CreateLeft({ panel, banner = true, addLabel = 'Plus' }) {
-  const [modelId, setModelId] = useState(VIDEO_MODELS[0].id)
-  const model = findModel(VIDEO_MODELS, modelId)
+export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel = 'Plus' }) {
+
+  const cfg = MODES[mode]
+  const models = useMemo(() => VIDEO_MODELS.filter(cfg.modelFilter ?? (() => true)), [cfg])
+
+  const [modelId, setModelId] = useState(models[0].id)              // was VIDEO_MODELS[0].id
+  const model = findModel(models, modelId)                          // was findModel(VIDEO_MODELS, modelId)
+  // ...
   const { caps } = model
   const [files, setFiles] = useState({})
   const setFile = (key) => (f) => setFiles((o) => ({ ...o, [key]: f }))
@@ -68,7 +95,7 @@ export function CreateLeft({ panel, banner = true, addLabel = 'Plus' }) {
   }, [files.audio])
   const s = useGenSettings(model, { audioSecs })
 
-  const items = VIDEO_MODELS.map((m) => modelItem(m, 'video'))
+  const items = models.map((m) => modelItem(m, 'video'))      
   const range = caps.duration.fromAudio
   const blocker = caps.startFrame === 'required' && !files.start ? 'Ce modèle exige une image de départ.'
     : caps.audioRef === 'required' && !files.audio ? `Ce modèle exige un fichier audio${range ? ` de ${range.min} à ${range.max} s` : ''}.`
