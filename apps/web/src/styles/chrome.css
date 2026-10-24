@@ -5,7 +5,7 @@ body .pg .lg{background:none}
 body .pg .nl{color:rgba(17,17,17,.72)}
 body .pg .nl:hover{color:var(--on-light)}
 body .pg .nl.on{color:var(--on-light);font-weight:700;box-shadow:inset 0 -2px 0 #111;border-radius:0}
-body .pg .bd{background:#111;color:var(--lime)}
+body .pg .bd{background:#111;color:var(--lime-ink)}
 body .pg .rt{color:var(--on-light)}
 body .pg .nv .pb{background:rgba(17,17,17,.08);border:1px solid rgba(17,17,17,.22);color:var(--on-light)}
 body .pg .nv .pb:hover{background:rgba(17,17,17,.16)}

@@ -1,6 +1,6 @@
 import Icon from '../../lib/icons.jsx'
 import Menu from '../../components/Menu.jsx'
-import { Section, DropTile, AddMedia, PlanSection, OptionChips, GenerateBar } from '../../components/GenPanel.jsx'
+import { Section, DropTile, AddMedia, citeAssets, PlanSection, OptionChips, GenerateBar } from '../../components/GenPanel.jsx'
 import useGenSettings from '../../lib/useGenSettings.js'
 import useMediaSecs from '../../lib/useMediaSecs.js'
 import { VIDEO_MODELS, findModel, priceLabel } from '@studio/catalog'
@@ -118,6 +118,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
           <AddMedia
             key={model.id}
             label={addLabel}
+            onAdd={(assets) => citeAssets(s, assets)}
           />
         )}
       </Section>

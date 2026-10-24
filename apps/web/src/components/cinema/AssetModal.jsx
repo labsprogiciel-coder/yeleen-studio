@@ -14,6 +14,7 @@ const EMPTY = []
 const SORTS = [{ id: 'recent', title: 'Plus récents' }, { id: 'old', title: 'Plus anciens' }, { id: 'name', title: 'Nom' }]
 const ORIGINS = [{ id: 'all', title: 'Tout' }, { id: 'upload', title: 'Importés' }, { id: 'generated', title: 'Générés' }]
 const BY_KIND = [{ id: 'all', label: 'Tout' }, { id: 'image', label: 'Images' }, { id: 'video', label: 'Vidéos' }, { id: 'audio', label: 'Audio' }]
+const KIND_IDS = ['image', 'video', 'audio']
 const UNDO_MS = 9000 // la suppression devient définitive (y compris côté serveur) après ce délai
 
 // Les trois entrées de la barre latérale, chacune avec ses propres filtres.
@@ -32,8 +33,19 @@ const TABS = [
  * Sans `onAdd` (consultation, ouverte depuis la navigation : voir lib/libraryDialog.jsx), on parcourt, on importe, on met en favori.
  * Dans les deux cas, chaque fichier a un menu : Télécharger, et Supprimer pour les miens (annulable pendant quelques secondes).
  * `view` choisit la vue d'arrivée : { tab, sub, origin, focus } (focus : identifiant d'un fichier à montrer).
+ * `accept` (comme un champ de fichier : « image/* », « video/mp4,video/quicktime ») ne montre et n'importe que ces fichiers ;
+ * `single` : un seul fichier, choisi d'un toucher (une case d'entrée du panneau), la fenêtre se ferme aussitôt.
  */
-export default function AssetModal({ open, onClose, onAdd, taken = [], initialSub = 'recent', view = null }) {
+/** Ce que `accept` autorise : les types (image, video, audio) et, s'il en nomme, les formats exacts. */
+function acceptRule(accept) {
+  if (!accept) return null
+  const parts = accept.split(',').map((x) => x.trim()).filter(Boolean)
+  const kinds = new Set(parts.map((x) => x.split('/')[0]))
+  const exact = parts.filter((x) => !x.endsWith('/*'))
+  return { kinds, ok: (a) => kinds.has(a.kind) && (!exact.length || !(a.type ?? a.contentType) || exact.includes(a.type ?? a.contentType)) }
+}
+
+export default function AssetModal({ open, onClose, onAdd, taken = [], initialSub = 'recent', view = null, accept = null, single = false }) {
   const ref = useRef(null)
   const assetsCtx = useAssets()
   const { assets, addUpload, update, remove, restore, purge } = assetsCtx
@@ -49,6 +61,8 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   const [picked, setPicked] = useState(() => new Set())
   const [focus, setFocus] = useState(null)
   const [undo, setUndo] = useState(null) // { ids, timer } : dernière suppression, annulable
+  const rule = useMemo(() => acceptRule(accept), [accept])
+  const onlyKind = rule?.kinds.size === 1 ? [...rule.kinds][0] : null
   const sub = subs[tab]
   const setSub = (v) => setSubs((s) => ({ ...s, [tab]: v }))
 
@@ -56,7 +70,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
     const d = ref.current
     if (open && !d.open) {
       const t = view?.tab ?? 'library'
-      const base = { library: view?.focus ? 'all' : initialSub, yeleen: 'all', favs: 'all' }
+      const base = { library: view?.focus ? 'all' : onlyKind ?? initialSub, yeleen: 'all', favs: onlyKind ?? 'all' }
       setTab(t)
       setSubs(view?.sub ? { ...base, [t]: view.sub } : base)
       setOrigin(view?.origin ?? 'all')
@@ -66,7 +80,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
       d.showModal()
     }
     if (!open && d.open) d.close()
-  }, [open, initialSub, view])
+  }, [open, initialSub, view, onlyKind])
 
   // Fichier à montrer (« Voir dans la bibliothèque ») : amené au centre et encadré.
   useEffect(() => {
@@ -89,15 +103,21 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
     else out = [...assets, ...yeleen].filter(favorite)
     if (tab === 'yeleen' && sub !== 'all') out = out.filter((a) => a.category === sub)
     else if (sub === 'image' || sub === 'video' || sub === 'audio') out = out.filter((a) => a.kind === sub)
+    if (rule) out = out.filter(rule.ok)
     out = [...out].sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name, 'fr') : sort === 'old' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt)) // à date égale (catalogue), l'ordre du fichier est conservé
     return tab === 'library' && sub === 'recent' ? out.slice(0, 24) : out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assets, yeleen, catalog.favs, tab, sub, origin, sort])
+  }, [assets, yeleen, catalog.favs, tab, sub, origin, sort, rule])
 
   const toggle = (id) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const upload = async (files) => {
     const added = (await Promise.all([...files].map(addUpload))).filter(Boolean)
     if (!added.length) return toast('Format non pris en charge : image, vidéo ou audio.')
+    if (single) { // une case d'entrée : le fichier importé est le choix
+      const ok = added.find((a) => !rule || rule.ok(a))
+      if (ok) { onAdd([ok]); return onClose() }
+      return toast('Ce fichier ne convient pas à cette entrée.')
+    }
     setTab('library')
     if (!browse) setPicked((s) => new Set([...s, ...added.map((a) => a.id)])) // en consultation, rien à cocher : l'import garde son menu
   }
@@ -140,7 +160,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
       <div className="am-panel" id="am-main" role="tabpanel" aria-labelledby={`am-tab-${tab}`}>
         <div className="am-sub">
           <div className="am-subs" role="tablist" aria-label="Type" onKeyDown={onTabKeys}>
-            {tabs.find((t) => t.id === tab).subs.map((t) => (
+            {tabs.find((t) => t.id === tab).subs.filter((t) => !rule || !KIND_IDS.includes(t.id) || rule.kinds.has(t.id)).map((t) => (
               <button key={t.id} type="button" role="tab" aria-selected={sub === t.id} tabIndex={sub === t.id ? 0 : -1} className={sub === t.id ? 'on' : undefined} onClick={() => setSub(t.id)}>{t.label}</button>
             ))}
           </div>
@@ -160,7 +180,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
         <div className="am-grid">
           {tab === 'library' && (
             <label className="am-up">
-              <input type="file" multiple accept="image/*,video/*,audio/*" onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
+              <input type="file" multiple={!single} accept={accept ?? 'image/*,video/*,audio/*'} onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
               <span className="am-cloud"><Icon name="upload" size={22} /></span>
               <span>Importer un fichier</span>
             </label>
@@ -178,7 +198,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
                     <span className="am-nm" aria-hidden="true">{a.name}</span>
                   </div>
                 ) : (
-                  <button type="button" className={`am-it${on ? ' on' : ''}`} aria-pressed={on} disabled={had} onClick={() => toggle(a.id)} aria-label={`${label}${had ? ', déjà ajouté' : ''}`}>
+                  <button type="button" className={`am-it${on ? ' on' : ''}`} aria-pressed={on} disabled={had} onClick={() => (single ? (onAdd([a]), onClose()) : toggle(a.id))} aria-label={`${label}${had ? ', déjà ajouté' : ''}`}>
                     <AssetThumb asset={a} />
                     <span className="am-nm">{a.name}</span>
                     {(on || had) && <span className="am-ck" aria-hidden="true"><Icon name="check" size={14} /></span>}

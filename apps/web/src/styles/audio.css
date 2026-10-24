@@ -65,7 +65,7 @@
 .audio .am-t{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
 .audio .am-t small{font-size:11px;color:var(--ink-3)}
 .audio .am-t b{font-size:14px;font-weight:500}
-.audio .ep-price{flex:none;font-size:12px;font-weight:600;color:var(--lime);white-space:nowrap}
+.audio .ep-price{flex:none;font-size:12px;font-weight:600;color:var(--lime-ink);white-space:nowrap}
 .audio .st{height:auto;min-height:240px;padding:14px 24px 16px;display:flex;flex-direction:column;gap:10px}
 .audio .sg{gap:8px}
 .audio .pm{display:flex;flex-direction:column;gap:6px;min-width:0;padding:10px 12px;border-radius:12px;background:var(--surface);color:var(--ink);text-align:left}

@@ -54,7 +54,7 @@
 .sp-pipe li:not(:last-child):before{content:"";position:absolute;left:30px;right:8px;top:10px;height:2px;background:var(--fill-hover)}
 .sp-pipe li.st-done:not(:last-child):before,.sp-pipe li.st-skipped:not(:last-child):before{background:var(--lime)}
 .sp-dot{position:relative;z-index:var(--z-raised);flex:none;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--fill);color:var(--ink-2)}
-.st-running .sp-dot{background:var(--lime-tint);color:var(--lime)}
+.st-running .sp-dot{background:var(--lime-tint);color:var(--lime-ink)}
 .st-done .sp-dot,.st-skipped .sp-dot{background:var(--lime);color:var(--on-light)}
 .st-failed .sp-dot{background:var(--danger-line);color:var(--danger-ink)}
 .sp-pipe li>div{min-width:0;display:flex;flex-direction:column;gap:6px}
@@ -78,7 +78,7 @@ a.lb-btn{text-decoration:none}
 .sp-back:hover{color:var(--ink)}
 .spot .ep-gen .gen span{display:flex;align-items:center;gap:6px}
 .sp-brandnote{padding:10px 12px;border-radius:12px;background:var(--surface)}
-.sp-brandnote a{color:var(--lime);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.sp-brandnote a{color:var(--lime-ink);font-weight:600;text-decoration:underline;text-underline-offset:2px}
 
 @media (max-width:640px){
   .sp-pipe{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:16px}

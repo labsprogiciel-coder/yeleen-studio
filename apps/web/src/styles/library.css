@@ -1,7 +1,7 @@
 /* Boutons et recherche partagés, vignettes, sélecteur d'assets, envoi vers, notifications, et le détail technique du Spot (la bibliothèque est une fenêtre : voir assetModal.css) */
 .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none;border:0;border-radius:10px;background:none;color:var(--ink-3);cursor:pointer;transition:background-color .15s,color .15s}
-.icon-btn:hover{background:var(--fill);color:#fff}
-.icon-btn.on{color:var(--lime)}
+.icon-btn:hover{background:var(--fill);color:var(--ink-hi)}
+.icon-btn.on{color:var(--lime-ink)}
 .lb-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:0 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background-color .15s,border-color .15s}
 .lb-btn:hover:not(:disabled){background:var(--line-soft);border-color:var(--line-strong)}
 .lb-btn.main{background:var(--lime);border-color:var(--lime);color:var(--on-light)}
@@ -25,7 +25,7 @@
 .at-video{aspect-ratio:16/10}
 .at-play{position:absolute;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:rgba(13,14,16,.6);border:1.5px solid #fff;color:#fff}
 .at-dur{position:absolute;right:6px;bottom:6px;padding:2px 6px;border-radius:6px;background:rgba(13,14,16,.78);color:#fff;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
-.at-audio{flex-direction:column;gap:6px;background:var(--field);color:var(--lime)}
+.at-audio{flex-direction:column;gap:6px;background:var(--field);color:var(--lime-ink)}
 .at-wave{display:flex;align-items:center;gap:2px;width:78%;height:46%}
 .at-wave i{flex:1;max-width:4px;min-height:3px;border-radius:2px;background:var(--lime);opacity:.85}
 .at.large{aspect-ratio:16/10;border-radius:12px}
@@ -34,19 +34,6 @@
 .at-audio.large audio{width:92%}
 
 /* Sélecteur d'asset (feuille latérale) */
-dialog.picker{position:fixed;inset:0 0 0 auto;margin:0;width:min(440px,100vw);height:100dvh;max-height:none;padding:16px;border:0;border-left:1px solid var(--line);background:var(--field);color:var(--ink);display:none;flex-direction:column;gap:12px}
-dialog.picker[open]{display:flex}
-dialog.picker::backdrop{background:rgba(0,0,0,.55)}
-dialog.picker header{display:flex;align-items:center;justify-content:space-between}
-dialog.picker h2{margin:0;font-family:var(--font-body);font-stretch:100%;text-transform:none;font-size:18px;font-weight:700}
-.picker-bar{display:flex;gap:8px}
-.picker-grid{flex:1;min-height:0;overflow-y:auto;align-content:start;list-style:none;margin:0;padding:2px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-.picker-grid button{position:relative;display:flex;flex-direction:column;gap:6px;width:100%;padding:6px;border:1px solid var(--fill);border-radius:12px;background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s}
-.picker-grid button:hover:not(:disabled){border-color:var(--lime)}
-.picker-grid button:disabled{opacity:.6;cursor:progress}
-.picker-grid span{padding:0 2px;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.picker-grid .gx-spin{position:absolute;top:10px;right:10px}
-.picker-empty{margin:auto;max-width:300px;text-align:center;font-size:14px;line-height:1.5;color:var(--ink-3)}
 
 /* Envoyer vers (sur un asset généré) */
 .mn-btn.send{gap:8px;min-height:36px;padding:0 12px;border:1px solid rgba(255,255,255,.2);border-radius:999px;background:rgba(13,14,16,.74);color:#fff;font-size:12px;font-weight:700}
@@ -62,11 +49,11 @@ dialog.picker h2{margin:0;font-family:var(--font-body);font-stretch:100%;text-tr
 .ch{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;min-height:0}
 
 .ch-json summary{width:max-content;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer}
-.ch-json summary:hover{color:#fff}
+.ch-json summary:hover{color:var(--ink-hi)}
 .ch-json>div{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:8px}
 .ch-json p{margin:0;font-size:13px;line-height:1.5;color:var(--ink-3)}
-.ch-json code{padding:1px 5px;border-radius:5px;background:var(--fill);color:#e6e6e2;font-size:12px}
-.ch-json pre{width:100%;max-height:280px;margin:0;overflow:auto;padding:12px;border-radius:10px;background:#0b0c0e;color:#d4d4d0;font-size:12px;line-height:1.5}
+.ch-json code{padding:1px 5px;border-radius:5px;background:var(--fill);color:var(--ink);font-size:12px}
+.ch-json pre{width:100%;max-height:280px;margin:0;overflow:auto;padding:12px;border-radius:10px;background:var(--field);color:var(--ink-2);font-size:12px;line-height:1.5}
 
 .ch-err{margin:0;padding:8px 10px;border-radius:8px;background:var(--danger-bg);color:var(--danger-ink);font-size:12px;line-height:1.45}
 

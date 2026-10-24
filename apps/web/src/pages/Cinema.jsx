@@ -16,6 +16,7 @@ import Showcase from '../components/cinema/Showcase.jsx'
 import { TOOLS, tabOf } from '../components/cinema/tools.js'
 import BalanceChip from '../components/BalanceChip.jsx'
 import ProjectPicker from '../components/cinema/ProjectPicker.jsx'
+import ThemeToggle from '../components/ThemeToggle.jsx'
 import { CreateLeft } from './video/CreateTab.jsx'
 import AudioPanel from './audio/AudioPanel.jsx'
 import ToolForm, { toolJobs } from '../components/cinema/ToolForm.jsx'
@@ -360,6 +361,7 @@ export default function Cinema() {
       <header className="cx-top">
         <ProjectPicker />
         <div className="cx-acc">
+          <ThemeToggle className="cx-ib cx-theme" />
           <RechargeButton className="cx-price">Tarifs</RechargeButton>
           <BalanceChip />
           <AccountMenu fallback={<span className="av" aria-hidden="true" />} />
