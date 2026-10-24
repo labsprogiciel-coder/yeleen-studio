@@ -5,6 +5,7 @@ import { jetons, useJobs } from '../lib/jobs.jsx'
 import { CAMERA_MOTIONS, videoCost } from '@studio/catalog'
 import { useAssets } from '../lib/assets.jsx'
 import AssetModal from './cinema/AssetModal.jsx'
+import AssetThumb from './AssetThumb.jsx'
 import { useToast } from '../lib/toasts.jsx'
 import MentionTextarea from './MentionTextarea.jsx'
 import PlanTabs from './PlanTabs.jsx'
@@ -37,9 +38,10 @@ export function QualityMenu({ s }) {
 /**
  * Case d'entrée : ouvre la bibliothèque (choisir un fichier ou en importer un), avec l'aperçu d'une image une fois remplie.
  * `accept` limite ce que la bibliothèque montre et importe ; `disabled` + `reason` : le modèle choisi n'accepte pas cette entrée ;
- * `required` : il l'exige. `onFile(file, asset)` reçoit le fichier choisi (null pour vider la case).
+ * `required` : il l'exige. `onFile(file, asset)` reçoit le fichier choisi (null pour vider la case). `asset` : la case montre cet
+ * asset de la bibliothèque au lieu d'un fichier (les modèles gardent l'asset, pas le fichier).
  */
-export function DropTile({ icon, label, accept, file, onFile, disabled = false, reason, required = false }) {
+export function DropTile({ icon, label, accept, file, asset = null, onFile, disabled = false, reason, required = false }) {
   const [thumb, setThumb] = useState(null)
   const [picking, setPicking] = useState(false)
   const { getFile } = useAssets()
@@ -59,18 +61,21 @@ export function DropTile({ icon, label, accept, file, onFile, disabled = false, 
       </div>
     )
   }
-  const pick = async ([asset]) => {
-    try { onFile(await getFile(asset), asset) } catch { toast('Fichier introuvable : réimportez-le.') }
+  const pick = async ([a]) => {
+    try { onFile(await getFile(a), a) } catch { toast('Fichier introuvable : réimportez-le.') }
   }
+  const name = file?.name ?? asset?.name
+  const shown = !file && asset // un asset sans fichier : son aperçu de bibliothèque
   return (
     <>
-      <div className={`ep-tile${file ? ' has' : ''}`} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}>
-        <button type="button" className="ep-pick" aria-haspopup="dialog" aria-label={file ? `${label} : ${file.name}, changer` : `${label} : choisir dans la bibliothèque`} onClick={() => setPicking(true)} />
+      <div className={`ep-tile${name ? ' has' : ''}${thumb || shown ? ' pic' : ''}`} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}>
+        {shown && <AssetThumb asset={asset} />}
+        <button type="button" className="ep-pick" aria-haspopup="dialog" aria-label={name ? `${label} : ${name}, changer` : `${label} : choisir dans la bibliothèque`} onClick={() => setPicking(true)} />
         <Icon name={icon} size={20} />
-        <span>{file ? file.name : label}</span>
-        {required && !file && <em className="ep-req">requis</em>}
-        {file && (
-          <button type="button" className="ep-x" aria-label={`Retirer ${file.name}`} onClick={() => onFile(null)}>
+        <span>{name ?? label}</span>
+        {required && !name && <em className="ep-req">requis</em>}
+        {name && (
+          <button type="button" className="ep-x" aria-label={`Retirer ${name}`} onClick={() => onFile(null)}>
             <Icon name="close" size={12} />
           </button>
         )}
@@ -97,6 +102,39 @@ export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*
       </button>
       <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={(assets) => onAdd?.(assets)} accept={accept} />
     </>
+  )
+}
+
+/**
+ * Case d'une référence jointe (Cinéma) : son aperçu et son nom (« Image 1 »). Toucher la case la cite dans le texte ;
+ * `off` : le modèle choisi ne l'utilise pas.
+ */
+export function RefTile({ asset, token, off = false, onCite, onRemove }) {
+  return (
+    <div className={`ep-tile has pic${off ? ' unused' : ''}`} title={off ? `${token} : non utilisé par ce modèle` : undefined}>
+      <AssetThumb asset={asset} />
+      <button type="button" className="ep-pick" aria-label={`Citer ${token} (${asset.name}) dans le texte`} onClick={onCite} />
+      <Icon name={asset.kind === 'video' ? 'vid' : asset.kind === 'audio' ? 'mus' : 'img'} size={20} />
+      <span>{token}</span>
+      <button type="button" className="ep-x" aria-label={`Retirer ${token}`} onClick={onRemove}><Icon name="close" size={12} /></button>
+    </div>
+  )
+}
+
+/**
+ * Le cadre de texte de tous les panneaux (celui du Générateur de vidéos) : la zone de saisie, une note éventuelle, puis le pied
+ * avec `foot` à gauche (@, puces) et le bouton Effacer à droite.
+ */
+export function PromptBox({ children, note = null, foot = null, canClear, onClear, clearLabel = 'Effacer le texte', ...rest }) {
+  return (
+    <div className="ep-prompt" {...rest}>
+      {children}
+      {note}
+      <div className="ep-pfoot">
+        {foot}
+        <button type="button" className="ep-clear" aria-label={clearLabel} disabled={!canClear} onClick={onClear}><Icon name="close" size={14} /></button>
+      </div>
+    </div>
   )
 }
 
@@ -137,7 +175,24 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
           <span>{modeItems.find((m) => m.id === value).title}</span>
         </Menu>
       </div>
-      <div className="ep-prompt" role={s.multi ? 'tabpanel' : undefined} id="plan-panel" aria-labelledby={s.multi ? `plan-tab-${s.active}` : undefined}>
+      <PromptBox
+        role={s.multi ? 'tabpanel' : undefined} id="plan-panel" aria-labelledby={s.multi ? `plan-tab-${s.active}` : undefined}
+        canClear={Boolean(s.current.text)} onClear={() => s.patch(s.active, { text: '' })} clearLabel="Effacer l’instruction"
+        note={unused.length > 0 && <p className="ep-refnote">{unused.map((t) => `@${t}`).join(', ')} : {ROLE_LABEL.unused.toLowerCase()}.</p>}
+        foot={<>
+          <button type="button" className="ep-at" aria-label="Insérer une référence" onClick={insertAt}><Icon name="at" size={16} /></button>
+          {s.caps?.cameraMotion && (
+            <Menu items={CAMERA_MOTIONS} value={s.camera} onChange={s.setCamera} label="Mouvement de caméra" menuWidth={230} className="ep-chip ep-cam">
+              <Icon name="motion" size={16} />{CAMERA_MOTIONS.find((c) => c.id === s.camera).title.replace('Caméra : auto', 'Caméra')}
+            </Menu>
+          )}
+          {s.multi && (
+            <button type="button" className="ep-chip" aria-label={`Durée du plan ${s.active + 1} : ${s.current.dur} secondes`} onClick={() => s.patch(s.active, { dur: next(DURATIONS, s.current.dur) })}>
+              <Icon name="clock" size={16} />{s.current.dur} s
+            </button>
+          )}
+        </>}
+      >
         {mentions ? (
           <MentionTextarea
             ref={area}
@@ -164,22 +219,7 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
             data-prompt
           />
         )}
-        {unused.length > 0 && <p className="ep-refnote">{unused.map((t) => `@${t}`).join(', ')} : {ROLE_LABEL.unused.toLowerCase()}.</p>}
-        <div className="ep-pfoot">
-          <button type="button" className="ep-at" aria-label="Insérer une référence" onClick={insertAt}><Icon name="at" size={16} /></button>
-          {s.caps?.cameraMotion && (
-            <Menu items={CAMERA_MOTIONS} value={s.camera} onChange={s.setCamera} label="Mouvement de caméra" menuWidth={230} className="ep-chip ep-cam">
-              <Icon name="motion" size={16} />{CAMERA_MOTIONS.find((c) => c.id === s.camera).title.replace('Caméra : auto', 'Caméra')}
-            </Menu>
-          )}
-          {s.multi && (
-            <button type="button" className="ep-chip" aria-label={`Durée du plan ${s.active + 1} : ${s.current.dur} secondes`} onClick={() => s.patch(s.active, { dur: next(DURATIONS, s.current.dur) })}>
-              <Icon name="clock" size={16} />{s.current.dur} s
-            </button>
-          )}
-          <button type="button" className="ep-clear" aria-label="Effacer l’instruction" disabled={!s.current.text} onClick={() => s.patch(s.active, { text: '' })}><Icon name="close" size={14} /></button>
-        </div>
-      </div>
+      </PromptBox>
     </section>
   )
 }

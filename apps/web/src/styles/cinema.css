@@ -1,58 +1,7 @@
-/* Studio cinéma : le compositeur (texte, pièces jointes, réglages) et l'avancement d'un modèle. La mise en page est dans studio.css. */
+/* Studio cinéma : l'avancement d'un modèle et le menu des projets. Les formulaires du panneau sont dans edit-panel.css, la mise en page dans studio.css. */
 .cn{--panel:var(--panel-bg);--card:var(--raised);--chip:var(--fill-hover);color:var(--ink);font-family:var(--font-body)}
 
-
-/* Compositeur */
-.cn-comp{flex:1;min-width:0;padding:12px;border-radius:26px;background:var(--card);border:1px solid var(--edge)}
-.cn-strip{display:flex;gap:8px;margin:0 0 10px;padding:2px 2px 4px;list-style:none;overflow-x:auto;scrollbar-width:none}
-.cn-strip li{position:relative;flex:none}
-.cn-strip li.off{opacity:.45}
-.cn-th{position:relative;display:block;width:50px;height:50px;padding:0;border:0;border-radius:10px;overflow:hidden;background:var(--chip);cursor:pointer}
-.cn-th .at{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border-radius:0}
-.cn-no{position:absolute;left:4px;bottom:3px;min-width:16px;padding:0 4px;border-radius:6px;background:rgba(0,0,0,.65);font-size:11px;font-weight:700;line-height:16px;text-align:center}
-.cn-rm{position:absolute;top:-5px;right:-5px;display:none;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:var(--ink);color:var(--on-light);cursor:pointer}
-.cn-strip li:hover .cn-rm,.cn-strip li:focus-within .cn-rm{display:flex}
-.cn-plans{margin:0 2px 8px}
-.cn-edit{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:end}
-.cn-field{grid-column:1;grid-row:1;min-width:0;--mt-pad:8px 6px;--mt-min:72px;--mt-max:min(38vh,340px)}
-.cn-field .mt-back,.cn-field textarea.mt-ta{font-size:15px;line-height:1.55}
-.cn-field textarea.mt-ta::placeholder{color:var(--ink-4)}
-.cn-field .mt-back mark{color:var(--lime-ink);background:rgba(214,255,63,.16);box-shadow:0 0 0 2px rgba(214,255,63,.16)}
-.cn-hint{margin:2px 6px 0;font-size:13px;line-height:1.4;color:var(--ink-3)}
-.cn-hint.bad{color:var(--danger-ink)}
-.cn-gen{grid-column:2;grid-row:1 / span 2;align-self:end;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:11px;white-space:nowrap;padding:0 20px;height:50px;border:0;border-radius:16px;background:var(--lime);color:var(--on-lime);cursor:pointer;box-shadow:0 3px 0 var(--lime-edge);transition:filter .15s,transform .1s}
-.cn-gen b{font-family:'Archivo',Helvetica,sans-serif;font-stretch:78%;font-weight:800;font-size:15px;text-transform:uppercase;letter-spacing:.02em;line-height:1}
-.cn-gen span{display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums}
-.cn-gen:hover:not(:disabled){filter:brightness(.95)}
-.cn-gen:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--lime-edge)}
-.cn-gen:disabled{background:var(--chip);color:var(--ink-4);box-shadow:none;cursor:not-allowed}
-.cn-bar{grid-column:1;grid-row:2;display:flex;align-items:center;gap:8px;min-width:0}
-.cn .cn-chip,.cn .cn-step{display:flex;align-items:center;gap:7px;flex:none;height:36px;min-height:0;padding:0 11px;border:0;border-radius:11px;background:var(--chip);color:var(--ink);font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;text-decoration:none}
-.cn .cn-chip:hover:not(:disabled){background:var(--line-strong)}
-.cn .cn-chip:disabled{color:var(--ink-4);cursor:default}
-.cn .cn-chip[aria-pressed="true"]{background:var(--lime-tint);color:var(--lime-ink)}
-.cn .cn-chip>svg:last-child:not(:first-child){color:var(--ink-3)}
-.cn .cn-model{max-width:230px}
-.cn .cn-model span{overflow:hidden;text-overflow:ellipsis}
-.cn-pair{display:flex;align-items:center;flex:none;height:36px;border-radius:11px;background:var(--chip)}
-.cn-pair button{display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:0;background:none;color:var(--ink);cursor:pointer;border-radius:11px}
-.cn-pair button:hover{background:var(--line-strong)}
-.cn-pair i{width:1px;height:18px;background:var(--line-strong)}
-.cn-scroll{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
-.cn-scroll::-webkit-scrollbar{display:none}
-.cn-more{flex:none;display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:0;border-radius:11px;background:var(--chip);color:var(--ink);cursor:pointer}
-.cn-step{padding:0 4px !important;gap:2px !important}
-.cn-step button{width:29px;height:29px;padding:0;border:0;border-radius:9px;background:none;color:var(--ink);font-size:16px;cursor:pointer}
-.cn-step button:disabled{color:var(--ink-4);cursor:default}
-.cn-step b{min-width:31px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
 .mn-list.cn-pop{background:var(--raised);border-color:var(--line);border-radius:20px;box-shadow:var(--shadow-pop)}
-
-
-
-/* Icônes des commandes du compositeur, 10 % plus petites ; la puce du son n'a plus de texte */
-.cn-bar svg{width:14px;height:14px}
-.cn-pair svg{width:16px;height:16px}
-.cn .cn-chip.icon{width:36px;padding:0;justify-content:center}
 
 .rc-runbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;width:min(980px,100%)}
 .rc-run{flex:1;display:flex;gap:10px;margin:0;padding:0;list-style:none;overflow-x:auto}
@@ -65,5 +14,4 @@
 .rc-run li[data-s="FAILED"] .rc-dot{background:var(--danger-line);color:var(--danger-ink)}
 .rc-back{flex:none;min-height:36px;padding:0 14px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
 .rc-back:hover{border-color:var(--line-strong)}
-.rc-notext{margin:0;padding:8px 6px;min-height:72px;font-size:15px;line-height:1.55;color:var(--ink-3)}
 

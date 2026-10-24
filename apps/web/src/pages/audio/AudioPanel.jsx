@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../../lib/icons.jsx'
 import Menu from '../../components/Menu.jsx'
 import MentionTextarea from '../../components/MentionTextarea.jsx'
-import { Section, GenerateButton } from '../../components/GenPanel.jsx'
+import { Section, GenerateButton, PromptBox } from '../../components/GenPanel.jsx'
 import { AUDIO_MODELS, findModel, priceLabel, voiceCost } from '@studio/catalog'
 import { VOICES, findVoice } from '@studio/catalog/voices'
 import { synthWav } from '../../lib/media.js'
@@ -158,7 +158,13 @@ export default function AudioPanel({ tool = 'voice-generator', onTool }) {
       </Section>
 
       <Section id="ap-script" title="Texte à lire">
-        <div className="ep-prompt">
+        <PromptBox canClear={Boolean(script)} onClear={() => setScript('')}
+          foot={has('language') && (
+            <Menu items={LANGUAGES} value={language} onChange={setLanguage} label="Langue" menuWidth={220} className="ep-chip">
+              <Icon name="globe" size={15} />
+              {LANGUAGES.find((l) => l.id === language)?.title ?? 'Langue'}
+            </Menu>
+          )}>
           <MentionTextarea
             mentions={false}
             value={script}
@@ -168,24 +174,7 @@ export default function AudioPanel({ tool = 'voice-generator', onTool }) {
             rows={5}
             data-prompt
           />
-          <div className="ep-pfoot">
-            {has('language') && (
-              <Menu items={LANGUAGES} value={language} onChange={setLanguage} label="Langue" menuWidth={220} className="ep-chip">
-                <Icon name="globe" size={15} />
-                {LANGUAGES.find((l) => l.id === language)?.title ?? 'Langue'}
-              </Menu>
-            )}
-            <button
-              type="button"
-              className="ep-clear"
-              aria-label="Effacer le texte"
-              disabled={!script}
-              onClick={() => setScript('')}
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </div>
-        </div>
+        </PromptBox>
       </Section>
 
       <div className="ep-opts">

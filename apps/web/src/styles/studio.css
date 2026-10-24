@@ -61,18 +61,6 @@
 .cx-li-ic.img{object-fit:cover;background:var(--card)}
 .cx-note{margin:0;padding:14px;border-radius:14px;background:var(--card);font-size:14px;line-height:1.5;color:var(--ink-2)}
 
-/* Le compositeur, empilé dans la colonne : texte, réglages (qui passent à la ligne), puis Générer sur toute la largeur. */
-.cx-panel .cn-comp{flex:none;border-radius:18px}
-.cx-panel .cn-edit{grid-template-columns:minmax(0,1fr);gap:10px}
-.cx-panel .cn-field{--mt-min:120px}
-.cx-panel .cn-bar{grid-row:2;flex-wrap:wrap}
-.cx-panel .cn-scroll{display:contents}
-.cx-panel .cn-more{display:none}
-.cx-panel .cn-gen{grid-column:1;grid-row:3;justify-content:space-between;width:100%;height:50px;padding:0 18px;border-radius:14px;box-shadow:none}
-.cx-panel .cn-gen b{font-family:inherit;font-stretch:normal;font-size:16px;font-weight:700;text-transform:none;letter-spacing:0}
-.cx-panel .cn-gen span{font-size:15px}
-.cx-panel .cn-gen:disabled{background:var(--card);border:1px solid var(--edge);color:var(--ink-3)}
-.cx-panel .cn .cn-model,.cx-panel .cn-model{max-width:100%}
 /* Le panneau partagé de l'écran Vidéo : sans son propre défilement, c'est la colonne qui défile ; Générer reste collé en bas. */
 .cx-panel .ep{flex:1;display:flex;flex-direction:column;gap:14px}
 .cx-panel .ep-gen{background:linear-gradient(transparent,var(--panel) 28%)}

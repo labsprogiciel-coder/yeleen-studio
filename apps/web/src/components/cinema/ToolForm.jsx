@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import Icon from '../../lib/icons.jsx'
 import Menu from '../Menu.jsx'
 import Segmented from '../Segmented.jsx'
 import MentionTextarea from '../MentionTextarea.jsx'
-import { Section, DropTile, GenerateButton } from '../GenPanel.jsx'
+import { Section, DropTile, GenerateButton, PromptBox } from '../GenPanel.jsx'
 import { jetons, useJobs } from '../../lib/jobs.jsx'
 import { findTool, isFileField, toolCheck, toolCost } from '@studio/catalog/tools'
 
@@ -142,13 +141,10 @@ export default function ToolForm({ tool: uiTool, onDone }) {
 
       {fields.filter((f) => f.type === 'text').map((f) => (
         <Section key={f.key} id={`tf-${f.key}`} title={f.label}>
-          <div className="ep-prompt">
+          <PromptBox canClear={Boolean(values[f.key])} onClear={() => set(f.key)('')} clearLabel={`Effacer : ${f.label}`}
+            foot={<span className="tf-count" aria-live="polite">{(values[f.key] ?? '').length} / {f.max}</span>}>
             <MentionTextarea mentions={false} value={values[f.key] ?? ''} onChange={set(f.key)} placeholder={f.placeholder} aria-label={f.label} rows={f.max > 500 ? 4 : 2} data-prompt />
-            <div className="ep-pfoot">
-              <span className="tf-count" aria-live="polite">{(values[f.key] ?? '').length} / {f.max}</span>
-              <button type="button" className="ep-clear" aria-label={`Effacer : ${f.label}`} disabled={!values[f.key]} onClick={() => set(f.key)('')}><Icon name="close" size={14} /></button>
-            </div>
-          </div>
+          </PromptBox>
         </Section>
       ))}
 

@@ -1,11 +1,9 @@
 import Icon from '../../lib/icons.jsx'
-import AssetThumb from '../AssetThumb.jsx'
 import Menu from '../Menu.jsx'
 import MentionTextarea from '../MentionTextarea.jsx'
-import { ATTACH_PATTERN } from '../../lib/mentions.js'
-import { jetons } from '../../lib/jobs.jsx'
+import { Section, DropTile, PromptBox, GenerateButton } from '../GenPanel.jsx'
 import { RECIPES, recipeCost, recipeIssue } from '@studio/catalog/recipes'
-import Cauri from '../Cauri.jsx'
+import { splitLines } from '@studio/catalog/workflows'
 
 const STEP_LABEL = { IN_QUEUE: 'En attente', IN_PROGRESS: 'En cours', COMPLETED: 'Terminé', FAILED: 'Échec', CANCELED: 'Annulé' }
 
@@ -29,48 +27,40 @@ export function RunStrip({ jobs, onDone }) {
 }
 
 /**
- * Formulaire d'un modèle : la même barre que les créations Image et Vidéo (pièces jointes en vignettes, + pour importer,
- * zone de texte, puces, bouton Générer avec le prix).
+ * Formulaire d'un modèle, sur le modèle du Générateur de vidéos : le modèle choisi, une case par photo (la bibliothèque s'ouvre
+ * au toucher), le cadre de texte de chaque entrée, puis Générer avec le prix. `onPhoto(clé, asset)` : null retire la photo.
  */
-export function RecipeForm({ id, texts, onText, photos, onAdd, onRemove, onPick, error, onRun }) {
+export function RecipeForm({ id, texts, onText, photos, onPhoto, onPick, error, onRun }) {
   const r = RECIPES.find((x) => x.id === id)
   const issue = recipeIssue(id, { texts, photos })
   const cost = recipeCost(id)
-  const attached = r.photos.filter((p) => photos[p.key])
   return (
-    <div className="cn-comp">
-      {attached.length > 0 && (
-        <ul className="cn-strip" aria-label="Photos jointes">
-          {attached.map((p) => (
-            <li key={p.key}>
-              <button type="button" className="cn-th" onClick={onAdd} aria-label={`${p.label} : ${photos[p.key].name}. Remplacer`} title={`${p.label} : remplacer`}>
-                <AssetThumb asset={photos[p.key]} />
-                <span className="cn-no" aria-hidden="true">{r.photos.indexOf(p) + 1}</span>
-              </button>
-              <button type="button" className="cn-rm" onClick={() => onRemove(p.key)} aria-label={`Retirer : ${p.label}`}><Icon name="close" size={11} /></button>
-            </li>
+    <div className="ep">
+      <Section id="rc-model" title="Modèle">
+        <Menu items={RECIPES.map((x) => ({ id: x.id, title: x.name, icon: x.icon }))} value={id} onChange={onPick} label="Modèle" menuWidth={280}>
+          <Icon name={r.icon} size={18} /><span className="ep-ell">{r.name}</span>
+        </Menu>
+      </Section>
+
+      <Section id="rc-photos" title={r.photos.length > 1 ? 'Photos' : 'Photo'}>
+        <div className={`ep-tiles${r.photos.length === 1 ? ' one' : ''}`}>
+          {r.photos.map((p) => (
+            <DropTile key={p.key} icon="img" label={p.label} accept="image/*" file={null} asset={photos[p.key] ?? null} onFile={(f, a) => onPhoto(p.key, f ? a : null)} required />
           ))}
-        </ul>
-      )}
-      <div className="cn-edit">
-        <div className="cn-field">
-          {r.texts.length ? r.texts.map((t) => (
-            <MentionTextarea key={t.key} value={texts[t.key] ?? ''} onChange={(v) => onText(t.key, v)} items={[]} pattern={ATTACH_PATTERN} isRef={() => false} roles={{}} placeholder={t.placeholder} aria-label={t.label} rows={t.lines ? t.max : 2} />
-          )) : (
-            <p className="rc-notext">{r.blurb}. Ajoutez les photos avec +.</p>
-          )}
-          {(error || issue) && <p className={`cn-hint${error ? ' bad' : ''}`} role={error ? 'alert' : 'status'}>{error || issue}</p>}
         </div>
-        <button type="button" className="cn-gen" disabled={Boolean(issue)} onClick={onRun} title={issue ?? undefined}>
-          <b>Générer</b><span><Cauri size={16} />{jetons(cost)}</span>
-        </button>
-        <div className="cn-bar">
-          <div className="cn-pair">
-            <button type="button" onClick={onAdd} aria-label={`Ajouter : ${r.photos.map((p) => p.label.toLowerCase()).join(', ')}`} title={r.photos.map((p) => p.label).join(' · ')}><Icon name="plus" size={18} /></button>
-          </div>
-          <Menu items={RECIPES.map((x) => ({ id: x.id, title: x.name, icon: x.icon }))} value={id} onChange={onPick} label="Modèle" menuWidth={280} className="cn-chip" listClass="cn-pop"><Icon name={r.icon} size={16} /><span>{r.name}</span></Menu>
-        </div>
-      </div>
+      </Section>
+
+      {r.texts.map((t) => (
+        <Section key={t.key} id={`rc-${t.key}`} title={t.label}>
+          <PromptBox canClear={Boolean(texts[t.key])} onClear={() => onText(t.key, '')} clearLabel={`Effacer : ${t.label}`}
+            foot={t.lines && <span className="tf-count" aria-live="polite">{splitLines(texts[t.key]).length} / {t.max}</span>}>
+            <MentionTextarea mentions={false} value={texts[t.key] ?? ''} onChange={(v) => onText(t.key, v)} placeholder={t.placeholder} aria-label={t.label} rows={t.lines ? t.max : 3} data-prompt />
+          </PromptBox>
+        </Section>
+      ))}
+
+      {issue && <p className="tf-hint" role="status">{issue}</p>}
+      <GenerateButton price={cost} disabled={Boolean(issue)} error={error} title={issue ?? undefined} onClick={onRun} />
     </div>
   )
 }
