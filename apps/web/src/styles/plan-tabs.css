@@ -4,10 +4,10 @@
 .ep-ptab{display:flex;align-items:center;border-radius:999px}
 .ep-ptab.on{background:var(--fill)}
 .ep-ptab>button:first-child{min-width:28px;height:28px;padding:0 8px;border:0;border-radius:999px;background:none;color:var(--ink-3);font-size:13px;font-weight:700;cursor:pointer}
-.ep-ptab.on>button:first-child{color:#fff}
+.ep-ptab.on>button:first-child{color:var(--ink-hi)}
 .ep-rm{display:flex;align-items:center;justify-content:center;width:24px;height:24px;margin-right:2px;border:0;border-radius:50%;background:none;color:var(--ink-2);cursor:pointer}
-.ep-rm:hover{background:#34363a;color:#fff}
-.ep-plus{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);border-radius:50%;background:none;color:#e6e6e2;cursor:pointer;transition:background-color .15s}
+.ep-rm:hover{background:var(--line-strong);color:var(--ink-hi)}
+.ep-plus{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);border-radius:50%;background:none;color:var(--ink);cursor:pointer;transition:background-color .15s}
 .ep-plus:hover:not(:disabled){background:var(--fill)}
 .ep-plus:disabled{opacity:.35;cursor:not-allowed}
 .ep-plans h2{margin:0;font-family:var(--font-body);font-stretch:100%;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}

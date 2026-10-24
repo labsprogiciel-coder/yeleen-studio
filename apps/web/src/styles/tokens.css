@@ -1,6 +1,8 @@
 /*
  * Jetons de design partagés. Une seule teinte d'accent (le vert-jaune) et une échelle de gris : tout le reste en découle.
- * Interface sombre par choix : `color-scheme: dark` pour que barres de défilement et contrôles natifs suivent.
+ * Interface sombre par défaut ; thème clair (blanc et gris) quand `<html data-theme="light">` (lib/theme.jsx) : seuls les jetons
+ * changent, `color-scheme` suit pour que barres de défilement et contrôles natifs s'accordent. Ce qui est posé sur une image ou
+ * une vidéo (voiles, texte blanc) garde ses couleurs fixes dans les deux thèmes.
  * Ne créez pas un jeton par valeur : seulement les valeurs qui reviennent avec la même fonction.
  */
 :root {
@@ -10,6 +12,7 @@
   --lime-hover: #c8f02f;  /* fond d'un bouton lime au survol */
   --lime-edge: #9fbf1f;   /* arête basse des boutons lime (ombre sans flou) */
   --lime-tint: #26300f;   /* fond d'un état actif dont le texte est lime (puce, pastille, étape) */
+  --lime-ink: var(--lime); /* texte ou icône en accent (prix, état actif) : lime en sombre, olive lisible en clair */
   --on-light: #111111;    /* texte sur un aplat clair : lime ou blanc */
   --on-lime: var(--on-light); /* texte sur fond --lime */
 
@@ -28,6 +31,24 @@
   --line-soft: #1f2023;   /* séparateurs discrets */
   --line: #2f3033;        /* bordures de champs */
   --line-strong: #3a3b3e; /* bordures au survol */
+  --ink-hi: #fff;         /* texte au survol, plus fort que --ink */
+  --wash: rgba(255, 255, 255, 0.07);   /* voile léger sur une surface teintée ou une pastille */
+  --wash-2: rgba(255, 255, 255, 0.12); /* le même, au survol */
+  --shadow-pop: 0 6px 8px rgba(0, 0, 0, 0.35); /* menus et fenêtres */
+
+  /* Studio Cinéma : fond de page, cadre, panneaux, cartes et bordures des couches */
+  --page: #08090a;
+  --shell: #0f1012;
+  --panel-bg: #141517;
+  --card-bg: #1a1b1e;
+  --edge: #232427;
+  /* En-têtes et icônes d'outils teintés par type (image, vidéo, modèle) */
+  --tint-image-bg: #1c2540;
+  --tint-image: #8fa8ff;
+  --tint-video-bg: #183428;
+  --tint-video: #5fe0a0;
+  --tint-recipe-bg: #272c12;
+  --tint-muted: rgba(255, 255, 255, 0.62); /* texte secondaire sur un fond teinté */
 
   --danger-ink: #ffb4a8;  /* texte d'erreur */
   --danger-bg: #2a1816;   /* fond d'un message d'erreur (texte --danger-ink) */
@@ -49,4 +70,49 @@
 
   /* Caractères : Archivo (condensé) pour les titres, Hanken Grotesk pour tout le reste */
   --font-body: 'Hanken Grotesk', Helvetica, sans-serif;
+}
+
+/* Thème clair : blanc et gris neutres, même accent. Le vert-jaune reste le fond des actions ; en texte il devient olive (--lime-ink). */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --lime-tint: #eef6cf;
+  --lime-ink: #4a6a00;    /* 6,2:1 sur blanc */
+  --lime-edge: #a7c62a;
+
+  --ink: #17181b;
+  --ink-2: #3d3f45;
+  --ink-3: #5c5e66;       /* 6,4:1 sur blanc */
+  --ink-4: #6b6d75;       /* 5,1:1 sur blanc, 4,7:1 sur --field */
+
+  --bg: #f4f4f5;
+  --field: #f1f1f3;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --fill: #e9e9ec;
+  --fill-hover: #e2e2e6;
+
+  --line-soft: #ececef;
+  --line: #dcdce1;
+  --line-strong: #c5c6cc;
+  --ink-hi: #000;
+  --wash: rgba(17, 18, 22, 0.05);
+  --wash-2: rgba(17, 18, 22, 0.09);
+  --shadow-pop: 0 10px 28px rgba(16, 17, 20, 0.12), 0 1px 3px rgba(16, 17, 20, 0.08);
+
+  --danger-ink: #b42318;
+  --danger-bg: #fdecea;
+  --danger-line: #f3c4bd;
+
+  --page: #e7e7ea;
+  --shell: #f6f6f7;
+  --panel-bg: #ffffff;
+  --card-bg: #f3f3f5;
+  --edge: #e0e0e4;
+  --tint-image-bg: #e8edff;
+  --tint-image: #3651c9;
+  --tint-video-bg: #e1f5ea;
+  --tint-video: #12784f;
+  --tint-recipe-bg: #f1f6d9;
+  --tint-muted: rgba(17, 18, 22, 0.6);
 }

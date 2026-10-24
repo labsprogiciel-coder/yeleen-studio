@@ -8,8 +8,8 @@
 .shell .nls{display:flex;gap:2px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;align-items:center}
 .shell .nls::-webkit-scrollbar{display:none}
 .shell .nl{color:var(--ink-4);padding:8px;font-size:14px;font-weight:500;display:flex;gap:5px;align-items:center;white-space:nowrap;flex:none}
-.shell .nl.on{color:var(--lime)}
-.shell .bd{font-style:normal;font-size:9px;font-weight:700;border-radius:4px;padding:2px 5px;background:#33430c;color:var(--lime);text-transform:uppercase}
+.shell .nl.on{color:var(--lime-ink)}
+.shell .bd{font-style:normal;font-size:9px;font-weight:700;border-radius:4px;padding:2px 5px;background:#33430c;color:var(--lime-ink);text-transform:uppercase}
 .shell .rt{display:flex;gap:8px;align-items:center;flex:none;color:var(--ink-2)}
 .shell .pb{background:var(--raised);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;position:relative}
 .shell .av{width:28px;height:28px;border-radius:50%;background:conic-gradient(var(--lime),#4d8ad6,#e8307a,var(--lime))}
