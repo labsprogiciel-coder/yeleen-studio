@@ -9,7 +9,7 @@ body .pg .bd{background:#111;color:var(--lime-ink)}
 body .pg .rt{color:var(--on-light)}
 body .pg .nv .pb{background:rgba(17,17,17,.08);border:1px solid rgba(17,17,17,.22);color:var(--on-light)}
 body .pg .nv .pb:hover{background:rgba(17,17,17,.16)}
-body .pg .nv .lim{background:#111;color:var(--lime-ink)}
+body .pg .nv .lim{background:#111;color:var(--lime)}
 body .pg .nv .lim:hover{filter:none;background:var(--fill)}
 body .pg .nv :focus-visible{outline-color:#111}
 

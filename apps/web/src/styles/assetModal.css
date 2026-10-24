@@ -38,7 +38,7 @@ dialog.am-dlg::backdrop{background:rgba(0,0,0,.66)}
 .am-ck{position:absolute;top:8px;right:8px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--lime);color:var(--on-light)}
 .am-fav{position:absolute;top:8px;left:8px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;cursor:pointer;opacity:0;transition:opacity .15s}
 .am-cell:hover .am-fav,.am-fav:focus-visible,.am-fav.on{opacity:1}
-.am-fav.on{color:var(--lime-ink)}
+.am-fav.on{color:var(--lime)}
 .am-fav:hover{background:rgba(0,0,0,.75)}
 .am-fav::after{content:'';position:absolute;inset:-8px} /* l'étoile reste à 28 px ; la zone tactile fait 44 px */
 @media (hover:none){.am-fav{opacity:1}}
