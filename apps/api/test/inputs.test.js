@@ -44,3 +44,25 @@ test('workflow : les textes sont nettoyés et les villes réparties sur prompt �
   const city = buildInput('workflow', findWorkflow('city-journey'), { inputs: { image_urls: ['https://v3.fal.media/p.png'], cities: 'Dakar\n\n Paris \nTokyo' } })
   assert.deepEqual(city, { image_urls: ['https://v3.fal.media/p.png'], prompt: 'Dakar', prompt_2: 'Paris', prompt_3: 'Tokyo', prompt_4: 'Dakar', prompt_5: 'Paris', prompt_6: 'Tokyo', prompt_7: 'Dakar' })
 })
+
+test('outils : chaque entrée envoyée à fal suit le schéma du point d’accès', async () => {
+  const { findTool } = await import('@studio/catalog/tools')
+  const f = 'https://v3.fal.media/files/a.png'
+  assert.deepEqual(buildInput('tool', findTool('change-camera'), { inputs: { image: f, angle: 'profile' } }), { image_urls: [f], horizontal_angle: 90, vertical_angle: 0, zoom: 5, num_images: 1, output_format: 'png' })
+  assert.deepEqual(buildInput('tool', findTool('music-generator'), { inputs: { prompt: ' afrobeat ', length: '60', vocals: 'vocals' } }), { prompt: 'afrobeat', music_length_ms: 60000, force_instrumental: false })
+  assert.deepEqual(buildInput('tool', findTool('variations'), { inputs: { image: f, count: '4' } }).num_images, 4)
+  assert.deepEqual(buildInput('tool', findTool('speak-text'), { inputs: { image: f, text: 'Bonjour', resolution: '480p' } }), { image_url: f, text: 'Bonjour', resolution: '480p' })
+})
+
+test('outils ajoutés : prolonger, fluidifier, recadrer, restaurer, photo produit', async () => {
+  const { findTool } = await import('@studio/catalog/tools')
+  const v = 'https://v3.fal.media/files/c.mp4'
+  const f = 'https://v3.fal.media/files/a.png'
+  assert.deepEqual(buildInput('tool', findTool('video-extend'), { inputs: { video: v, mode: 'start', duration: '10' } }), { video_url: v, mode: 'start', duration: 10 })
+  assert.deepEqual(buildInput('tool', findTool('video-fps'), { inputs: { video: v, fps: '120' } }), { video_url: v, target_fps: 120, model: 'Apollo', H264_output: true })
+  assert.deepEqual(buildInput('tool', findTool('video-reframe'), { inputs: { video: v } }), { video_url: v, aspect_ratio: '9:16', resolution: '720p' })
+  assert.deepEqual(buildInput('tool', findTool('photo-restore'), { inputs: { image: f, colors: 'keep' } }), { image_url: f, remove_scratches: true, enhance_resolution: true, fix_colors: false })
+  const product = buildInput('tool', findTool('product-photo'), { inputs: { image: f, scene: 'market', ratio: '4:5' } })
+  assert.equal(product.aspect_ratio, '4:5')
+  assert.match(product.prompt, /market stall/)
+})

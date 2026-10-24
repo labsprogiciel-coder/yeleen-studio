@@ -338,3 +338,103 @@ test('Runware : annuler arrête le suivi sans remboursement ni appel (Runware n�
     assert.equal(rw.sent.length, 1)
   } finally { t.restore() }
 })
+
+test('outil du studio : envoyé au point d’accès du catalogue avec l’entrée fal, débité au prix du catalogue, sortie audio lue', async () => {
+  const { findTool, toolCost } = await import('@studio/catalog/tools')
+  let sent = null
+  const t = setup((url, init) => {
+    if (url.includes('storage/upload/initiate')) return { body: { file_url: 'https://v3.fal.media/files/in.mp3', upload_url: 'https://v3.fal.media/upload/1' } }
+    if (url.startsWith('https://queue.fal.run/fal-ai/elevenlabs/voice-changer')) { sent = JSON.parse(init.body); return { body: queued } }
+    if (url.includes('/status')) return { body: { status: 'COMPLETED' } }
+    return { body: { audio: { url: 'https://v3.fal.media/files/out.mp3', content_type: 'audio/mpeg' }, seed: 1 } }
+  })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    // L'audio est d'abord téléversé ici : le serveur le mesure (5 s de MP3 à 128 kbit/s) avant d'accepter l'outil limité à 60 s.
+    const { frames } = await import('./media.test.js')
+    const mp3 = frames(128, 192)
+    const up = await (await t.req('/uploads?name=voix.mp3', { method: 'POST', headers: { 'content-type': 'audio/mpeg', 'content-length': String(mp3.length) }, body: mp3 })).json()
+    assert.equal(up.secs, 5)
+    const inputs = { audio: up.url, voice: 'Aria' }
+    const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'voice-changer', inputs }))
+    const { jobId, balance, cost } = await res.json()
+    assert.equal(res.status, 202)
+    assert.equal(cost, toolCost(findTool('voice-changer'), inputs))
+    assert.equal(Math.round((start - balance) * 10) / 10, cost)
+    assert.deepEqual(sent, { audio_url: inputs.audio, voice: 'Aria' })
+    const done = await (await t.req(`/jobs/${jobId}`)).json()
+    assert.equal(done.status, 'COMPLETED')
+    assert.equal(done.outputs[0].contentType, 'audio/mpeg')
+  } finally { t.restore() }
+})
+
+test('outil du studio : un fichier hors du stockage fal est refusé sans débit ni appel', async () => {
+  let called = false
+  const t = setup(() => { called = true; return { body: queued } })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'remove-background', inputs: { image: 'https://exemple.com/a.png' } }))
+    assert.equal(res.status, 400)
+    assert.equal((await res.json()).error, 'invalid_file_url')
+    assert.equal((await (await t.req('/wallet')).json()).balance, start)
+    assert.equal(called, false)
+  } finally { t.restore() }
+})
+
+test('outil limité en durée : un fichier non téléversé ici, ou trop long, est refusé avant le débit ; mesuré et court, il passe', async () => {
+  const { mp4 } = await import('./media.test.js')
+  let n = 0
+  let submitted = 0
+  const t = setup((url) => {
+    if (url.includes('storage/upload/initiate')) { n++; return { body: { file_url: `https://v3b.fal.media/files/v${n}.mp4`, upload_url: `https://v3b.fal.media/upload/${n}` } } }
+    if (url.startsWith('https://queue.fal.run/fal-ai/depth-anything-video')) { submitted++; return { body: queued } }
+    return { body: {} }
+  })
+  const upload = (buf) => t.req('/uploads?name=clip.mp4', { method: 'POST', headers: { 'content-type': 'video/mp4', 'content-length': String(buf.byteLength) }, body: buf })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const long = await (await upload(mp4(600, 1920, 1080))).json()
+    assert.equal(long.secs, 600)
+    const job = (video) => t.req('/jobs', post({ kind: 'tool', modelId: 'video-depth', inputs: { video } }))
+    assert.equal((await (await job(long.url)).json()).error, 'media_too_long')
+    assert.equal((await (await job('https://v3b.fal.media/files/ailleurs.mp4')).json()).error, 'unmeasured_media')
+    assert.equal((await (await t.req('/wallet')).json()).balance, start)
+    assert.equal(submitted, 0)
+    const short = await (await upload(mp4(15, 1280, 720))).json()
+    assert.equal((await job(short.url)).status, 202)
+    assert.equal(submitted, 1)
+  } finally { t.restore() }
+})
+
+test('outil limité en résolution : une vidéo 4K est refusée par SDR vers HDR (1080p au plus)', async () => {
+  const { mp4 } = await import('./media.test.js')
+  const t = setup((url) => (url.includes('storage/upload/initiate') ? { body: { file_url: 'https://v3b.fal.media/files/4k.mp4', upload_url: 'https://v3b.fal.media/upload/1' } } : { body: queued }))
+  try {
+    const buf = mp4(8, 3840, 2160)
+    const up = await (await t.req('/uploads?name=a.mp4', { method: 'POST', headers: { 'content-type': 'video/mp4', 'content-length': String(buf.byteLength) }, body: buf })).json()
+    const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'video-hdr', inputs: { video: up.url } }))
+    assert.equal((await res.json()).error, 'media_too_large')
+  } finally { t.restore() }
+})
+
+test('sans taille d’image lisible, une vidéo est refusée par un outil limité en résolution ; un MP3 VBR long, par un outil limité en durée', async () => {
+  const { mp4, frames, mp3Frame, bytes } = await import('./media.test.js')
+  let n = 0
+  let submitted = 0
+  const t = setup((url) => {
+    if (url.includes('storage/upload/initiate')) { n++; return { body: { file_url: `https://v3b.fal.media/files/f${n}`, upload_url: `https://v3b.fal.media/upload/${n}` } } }
+    if (url.startsWith('https://queue.fal.run/')) { submitted++; return { body: queued } }
+    return { body: {} }
+  })
+  const upload = (buf, type) => t.req('/uploads?name=f', { method: 'POST', headers: { 'content-type': type, 'content-length': String(buf.byteLength) }, body: buf })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const audioOnly = await (await upload(mp4(8, 0, 0), 'video/mp4')).json() // piste sans largeur ni hauteur
+    assert.equal((await (await t.req('/jobs', post({ kind: 'tool', modelId: 'video-hdr', inputs: { video: audioOnly.url } }))).json()).error, 'unmeasured_media')
+    const vbr = bytes(mp3Frame(320), frames(32, 2600)) // ≈ 68 s, mais 7 s d'après la première trame
+    const up = await (await upload(vbr.buffer, 'audio/mpeg')).json()
+    assert.equal((await (await t.req('/jobs', post({ kind: 'tool', modelId: 'voice-changer', inputs: { audio: up.url } }))).json()).error, 'media_too_long')
+    assert.equal((await (await t.req('/wallet')).json()).balance, start)
+    assert.equal(submitted, 0)
+  } finally { t.restore() }
+})

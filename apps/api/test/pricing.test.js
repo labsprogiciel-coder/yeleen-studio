@@ -58,3 +58,54 @@ test('workflow fal : liste fermée, entrées contrôlées, prix du catalogue, so
   const out = outputsOf('workflow', { video: { url: 'https://v3.fal.media/v.mp4', content_type: 'video/mp4' }, extra: { images: [{ url: 'https://v3.fal.media/i.png', content_type: 'image/png' }] }, note: 'texte' })
   assert.deepEqual(out.map((o) => o.url), ['https://v3.fal.media/v.mp4', 'https://v3.fal.media/i.png'])
 })
+
+test('outil du studio : liste fermée, fichiers déposés chez fal, choix connus, prix du catalogue', async () => {
+  const { findTool, toolCost } = await import('@studio/catalog/tools')
+  const { buildInput, outputsOf } = await import('../src/inputs.js')
+  const f = 'https://v3.fal.media/files/a.png'
+  const ok = { kind: 'tool', modelId: 'relight', inputs: { image: f, light: 'neon' } }
+  assert.equal(priceJob(ok).cost, toolCost(findTool('relight'), ok.inputs))
+  assert.equal(priceJob({ ...ok, modelId: 'nope' }).error, 'unknown_model')
+  assert.equal(priceJob({ ...ok, inputs: { image: 'https://ailleurs.com/a.png' } }).error, 'invalid_file_url')
+  assert.equal(priceJob({ ...ok, inputs: { image: f, light: 'laser' } }).error, 'invalid_option')
+  assert.deepEqual(buildInput('tool', priceJob(ok).model, ok), { image_url: f, lighting_style: 'neon' })
+  // Choix par défaut : le premier de la liste.
+  assert.deepEqual(buildInput('tool', findTool('relight'), { inputs: { image: f } }), { image_url: f, lighting_style: 'natural' })
+  // Sortie lue sans connaître sa forme, type déduit du nom de fichier s'il manque.
+  assert.deepEqual(outputsOf('tool', { audio: { url: 'https://v3.fal.media/s.mp3', file_name: 's.mp3' } }).map((o) => o.contentType), ['audio/mpeg'])
+})
+
+test('outil du studio : texte requis, plage de nombres et règle entre champs', () => {
+  const v = 'https://v3.fal.media/files/c.mp4'
+  assert.equal(priceJob({ kind: 'tool', modelId: 'music-generator', inputs: { prompt: '  ' } }).error, 'invalid_text')
+  assert.equal(priceJob({ kind: 'tool', modelId: 'clip-editor', inputs: { video: v, start: 4, end: 2 } }).error, 'invalid_option')
+  assert.equal(priceJob({ kind: 'tool', modelId: 'clip-editor', inputs: { video: v, start: -1, end: 2 } }).error, 'invalid_option')
+  assert.equal(priceJob({ kind: 'tool', modelId: 'clip-editor', inputs: { video: v, start: 1, end: 3 } }).ok, true)
+  assert.equal(priceJob({ kind: 'tool', modelId: 'video-project-editor', inputs: { videos: [v] } }).error, 'invalid_file_url') // deux clips au moins
+})
+
+test('outil du studio : le prix suit la durée et la taille choisies, au pire cas pour un fichier fourni', async () => {
+  const { findTool, toolCost } = await import('@studio/catalog/tools')
+  const { toJetons } = await import('@studio/catalog')
+  const music = findTool('music-generator')
+  assert.equal(toolCost(music, { prompt: 'a', length: '30' }), toJetons(0.6)) // minute entamée
+  assert.equal(toolCost(music, { prompt: 'a', length: '120' }), toJetons(1.2))
+  assert.equal(toolCost(findTool('video-upscaler'), { target: '4k' }), toJetons(0.0288 * 30))
+  assert.equal(toolCost(findTool('speak-text'), { text: 'x'.repeat(95), resolution: '720p' }), toJetons(10 * 0.15)) // 10 s de parole
+  for (const t of (await import('@studio/catalog/tools')).TOOLS) assert.ok(toolCost(t, {}) <= 250, `${t.id} dépasse le plafond d'une génération`)
+})
+
+test('outils ajoutés : prix au pire cas affiché (durée ajoutée, images créées, durée maximale)', async () => {
+  const { findTool, toolCost } = await import('@studio/catalog/tools')
+  const { EXTEND_MODEL, toJetons } = await import('@studio/catalog')
+  assert.equal(toolCost(findTool('video-extend'), { duration: '20' }), toJetons(EXTEND_MODEL.price.usd * 20))
+  assert.equal(toolCost(findTool('video-fps'), { fps: '60' }), toJetons((60 - 24) * 10 * 0.002))
+  assert.equal(toolCost(findTool('video-reframe'), { resolution: '1080p' }), toJetons(2))
+  assert.equal(findTool('video-hdr').maxP, 1080)
+})
+
+test('sortie d’un outil sans type ni nom de fichier : reconnue à l’extension de son adresse', async () => {
+  const { outputsOf } = await import('../src/inputs.js')
+  assert.deepEqual(outputsOf('tool', { video: { url: 'https://v3.fal.media/files/out.mp4' } }).map((o) => o.contentType), ['video/mp4'])
+  assert.deepEqual(outputsOf('tool', { video: { url: 'https://v3.fal.media/files/out' } }), [])
+})

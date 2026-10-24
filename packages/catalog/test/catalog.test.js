@@ -96,3 +96,15 @@ test('workflows fal : champs, prix et contrôle des entrées', async () => {
   assert.equal(workflowInputIssue(p2v, { person1: 'a' }), 'missing_person2')
   assert.equal(workflowInputIssue(WORKFLOWS.find((w) => w.id === 'fan-cam'), { image_urls: ['a'] }), null) // détails facultatifs
 })
+
+test('outils : identifiants uniques, un point d’accès, des choix et un prix pour chacun', async () => {
+  const { TOOLS, toolCost, toolInputIssue } = await import('../src/tools.js')
+  assert.equal(new Set(TOOLS.map((t) => t.id)).size, TOOLS.length)
+  for (const t of TOOLS) {
+    assert.match(t.endpoint, /^[\w-]+\/[\w./-]+$/, t.id)
+    assert.ok(['image', 'video', 'audio'].includes(t.output), t.id)
+    for (const f of t.inputs.filter((x) => x.type === 'select')) assert.ok(f.options.length > 0, `${t.id}.${f.key}`)
+    assert.ok(toolCost(t, {}) >= 0.1, t.id)
+    assert.ok(toolInputIssue(t, {}) !== null || t.inputs.every((f) => f.type === 'select' || (f.type === 'text' && !f.required)), `${t.id} : entrées vides acceptées`)
+  }
+})
