@@ -14,7 +14,7 @@ const lower = (label) => label.charAt(0).toLowerCase() + label.slice(1) // « Vi
 const VARIANTS = { speak: [{ id: 'speak-text', title: 'Script' }, { id: 'speak-audio', title: 'Ajouter un audio' }] }
 export const toolJobs = (id) => VARIANTS[id] ?? (findTool(id) ? [{ id }] : null)
 
-/** Durée (s) et hauteur (px, vidéo) d'un fichier, lues dans le navigateur : le serveur ne les mesure pas encore. */
+/** Durée (s) et plus petit côté (px, vidéo) d'un fichier, lus dans le navigateur pour refuser tôt ce que le serveur refuserait. */
 function useMediaInfo(file, kind) {
   const [info, setInfo] = useState(null)
   useEffect(() => {
@@ -22,7 +22,7 @@ function useMediaInfo(file, kind) {
     const url = URL.createObjectURL(file)
     const el = document.createElement(kind)
     el.preload = 'metadata'
-    el.onloadedmetadata = () => setInfo({ secs: Math.round(el.duration * 10) / 10, height: el.videoHeight || null })
+    el.onloadedmetadata = () => setInfo({ secs: Math.round(el.duration * 10) / 10, short: Math.min(el.videoWidth, el.videoHeight) || null })
     el.onerror = () => setInfo(null)
     el.src = url
     return () => { el.removeAttribute('src'); URL.revokeObjectURL(url) }
@@ -30,11 +30,15 @@ function useMediaInfo(file, kind) {
   return info
 }
 
-/** Tuile d'un fichier vidéo ou audio : remonte sa durée et sa hauteur. */
-function MediaTile({ field, file, onFile, onInfo }) {
-  const info = useMediaInfo(file, one(field.type) === 'video' ? 'video' : 'audio')
+// Formats que le serveur sait mesurer (apps/api/src/media.js) : les seuls acceptés par un outil à durée ou résolution limitée.
+const MEASURED = { video: 'video/mp4,video/quicktime', audio: 'audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a' }
+
+/** Tuile d'un fichier vidéo ou audio : remonte sa durée et son plus petit côté. */
+function MediaTile({ field, file, onFile, onInfo, limited }) {
+  const kind = one(field.type) === 'video' ? 'video' : 'audio'
+  const info = useMediaInfo(file, kind)
   useEffect(() => onInfo(info), [info]) // eslint-disable-line react-hooks/exhaustive-deps
-  return <DropTile icon={ICON[field.type]} label={field.label} accept={`${one(field.type)}/*`} file={file} onFile={onFile} required />
+  return <DropTile icon={ICON[field.type]} label={field.label} accept={limited ? MEASURED[kind] : `${kind}/*`} file={file} onFile={onFile} required />
 }
 
 /** Liste de fichiers : une tuile par fichier posé, plus une tuile vide tant que le maximum n'est pas atteint. */
@@ -69,7 +73,7 @@ export default function ToolForm({ tool: uiTool, onDone }) {
   const { submit } = useJobs()
   const [values, setValues] = useState({})
   const [files, setFiles] = useState({})
-  const [media, setMedia] = useState({}) // { [clé]: { secs, height } }
+  const [media, setMedia] = useState({}) // { [clé]: { secs, short } }
   const secs = Object.fromEntries(Object.entries(media).map(([k, m]) => [k, m?.secs]))
   const [error, setError] = useState('')
   const set = (key) => (v) => { setValues((o) => ({ ...o, [key]: v })); setError('') }
@@ -94,8 +98,8 @@ export default function ToolForm({ tool: uiTool, onDone }) {
     }
     const long = tool.maxSecs && Object.values(secs).find((s) => s > tool.maxSecs)
     if (long) return `${tool.maxSecs} s au maximum : raccourcissez le fichier (il dure ${Math.round(long)} s).`
-    const tall = tool.maxHeight && Object.values(media).find((m) => m?.height > tool.maxHeight)
-    if (tall) return `${tool.maxHeight}p au maximum : cette vidéo fait ${tall.height}p.`
+    const tall = tool.maxP && Object.values(media).find((m) => m?.short > tool.maxP)
+    if (tall) return `${tool.maxP}p au maximum : cette vidéo est en ${tall.short}p.`
     if (tool.id === 'clip-editor' && clip > 0 && values.end > clip) return `Le clip dure ${clip} s : la fin doit venir avant.`
     if (toolCheck(tool, inputs)) return 'La fin doit venir après le début.'
     return null
@@ -125,13 +129,13 @@ export default function ToolForm({ tool: uiTool, onDone }) {
       )}
 
       {fileFields.length > 0 && (
-        <Section id="tf-files" title={tool.maxSecs ? `Fichiers · ${[`${tool.maxSecs} s`, tool.maxHeight && `${tool.maxHeight}p`].filter(Boolean).join(', ')} au maximum` : 'Fichiers'}>
+        <Section id="tf-files" title={tool.maxSecs ? `Fichiers · ${[`${tool.maxSecs} s`, tool.maxP && `${tool.maxP}p`].filter(Boolean).join(', ')} au maximum` : 'Fichiers'}>
           <div className={`ep-tiles${fileFields.length === 1 && !fileFields[0].type.endsWith('s') ? ' one' : ''}`}>
             {fileFields.map((f) => (f.type.endsWith('s')
               ? <FileList key={f.key} field={f} files={files[f.key]} onFiles={setFile(f.key)} />
               : f.type === 'image'
                 ? <DropTile key={f.key} icon="img" label={f.label} accept="image/*" file={files[f.key] ?? null} onFile={setFile(f.key)} required />
-                : <MediaTile key={f.key} field={f} file={files[f.key] ?? null} onFile={setFile(f.key)} onInfo={(m) => setMedia((o) => ({ ...o, [f.key]: m }))} />))}
+                : <MediaTile key={f.key} field={f} file={files[f.key] ?? null} onFile={setFile(f.key)} onInfo={(m) => setMedia((o) => ({ ...o, [f.key]: m }))} limited={Boolean(tool.maxSecs || tool.maxP)} />))}
           </div>
         </Section>
       )}

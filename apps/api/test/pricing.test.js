@@ -101,5 +101,11 @@ test('outils ajoutés : prix au pire cas affiché (durée ajoutée, images cré�
   assert.equal(toolCost(findTool('video-extend'), { duration: '20' }), toJetons(EXTEND_MODEL.price.usd * 20))
   assert.equal(toolCost(findTool('video-fps'), { fps: '60' }), toJetons((60 - 24) * 10 * 0.002))
   assert.equal(toolCost(findTool('video-reframe'), { resolution: '1080p' }), toJetons(2))
-  assert.equal(findTool('video-hdr').maxHeight, 1080)
+  assert.equal(findTool('video-hdr').maxP, 1080)
+})
+
+test('sortie d’un outil sans type ni nom de fichier : reconnue à l’extension de son adresse', async () => {
+  const { outputsOf } = await import('../src/inputs.js')
+  assert.deepEqual(outputsOf('tool', { video: { url: 'https://v3.fal.media/files/out.mp4' } }).map((o) => o.contentType), ['video/mp4'])
+  assert.deepEqual(outputsOf('tool', { video: { url: 'https://v3.fal.media/files/out' } }), [])
 })

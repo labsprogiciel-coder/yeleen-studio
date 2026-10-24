@@ -343,13 +343,18 @@ test('outil du studio : envoyé au point d’accès du catalogue avec l’entré
   const { findTool, toolCost } = await import('@studio/catalog/tools')
   let sent = null
   const t = setup((url, init) => {
+    if (url.includes('storage/upload/initiate')) return { body: { file_url: 'https://v3.fal.media/files/in.mp3', upload_url: 'https://v3.fal.media/upload/1' } }
     if (url.startsWith('https://queue.fal.run/fal-ai/elevenlabs/voice-changer')) { sent = JSON.parse(init.body); return { body: queued } }
     if (url.includes('/status')) return { body: { status: 'COMPLETED' } }
     return { body: { audio: { url: 'https://v3.fal.media/files/out.mp3', content_type: 'audio/mpeg' }, seed: 1 } }
   })
   try {
     const start = (await (await t.req('/wallet')).json()).balance
-    const inputs = { audio: 'https://v3.fal.media/files/in.mp3', voice: 'Aria' }
+    // L'audio est d'abord téléversé ici : le serveur le mesure (5 s de MP3 à 128 kbit/s) avant d'accepter l'outil limité à 60 s.
+    const mp3 = new Uint8Array(16000 * 5); mp3.set([0xff, 0xfb, 0x90, 0x00])
+    const up = await (await t.req('/uploads?name=voix.mp3', { method: 'POST', headers: { 'content-type': 'audio/mpeg', 'content-length': String(mp3.length) }, body: mp3 })).json()
+    assert.equal(up.secs, 5)
+    const inputs = { audio: up.url, voice: 'Aria' }
     const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'voice-changer', inputs }))
     const { jobId, balance, cost } = await res.json()
     assert.equal(res.status, 202)
@@ -372,5 +377,41 @@ test('outil du studio : un fichier hors du stockage fal est refusé sans débit 
     assert.equal((await res.json()).error, 'invalid_file_url')
     assert.equal((await (await t.req('/wallet')).json()).balance, start)
     assert.equal(called, false)
+  } finally { t.restore() }
+})
+
+test('outil limité en durée : un fichier non téléversé ici, ou trop long, est refusé avant le débit ; mesuré et court, il passe', async () => {
+  const { mp4 } = await import('./media.test.js')
+  let n = 0
+  let submitted = 0
+  const t = setup((url) => {
+    if (url.includes('storage/upload/initiate')) { n++; return { body: { file_url: `https://v3b.fal.media/files/v${n}.mp4`, upload_url: `https://v3b.fal.media/upload/${n}` } } }
+    if (url.startsWith('https://queue.fal.run/fal-ai/depth-anything-video')) { submitted++; return { body: queued } }
+    return { body: {} }
+  })
+  const upload = (buf) => t.req('/uploads?name=clip.mp4', { method: 'POST', headers: { 'content-type': 'video/mp4', 'content-length': String(buf.byteLength) }, body: buf })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const long = await (await upload(mp4(600, 1920, 1080))).json()
+    assert.equal(long.secs, 600)
+    const job = (video) => t.req('/jobs', post({ kind: 'tool', modelId: 'video-depth', inputs: { video } }))
+    assert.equal((await (await job(long.url)).json()).error, 'media_too_long')
+    assert.equal((await (await job('https://v3b.fal.media/files/ailleurs.mp4')).json()).error, 'unmeasured_media')
+    assert.equal((await (await t.req('/wallet')).json()).balance, start)
+    assert.equal(submitted, 0)
+    const short = await (await upload(mp4(15, 1280, 720))).json()
+    assert.equal((await job(short.url)).status, 202)
+    assert.equal(submitted, 1)
+  } finally { t.restore() }
+})
+
+test('outil limité en résolution : une vidéo 4K est refusée par SDR vers HDR (1080p au plus)', async () => {
+  const { mp4 } = await import('./media.test.js')
+  const t = setup((url) => (url.includes('storage/upload/initiate') ? { body: { file_url: 'https://v3b.fal.media/files/4k.mp4', upload_url: 'https://v3b.fal.media/upload/1' } } : { body: queued }))
+  try {
+    const buf = mp4(8, 3840, 2160)
+    const up = await (await t.req('/uploads?name=a.mp4', { method: 'POST', headers: { 'content-type': 'video/mp4', 'content-length': String(buf.byteLength) }, body: buf })).json()
+    const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'video-hdr', inputs: { video: up.url } }))
+    assert.equal((await res.json()).error, 'media_too_large')
   } finally { t.restore() }
 })

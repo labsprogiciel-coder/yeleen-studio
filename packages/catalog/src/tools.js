@@ -11,12 +11,12 @@ import { VOICES } from './voices.js'
  * - `select` : une valeur parmi `options` ({ id, label, value? } ; `value` est ce que reçoit fal, `id` par défaut) ;
  * - `number` : un nombre entre `min` et `max`.
  * `usd(v)` : coût fournisseur d'un lancement, d'après la page du modèle chez fal ; `build(v)` : l'entrée envoyée à fal.
- * `v` : les entrées vérifiées, choix par défaut compris (voir `toolValues`). `maxHeight` : hauteur maximale d'une vidéo fournie
- * (vérifiée dans le navigateur), quand le prix dépend de la résolution de la source.
+ * `v` : les entrées vérifiées, choix par défaut compris (voir `toolValues`). `maxP` : résolution maximale d'une vidéo fournie
+ * (son plus petit côté : 1080 pour 1080p, en portrait comme en paysage), quand le prix dépend de la résolution de la source.
  *
- * Fichiers vidéo et audio : le serveur ne mesure pas encore leur durée. Un outil facturé à la seconde est donc facturé pour
- * `maxSecs` (la durée maximale acceptée, affichée dans l'interface, qui refuse un fichier plus long) : le prix affiché n'est
- * jamais plus bas que le prix facturé, comme pour les vidéos de référence (apps/api/src/pricing.js).
+ * Fichiers vidéo et audio : un outil facturé à la seconde l'est pour `maxSecs`, la durée maximale acceptée. Le serveur mesure
+ * chaque fichier au téléversement (apps/api/src/media.js) et refuse, avant le débit, un fichier non mesuré ou hors limites ;
+ * l'interface affiche ces limites et refuse le fichier plus tôt.
  */
 const opt = (id, label, value) => ({ id, label, ...(value === undefined ? {} : { value }) })
 const per = (table) => (key) => table[key]
@@ -302,7 +302,7 @@ export const TOOLS = [
     // 2,40 $ pour 10 s jusqu'en 1080p à 30 i/s (4K : 5,10 $) : la source est limitée à 10 s et à 1080p.
     endpoint: 'topaz/sdr-to-hdr/video',
     maxSecs: 10,
-    maxHeight: 1080,
+    maxP: 1080,
     inputs: [{ key: 'video', type: 'video', label: 'Vidéo SDR' }],
     usd: () => 2.4,
     build: (v) => ({ video_url: v.video, output_format: 'mp4' }),

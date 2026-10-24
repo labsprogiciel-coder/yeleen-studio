@@ -59,7 +59,7 @@ export function workflowFiles(result) {
   const walk = (x) => {
     if (Array.isArray(x)) return x.forEach(walk)
     if (x && typeof x === 'object') {
-      if (typeof x.url === 'string' && /^https:\/\//.test(x.url) && (x.content_type || x.file_name)) found.push({ url: x.url, contentType: x.content_type ?? typeOf(x.file_name ?? x.url), width: x.width, height: x.height })
+      if (typeof x.url === 'string' && /^https:\/\//.test(x.url) && (x.content_type || x.file_name || typeOf(x.url))) found.push({ url: x.url, contentType: x.content_type ?? typeOf(x.file_name ?? x.url), width: x.width, height: x.height })
       else Object.values(x).forEach(walk)
     }
   }
