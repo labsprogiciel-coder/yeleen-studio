@@ -228,7 +228,9 @@ app.post('/jobs', async (c) => {
   const req = await c.req.json()
   const price = priceJob(req)
   if (!price.ok) return c.json({ error: price.error }, 400)
-  const texts = req.kind === 'video' ? req.plans.map((p) => p.text) : req.kind === 'workflow' ? Object.values(req.inputs ?? {}).filter((v) => typeof v === 'string') : [req.prompt ?? '']
+  const texts = req.kind === 'video' ? req.plans.map((p) => p.text)
+    : req.kind === 'tool' ? price.model.inputs.filter((f) => f.type === 'text').map((f) => req.inputs?.[f.key] ?? '')
+      : req.kind === 'workflow' ? Object.values(req.inputs ?? {}).filter((v) => typeof v === 'string') : [req.prompt ?? '']
   if (isBlocked(texts.join(' '))) return c.json({ error: 'moderation' }, 422)
   // Garde-fou tant qu'il n'y a ni connexion ni plafond par compte : on refuse une seule demande très coûteuse.
   const cap = Number(c.env.MAX_JOB_COST ?? 250)

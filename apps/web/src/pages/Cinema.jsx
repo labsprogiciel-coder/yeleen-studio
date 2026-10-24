@@ -17,9 +17,8 @@ import { TOOLS, tabOf } from '../components/cinema/tools.js'
 import BalanceChip from '../components/BalanceChip.jsx'
 import ProjectPicker from '../components/cinema/ProjectPicker.jsx'
 import { CreateLeft } from './video/CreateTab.jsx'
-import { EditLeft } from './video/EditLeft.jsx'
-import SpeakPanel from './video/SpeakPanel.jsx'
 import AudioPanel from './audio/AudioPanel.jsx'
+import ToolForm, { toolJobs } from '../components/cinema/ToolForm.jsx'
 import { AccountMenu } from '../lib/auth.jsx'
 import { RechargeButton } from '../lib/rechargeDialog.jsx'
 import AssetModal from '../components/cinema/AssetModal.jsx'
@@ -43,13 +42,6 @@ import '../styles/studio.css'
 // Le modèle audio vers vidéo se pilote par un fichier audio : il a sa place dans l'écran Vidéo, pas ici.
 const VIDEO_LIST = VIDEO_MODELS.filter((m) => m.input !== 'audio')
 const CINEMA = ['seedance-2-5', 'kling-3-pro', 'h3-max'] // modèles pensés pour le récit : références, personnages, plans fidèles au texte
-
-const VIDEO_EDIT_MAP = {
-  'clip-editor': 'edit',
-  'video-upscaler': 'upscale',
-  'video-relight': 'relight',
-  'video-project-editor': 'edit',
-}
 const rank = (id) => (CINEMA.includes(id) ? CINEMA.indexOf(id) : CINEMA.length)
 const VIDEO_ITEMS = [...VIDEO_LIST]
   .sort((a, b) => rank(a.id) - rank(b.id))
@@ -141,8 +133,8 @@ export default function Cinema() {
     setTab(t); setTool(id)
     if (t === 'recipe') pickRecipe(id)
   }
-  // Changer d'onglet ouvre son premier outil : un seul clic pour commencer, la liste reste à un clic (« Outils »).
-  const openTab = (t) => { setError(''); setTab(t); setTool(null) }  
+  // Changer d'onglet montre la liste de ses outils.
+  const openTab = (t) => { setError(''); setTab(t); setTool(null) }
   useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ, même si Cinéma est déjà ouvert
     if (pending?.target !== 'cinema.recipe') return
     const h = take('cinema.recipe')
@@ -378,9 +370,8 @@ export default function Cinema() {
       <ToolPanel tab={tab} onTab={openTab} tool={tool} onTool={openTool} onTemplates={() => setView('templates')}>
       {tool === 'video-gen'   && <CreateLeft key="generate" mode="generate" banner={false} addLabel="Ajouter un média" />}
       {tool === 'modify-video' && <CreateLeft key="edit"    mode="edit"     banner={false} />}
-      {tool === 'speak'       && <SpeakPanel />}
-      {VIDEO_EDIT_MAP[tool]   && <EditLeft key={tool} tool={VIDEO_EDIT_MAP[tool]} setTool={(t) => openTool(Object.keys(VIDEO_EDIT_MAP).find((k) => VIDEO_EDIT_MAP[k] === t) || t)} banner={false} />}
-      {(tab === 'audio' && tool) && <AudioPanel key={tool} tool={tool} onTool={openTool} />}
+      {tool === 'voice-generator' && <AudioPanel key={tool} tool={tool} onTool={openTool} />}
+      {tool && toolJobs(tool) && <ToolForm key={tool} tool={tool} onDone={() => setView('creations')} />}
       {(tool === 'image' || tool === 'video-refs') && composer}
         {recipe && recipeId && (runBusy
           ? <p className="cx-note">Le modèle « {recipeById(recipeId).name} » est en cours : suivez-le dans Créations.</p>

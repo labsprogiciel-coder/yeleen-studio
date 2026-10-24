@@ -338,3 +338,39 @@ test('Runware : annuler arrête le suivi sans remboursement ni appel (Runware n�
     assert.equal(rw.sent.length, 1)
   } finally { t.restore() }
 })
+
+test('outil du studio : envoyé au point d’accès du catalogue avec l’entrée fal, débité au prix du catalogue, sortie audio lue', async () => {
+  const { findTool, toolCost } = await import('@studio/catalog/tools')
+  let sent = null
+  const t = setup((url, init) => {
+    if (url.startsWith('https://queue.fal.run/fal-ai/elevenlabs/voice-changer')) { sent = JSON.parse(init.body); return { body: queued } }
+    if (url.includes('/status')) return { body: { status: 'COMPLETED' } }
+    return { body: { audio: { url: 'https://v3.fal.media/files/out.mp3', content_type: 'audio/mpeg' }, seed: 1 } }
+  })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const inputs = { audio: 'https://v3.fal.media/files/in.mp3', voice: 'Aria' }
+    const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'voice-changer', inputs }))
+    const { jobId, balance, cost } = await res.json()
+    assert.equal(res.status, 202)
+    assert.equal(cost, toolCost(findTool('voice-changer'), inputs))
+    assert.equal(Math.round((start - balance) * 10) / 10, cost)
+    assert.deepEqual(sent, { audio_url: inputs.audio, voice: 'Aria' })
+    const done = await (await t.req(`/jobs/${jobId}`)).json()
+    assert.equal(done.status, 'COMPLETED')
+    assert.equal(done.outputs[0].contentType, 'audio/mpeg')
+  } finally { t.restore() }
+})
+
+test('outil du studio : un fichier hors du stockage fal est refusé sans débit ni appel', async () => {
+  let called = false
+  const t = setup(() => { called = true; return { body: queued } })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'remove-background', inputs: { image: 'https://exemple.com/a.png' } }))
+    assert.equal(res.status, 400)
+    assert.equal((await res.json()).error, 'invalid_file_url')
+    assert.equal((await (await t.req('/wallet')).json()).balance, start)
+    assert.equal(called, false)
+  } finally { t.restore() }
+})
