@@ -85,7 +85,17 @@
 .ep-tiles.one{grid-template-columns:minmax(0,1fr)}
 
 /* Tuile avec l'aperçu d'une image : texte blanc ombré et bouton sombre sur la photo, quel que soit le thème ; sans image, aux couleurs du thème. */
-.ep-tile[style*="background-image"]{color:#fff}
-.ep-tile[style*="background-image"]>span{text-shadow:0 1px 6px rgba(0,0,0,.7)}
-.ep-tile:not([style*="background-image"]) .ep-lib{background:var(--fill);color:var(--ink-2)}
-.ep-tile:not([style*="background-image"]):hover .ep-lib{background:var(--fill-hover);color:var(--ink-hi)}
+.ep-tile.pic{color:#fff}
+.ep-tile.pic>span{text-shadow:0 1px 6px rgba(0,0,0,.7)}
+.ep-tile:not(.pic) .ep-lib{background:var(--fill);color:var(--ink-2)}
+.ep-tile:not(.pic):hover .ep-lib{background:var(--fill-hover);color:var(--ink-hi)}
+/* Aperçu d'un asset de la bibliothèque (référence jointe, photo d'un modèle) sous le contenu de la case */
+.ep-tile>.at{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border-radius:0}
+.ep-tile>.at~svg,.ep-tile>.at~span:not(.ep-lib){position:relative;pointer-events:none}
+.ep-tile.unused{opacity:.45}
+/* Puces en nombre variable (Cinéma) : elles se partagent la ligne et passent à la suivante si besoin */
+.ep-opts.auto{grid-template-columns:repeat(auto-fit,minmax(76px,1fr))}
+.ep-step{gap:2px;padding:0 4px}
+.ep-step button{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;cursor:pointer}
+.ep-step button:hover:not(:disabled){background:var(--fill)}
+.ep-step button:disabled{color:var(--ink-4);cursor:not-allowed}

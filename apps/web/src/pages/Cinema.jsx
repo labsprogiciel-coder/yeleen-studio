@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../lib/icons.jsx'
-import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, videoCost } from '@studio/catalog'
+import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, priceLabel, videoCost } from '@studio/catalog'
 import { recipeById, recipeCost } from '@studio/catalog/recipes'
 import { SkipLink } from '../components/Headers.jsx'
 import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
 import PlanTabs from '../components/PlanTabs.jsx'
-import AssetThumb from '../components/AssetThumb.jsx'
+import Segmented from '../components/Segmented.jsx'
+import { Section, AddMedia, RefTile, PromptBox, GenerateButton } from '../components/GenPanel.jsx'
 import BrandToggle from '../components/BrandToggle.jsx'
 import { features } from '../lib/features.js'
 import ModelLogo from '../components/ModelLogo.jsx'
@@ -37,7 +38,6 @@ import useGenSettings from '../lib/useGenSettings.js'
 import '../styles/shell.css'
 import '../styles/library.css'
 import '../styles/cinema.css'
-import Cauri from '../components/Cauri.jsx'
 import '../styles/studio.css'
 
 // Le modèle audio vers vidéo se pilote par un fichier audio : il a sa place dans l'écran Vidéo, pas ici.
@@ -55,35 +55,6 @@ const MODES = [
   { id: 'edit', icon: 'wand', title: 'Modifier la vidéo' },
 ]
 const nextOf = (list, v) => list[(list.indexOf(v) + 1) % list.length]
-
-/** Une barre qui défile quand elle est trop étroite, avec la flèche qui montre qu'il y a une suite. */
-function ChipScroll({ children }) {
-  const box = useRef(null)
-  const [more, setMore] = useState({ right: false, left: false })
-  const measure = () => {
-    const el = box.current
-    if (!el) return
-    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2
-    const left = el.scrollLeft > 2
-    setMore((m) => (m.right === right && m.left === left ? m : { right, left })) // sans changement, pas de nouveau rendu
-  }
-  useEffect(measure) // le contenu peut changer sans que la barre change de taille (texte d'une puce)
-  useEffect(() => {
-    const ro = new ResizeObserver(measure)
-    ro.observe(box.current)
-    return () => ro.disconnect()
-  }, [])
-  return (
-    <>
-      <div className="cn-scroll" ref={box} onScroll={measure}>{children}</div>
-      {(more.right || more.left) && (
-        <button type="button" className="cn-more" aria-label={more.right ? 'Voir les autres réglages' : 'Revenir aux premiers réglages'} onClick={() => box.current.scrollBy({ left: more.right ? 260 : -260, behavior: 'smooth' })}>
-          <Icon name={more.right ? 'chevR' : 'chevL'} size={16} />
-        </button>
-      )}
-    </>
-  )
-}
 
 export default function Cinema() {
   useDocumentTitle('Studio cinéma')
@@ -242,14 +213,6 @@ export default function Cinema() {
     if (!res.ok) return setRerror(`Solde insuffisant : il manque ${jetons(res.missing)} cauris.`)
     setRun({ id, recipeId })
   }
-  const pickPhoto = (list) => {
-    const imgs = list.filter((a) => a.kind === 'image')
-    if (!imgs.length) return toast('Choisissez une image.')
-    const keys = recipeById(recipeId).photos.map((p) => p.key)
-    const free = keys.filter((k) => !photos[k])
-    const targets = free.length ? free : keys // tout est rempli : on remplace en repartant de la première
-    setPhotos((x) => ({ ...x, ...Object.fromEntries(targets.slice(0, imgs.length).map((k, i) => [k, imgs[i]])) }))
-  }
 
   const modelItems = video ? VIDEO_ITEMS : IMAGE_ITEMS
   const modelValue = video ? videoId : imageId
@@ -257,98 +220,99 @@ export default function Cinema() {
   const logo = logoFor(model.id)
   const durations = s.picks.map((d) => ({ id: d, title: `${d} s` }))
 
-  // Le compositeur (texte, pièces jointes, réglages) : formulaire des outils « Générateur d'images » et « Références et montage ».
+  // Le formulaire des outils « Générateur d'images » et « Références et montage », sur le modèle du Générateur de vidéos.
+  const hint = needs || planHint || idle || long
   const composer = (
-          <div className="cn-comp">
-            {video && attached.length > 0 && (
-              <ul className="cn-strip" aria-label="Références jointes">
-                {attached.map((x) => (
-                  <li key={x.id} className={roles[x.token] === 'unused' ? 'off' : undefined}>
-                    <button type="button" className="cn-th" onClick={() => area.current?.insertAt(x.token)} aria-label={`Citer ${x.token} (${x.asset.name}) dans le texte`} title={roles[x.token] === 'unused' ? `${x.token} : non utilisé par ce modèle` : x.token}>
-                      <AssetThumb asset={x.asset} />
-                      <span className="cn-no" aria-hidden="true">{x.token.replace(/^\S+ /, '')}</span>
-                    </button>
-                    <button type="button" className="cn-rm" onClick={() => detach(x.id)} aria-label={`Retirer ${x.token}`}><Icon name="close" size={11} /></button>
-                  </li>
-                ))}
-              </ul>
-            )}
+    <div className="ep">
+      <Section id="cn-model" title="Modèle">
+        <Menu items={modelItems} value={modelValue} onChange={onModel} label={video ? 'Modèle vidéo' : 'Modèle image'} menuWidth={460} search="Rechercher un modèle…">
+          {logo ? <ModelLogo logo={logo} size={18} /> : <Icon name="sparkle" size={18} />}<span className="ep-ell">{model.name}</span><span className="ep-price">{priceLabel(model)}</span>
+        </Menu>
+      </Section>
 
-            {video && caps.multiShot && <div className="cn-plans"><PlanTabs s={s} controls="cn-plan" headingId="cn-plan-h" /></div>}
-            <div className="cn-edit">
-              <div className="cn-field" id="cn-plan" role={video && s.multi ? 'tabpanel' : undefined} aria-labelledby={video && s.multi ? `plan-tab-${s.active}` : undefined}>
-                <MentionTextarea
-                  ref={area}
-                  mentions={Boolean(video)}
-                  value={text}
-                  onChange={(t) => { setText(t); setError('') }}
-                  items={video ? items : []}
-                  pattern={ATTACH_PATTERN}
-                  isRef={(t) => attached.some((x) => x.token === t)}
-                  roles={roles}
-                  emptyHint="Joignez des fichiers avec + : vous pourrez les citer ici."
-                  placeholder={video ? (s.multi ? `Décrivez le plan ${s.active + 1}. Tapez @ pour citer une référence jointe.` : 'Décrivez la scène. Tapez @ pour citer une référence jointe.') : 'Décrivez l’image que vous imaginez.'}
-                  aria-label={video && s.multi ? `Plan ${s.active + 1}` : 'Description'}
-                  rows={3}
-                  data-prompt
-                />
-                {(error || needs || planHint || idle || long) && <p className={`cn-hint${error ? ' bad' : ''}`} role={error ? 'alert' : 'status'}>{error || needs || planHint || idle || long}</p>}
-              </div>
-              <button type="button" className="cn-gen" disabled={blocked} onClick={generate} title={needs ?? (emptyPlan >= 0 ? (s.multi ? `Décrivez le plan ${emptyPlan + 1}` : 'Décrivez d’abord la scène') : (video && caps.startFrame === 'required' && !ref.slots.start ? 'Ajoutez une image avec +' : undefined))}>
-                <b>Générer</b><span><Cauri size={16} />{jetons(cost)}</span>
-              </button>
+      {video && modeItems.length > 1 && (
+        <Section id="cn-mode" title="Mode">
+          <Segmented items={modeItems} value={activeTask} onChange={native ? setTask : fromClip} label="Mode de création" />
+        </Section>
+      )}
 
-              <div className="cn-bar">
-                {video && (
-                  <div className="cn-pair">
-                    <button type="button" onClick={() => setPicking('recent')} aria-label="Ajouter des références" title="Ajouter des références"><Icon name="plus" size={18} /></button>
-                    <i aria-hidden="true" />
-                    <button type="button" onClick={() => area.current?.insertAt()} aria-label="Citer une référence" title="Citer une référence"><Icon name="at" size={18} /></button>
-                  </div>
-                )}
-                <Menu items={modelItems} value={modelValue} onChange={onModel} label={video ? 'Modèle vidéo' : 'Modèle image'} menuWidth={460} search="Rechercher un modèle…" className="cn-chip cn-model" listClass="cn-pop">
-                  {logo ? <ModelLogo logo={logo} size={18} /> : <Icon name="sparkle" size={16} />}<span>{model.name}</span>
-                </Menu>
-                {video && modeItems.length > 1 && (
-                  <Menu items={modeItems} value={activeTask} onChange={native ? setTask : fromClip} label="Mode de création" menuWidth={240} className="cn-chip" listClass="cn-pop">
-                    <Icon name={MODES.find((m) => m.id === activeTask).icon} size={16} /><span>{MODES.find((m) => m.id === activeTask).title}</span>
-                  </Menu>
-                )}
-
-                <ChipScroll>
-                  {video ? (
-                    <>
-                      {s.ratios ? (
-                        <Menu items={s.ratios.map((r) => ({ id: r, title: r === 'auto' ? 'Auto' : r }))} value={s.ratio} onChange={s.setRatio} label="Format" menuWidth={160} className="cn-chip" listClass="cn-pop"><Icon name="screen" size={16} /><span>{s.ratio === 'auto' ? 'Auto' : s.ratio}</span></Menu>
-                      ) : (
-                        <button type="button" className="cn-chip" disabled title="Le format suit l’image de départ"><Icon name="screen" size={16} /><span>Auto</span></button>
-                      )}
-                      {s.resolutions && (
-                        <Menu items={s.resolutions.map((r) => ({ id: r, title: r }))} value={s.res} onChange={s.setRes} label="Résolution" menuWidth={160} className="cn-chip" listClass="cn-pop"><Icon name="diamond" size={16} /><span>{s.res}</span></Menu>
-                      )}
-                      {durations.length > 0 && activeTask !== 'edit' && (
-                        <Menu items={durations} value={s.current.dur} onChange={(d) => s.patch(s.active, { dur: d })} label={s.multi ? `Durée du plan ${s.active + 1}` : 'Durée'} menuWidth={160} className="cn-chip" listClass="cn-pop"><Icon name="clock" size={16} /><span>{s.current.dur} s{s.multi ? ` · ${Math.round(s.total * 10) / 10} s au total` : ''}</span></Menu>
-                      )}
-                      {s.soundMode !== 'provided' && (
-                        <button type="button" className="cn-chip icon" aria-pressed={s.sound} aria-label="Son" disabled={s.soundMode === 'always'} onClick={() => s.setSound((v) => !v)} title={s.soundMode === 'always' ? 'Ce modèle génère toujours le son' : s.sound ? 'Son activé : cliquer pour le couper' : 'Son coupé : cliquer pour l’activer'}><Icon name={s.sound ? 'sound' : 'mute'} size={16} /></button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <button type="button" className="cn-chip" onClick={() => setIRatio((r) => nextOf(imodel.caps.ratios, r))} aria-label={`Format : ${iRatio}`}><Icon name="screen" size={16} /><span>{iRatio}</span></button>
-                      <button type="button" className="cn-chip" disabled={imodel.caps.resolutions.length < 2} onClick={() => setIRes(nextOf(imodel.caps.resolutions, iRes2))} aria-label={`Résolution : ${iRes2}`}><Icon name="diamond" size={16} /><span>{iRes2}</span></button>
-                      <span className="cn-step" role="group" aria-label="Nombre d’images">
-                        <button type="button" onClick={() => setICount((c) => Math.max(1, c - 1))} aria-label="Moins" disabled={iN <= 1}>−</button>
-                        <b>{iN}/{imodel.caps.maxImages}</b>
-                        <button type="button" onClick={() => setICount((c) => Math.min(imodel.caps.maxImages, c + 1))} aria-label="Plus" disabled={iN >= imodel.caps.maxImages}>+</button>
-                      </span>
-                    </>
-                  )}
-                  {features.brand && <BrandToggle className="cn-chip icon" iconOnly />}
-                </ChipScroll>
-              </div>
+      {video && (
+        <Section id="cn-refs" title="Références">
+          {attached.length > 0 && (
+            <div className="ep-tiles">
+              {attached.map((x) => (
+                <RefTile key={x.id} asset={x.asset} token={x.token} off={roles[x.token] === 'unused'} onCite={() => area.current?.insertAt(x.token)} onRemove={() => detach(x.id)} />
+              ))}
             </div>
-          </div>
+          )}
+          <AddMedia label="Ajouter des références" onAdd={attach} />
+        </Section>
+      )}
+
+      <section className="ep-sec" aria-labelledby="cn-plan-h">
+        {video && caps.multiShot
+          ? <div className="ep-row"><PlanTabs s={s} controls="cn-plan" headingId="cn-plan-h" /></div>
+          : <h2 id="cn-plan-h">{video ? 'Plan' : 'Description'}</h2>}
+        <PromptBox
+          id="cn-plan" role={video && s.multi ? 'tabpanel' : undefined} aria-labelledby={video && s.multi ? `plan-tab-${s.active}` : undefined}
+          canClear={Boolean(text)} onClear={() => setText('')} clearLabel={video ? 'Effacer le plan' : 'Effacer la description'}
+          note={hint && <p className="ep-refnote" role="status">{hint}</p>}
+          foot={video && <button type="button" className="ep-at" aria-label="Citer une référence" onClick={() => area.current?.insertAt()}><Icon name="at" size={16} /></button>}
+        >
+          <MentionTextarea
+            ref={area}
+            mentions={Boolean(video)}
+            value={text}
+            onChange={(t) => { setText(t); setError('') }}
+            items={video ? items : []}
+            pattern={ATTACH_PATTERN}
+            isRef={(t) => attached.some((x) => x.token === t)}
+            roles={roles}
+            emptyHint="Joignez des fichiers dans Références : vous pourrez les citer ici."
+            placeholder={video ? (s.multi ? `Décrivez le plan ${s.active + 1}. Tapez @ pour citer une référence jointe.` : 'Décrivez la scène. Tapez @ pour citer une référence jointe.') : 'Décrivez l’image que vous imaginez.'}
+            aria-label={video && s.multi ? `Plan ${s.active + 1}` : 'Description'}
+            rows={4}
+            data-prompt
+          />
+        </PromptBox>
+      </section>
+
+      <div className="ep-opts auto">
+        {video ? (
+          <>
+            {s.ratios ? (
+              <Menu items={s.ratios.map((r) => ({ id: r, title: r === 'auto' ? 'Auto' : r }))} value={s.ratio} onChange={s.setRatio} label="Format" menuWidth={160} className="ep-chip"><Icon name="screen" size={16} />{s.ratio === 'auto' ? 'Auto' : s.ratio}</Menu>
+            ) : (
+              <button type="button" className="ep-chip" disabled title="Le format suit l’image de départ"><Icon name="screen" size={16} />Auto</button>
+            )}
+            {s.resolutions && (
+              <Menu items={s.resolutions.map((r) => ({ id: r, title: r }))} value={s.res} onChange={s.setRes} label="Résolution" menuWidth={160} className="ep-chip"><Icon name="upscale" size={16} />{s.res}</Menu>
+            )}
+            {durations.length > 0 && activeTask !== 'edit' && (
+              <Menu items={durations} value={s.current.dur} onChange={(d) => s.patch(s.active, { dur: d })} label={s.multi ? `Durée du plan ${s.active + 1}` : 'Durée'} menuWidth={160} className="ep-chip"><Icon name="clock" size={16} />{s.current.dur} s</Menu>
+            )}
+            {s.soundMode !== 'provided' && (
+              <button type="button" className="ep-chip" aria-pressed={s.sound} aria-label="Son" disabled={s.soundMode === 'always'} onClick={() => s.setSound((v) => !v)} title={s.soundMode === 'always' ? 'Ce modèle génère toujours le son' : s.sound ? 'Son activé : cliquer pour le couper' : 'Son coupé : cliquer pour l’activer'}><Icon name={s.sound ? 'sound' : 'mute'} size={16} />{s.sound ? 'ON' : 'OFF'}</button>
+            )}
+          </>
+        ) : (
+          <>
+            <button type="button" className="ep-chip" onClick={() => setIRatio((r) => nextOf(imodel.caps.ratios, r))} aria-label={`Format : ${iRatio}`}><Icon name="screen" size={16} />{iRatio}</button>
+            <button type="button" className="ep-chip" disabled={imodel.caps.resolutions.length < 2} onClick={() => setIRes(nextOf(imodel.caps.resolutions, iRes2))} aria-label={`Résolution : ${iRes2}`}><Icon name="upscale" size={16} />{iRes2}</button>
+            <span className="ep-chip ep-step" role="group" aria-label="Nombre d’images">
+              <button type="button" onClick={() => setICount((c) => Math.max(1, c - 1))} aria-label="Moins" disabled={iN <= 1}>−</button>
+              <b>{iN}/{imodel.caps.maxImages}</b>
+              <button type="button" onClick={() => setICount((c) => Math.min(imodel.caps.maxImages, c + 1))} aria-label="Plus" disabled={iN >= imodel.caps.maxImages}>+</button>
+            </span>
+          </>
+        )}
+        {features.brand && <BrandToggle />}
+      </div>
+      {video && s.multi && <p className="tf-hint">{Math.round(s.total * 10) / 10} s au total</p>}
+
+      <GenerateButton price={cost} disabled={blocked} error={error} onClick={generate}
+        title={needs ?? (emptyPlan >= 0 ? (s.multi ? `Décrivez le plan ${emptyPlan + 1}` : 'Décrivez d’abord la scène') : (video && caps.startFrame === 'required' && !ref.slots.start ? 'Ajoutez une image dans Références' : undefined))} />
+    </div>
   )
 
   const runBusy = recipe && Boolean(run)
@@ -377,7 +341,7 @@ export default function Cinema() {
       {(tool === 'image' || tool === 'video-refs') && composer}
         {recipe && recipeId && (runBusy
           ? <p className="cx-note">Le modèle « {recipeById(recipeId).name} » est en cours : suivez-le dans Créations.</p>
-          : <RecipeForm id={recipeId} texts={rtext} onText={(k, v) => { setRtext((x) => ({ ...x, [k]: v })); setRerror('') }} photos={photos} onAdd={() => setPicking('photo')} onRemove={(k) => setPhotos((x) => ({ ...x, [k]: undefined }))} onPick={openTool} error={rerror} onRun={() => { runRecipe(); setView('creations') }} />)}
+          : <RecipeForm id={recipeId} texts={rtext} onText={(k, v) => { setRtext((x) => ({ ...x, [k]: v })); setRerror('') }} photos={photos} onPhoto={(k, a) => { setPhotos((x) => ({ ...x, [k]: a ?? undefined })); setRerror('') }} onPick={openTool} error={rerror} onRun={() => { runRecipe(); setView('creations') }} />)}
       </ToolPanel>
 
       <Showcase
@@ -390,7 +354,7 @@ export default function Cinema() {
       </div>
       </div>
 
-      <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={picking === 'photo' ? pickPhoto : attach} />
+      <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={attach} />
     </div>
   )
 }
