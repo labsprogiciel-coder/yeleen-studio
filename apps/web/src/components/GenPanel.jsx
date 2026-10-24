@@ -4,7 +4,8 @@ import Menu from './Menu.jsx'
 import { jetons, useJobs } from '../lib/jobs.jsx'
 import { CAMERA_MOTIONS, videoCost } from '@studio/catalog'
 import { useAssets } from '../lib/assets.jsx'
-import AssetPicker from './AssetPicker.jsx'
+import AssetModal from './cinema/AssetModal.jsx'
+import { useToast } from '../lib/toasts.jsx'
 import MentionTextarea from './MentionTextarea.jsx'
 import PlanTabs from './PlanTabs.jsx'
 import { ROLE_LABEL, resolveMentions, tokenFor, tokensIn } from '../lib/mentions.js'
@@ -34,14 +35,15 @@ export function QualityMenu({ s }) {
 }
 
 /**
- * Tuile de dépôt : un vrai sélecteur de fichier, avec aperçu pour une image.
- * `disabled` + `reason` : le modèle choisi n'accepte pas cette entrée ; `required` : il l'exige.
+ * Case d'entrée : ouvre la bibliothèque (choisir un fichier ou en importer un), avec l'aperçu d'une image une fois remplie.
+ * `accept` limite ce que la bibliothèque montre et importe ; `disabled` + `reason` : le modèle choisi n'accepte pas cette entrée ;
+ * `required` : il l'exige. `onFile(file, asset)` reçoit le fichier choisi (null pour vider la case).
  */
 export function DropTile({ icon, label, accept, file, onFile, disabled = false, reason, required = false }) {
   const [thumb, setThumb] = useState(null)
   const [picking, setPicking] = useState(false)
-  const { addUpload } = useAssets()
-  const kind = accept.split('/')[0]
+  const { getFile } = useAssets()
+  const toast = useToast()
   useEffect(() => {
     if (!file || !file.type.startsWith('image')) return setThumb(null)
     const url = URL.createObjectURL(file)
@@ -57,55 +59,58 @@ export function DropTile({ icon, label, accept, file, onFile, disabled = false, 
       </div>
     )
   }
+  const pick = async ([asset]) => {
+    try { onFile(await getFile(asset), asset) } catch { toast('Fichier introuvable : réimportez-le.') }
+  }
   return (
     <>
-      <label className={`ep-tile${file ? ' has' : ''}`} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}>
-        <input
-          type="file"
-          accept={accept}
-          onChange={async (e) => {
-            const f = e.target.files[0] ?? null
-            const asset = f ? await addUpload(f) : null // les fichiers importés rejoignent la bibliothèque
-            onFile(f, asset)
-          }}
-        />
+      <div className={`ep-tile${file ? ' has' : ''}`} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}>
+        <button type="button" className="ep-pick" aria-haspopup="dialog" aria-label={file ? `${label} : ${file.name}, changer` : `${label} : choisir dans la bibliothèque`} onClick={() => setPicking(true)} />
         <Icon name={icon} size={20} />
         <span>{file ? file.name : label}</span>
         {required && !file && <em className="ep-req">requis</em>}
         {file && (
-          <button type="button" className="ep-x" aria-label={`Retirer ${file.name}`} onClick={(e) => { e.preventDefault(); onFile(null) }}>
+          <button type="button" className="ep-x" aria-label={`Retirer ${file.name}`} onClick={() => onFile(null)}>
             <Icon name="close" size={12} />
           </button>
         )}
-        <button type="button" className="ep-lib" aria-label={`${label} : choisir dans la bibliothèque`} title="Choisir dans la bibliothèque" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPicking(true) }}>
-          <Icon name="folder" size={14} />
-        </button>
-      </label>
-      <AssetPicker kind={kind} open={picking} onClose={() => setPicking(false)} onPick={onFile} />
+        <span className="ep-lib" aria-hidden="true"><Icon name="folder" size={14} /></span>
+      </div>
+      <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={pick} accept={accept} single />
     </>
   )
 }
 
-/** Ligne « Ajouter un média » : plusieurs fichiers image, vidéo ou audio. */
-export function AddMedia({ label = 'Ajouter un média' }) {
-  const [files, setFiles] = useState([])
+/**
+ * Ligne « Ajouter un média » : ouvre la bibliothèque pour choisir plusieurs fichiers d'un coup. `onAdd(assets)` les reçoit
+ * (Cinéma les cite dans le plan, voir pages/video/CreateTab.jsx) ; `accept` limite les types proposés.
+ */
+export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*,video/*,audio/*' }) {
+  const [picking, setPicking] = useState(false)
   return (
     <>
-      <label className="ep-add">
-        <input type="file" multiple accept="image/*,video/*,audio/*" onChange={(e) => setFiles((x) => [...x, ...e.target.files])} />
+      <button type="button" className="ep-add" aria-haspopup="dialog" onClick={() => setPicking(true)}>
         <span className="ep-chips" aria-hidden="true">
           {['img', 'vid', 'mus', 'user', 'shapes', 'palette', 'plus'].map((n) => <i key={n}><Icon name={n} size={14} /></i>)}
         </span>
-        <span>{files.length ? `${files.length} média${files.length > 1 ? 's' : ''} ajouté${files.length > 1 ? 's' : ''}` : label}</span>
-        {files.length > 0 && (
-          <button type="button" className="ep-x ep-x-end" aria-label="Retirer tous les médias" onClick={(e) => { e.preventDefault(); setFiles([]) }}>
-            <Icon name="close" size={12} />
-          </button>
-        )}
-      </label>
-      {files.length > 0 && <p className="ep-files">{files.map((f) => f.name).join(' · ')}</p>}
+        <span>{label}</span>
+      </button>
+      <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={(assets) => onAdd?.(assets)} accept={accept} />
     </>
   )
+}
+
+/** Cite des assets dans le plan actif (« @mot-clé » en fin de texte), comme s'ils avaient été choisis avec @. */
+export function citeAssets(s, assets) {
+  const refs = { ...s.refs }
+  const tokens = assets.map((a) => {
+    const t = tokenFor(a, refs)
+    refs[t] = a.id
+    s.addRef(t, a.id)
+    return `@${t}`
+  })
+  const text = s.current.text.trimEnd()
+  s.patch(s.active, { text: `${text}${text ? ' ' : ''}${tokens.join(' ')} ` })
 }
 
 /**

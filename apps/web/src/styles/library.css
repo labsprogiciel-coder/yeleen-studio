@@ -34,19 +34,6 @@
 .at-audio.large audio{width:92%}
 
 /* Sélecteur d'asset (feuille latérale) */
-dialog.picker{position:fixed;inset:0 0 0 auto;margin:0;width:min(440px,100vw);height:100dvh;max-height:none;padding:16px;border:0;border-left:1px solid var(--line);background:var(--field);color:var(--ink);display:none;flex-direction:column;gap:12px}
-dialog.picker[open]{display:flex}
-dialog.picker::backdrop{background:rgba(0,0,0,.55)}
-dialog.picker header{display:flex;align-items:center;justify-content:space-between}
-dialog.picker h2{margin:0;font-family:var(--font-body);font-stretch:100%;text-transform:none;font-size:18px;font-weight:700}
-.picker-bar{display:flex;gap:8px}
-.picker-grid{flex:1;min-height:0;overflow-y:auto;align-content:start;list-style:none;margin:0;padding:2px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-.picker-grid button{position:relative;display:flex;flex-direction:column;gap:6px;width:100%;padding:6px;border:1px solid var(--fill);border-radius:12px;background:var(--surface);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s}
-.picker-grid button:hover:not(:disabled){border-color:var(--lime)}
-.picker-grid button:disabled{opacity:.6;cursor:progress}
-.picker-grid span{padding:0 2px;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.picker-grid .gx-spin{position:absolute;top:10px;right:10px}
-.picker-empty{margin:auto;max-width:300px;text-align:center;font-size:14px;line-height:1.5;color:var(--ink-3)}
 
 /* Envoyer vers (sur un asset généré) */
 .mn-btn.send{gap:8px;min-height:36px;padding:0 12px;border:1px solid rgba(255,255,255,.2);border-radius:999px;background:rgba(13,14,16,.74);color:#fff;font-size:12px;font-weight:700}

@@ -13,15 +13,15 @@
 .ep-tile:hover,.mn-btn.ep-tile:hover{border-color:var(--ink-4);background-color:var(--surface)}
 .ep-tile.has{border-style:solid;border-color:var(--lime)}
 .ep-tile>span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
-.ep-tile input,.ep-add input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-.ep-tile:focus-within,.ep-add:focus-within{outline:2px solid var(--lime);outline-offset:2px}
+.ep-pick{position:absolute;inset:0;border:0;border-radius:inherit;background:none;cursor:pointer}
+.ep-pick:focus-visible,.ep-add:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
 .mn-btn.ep-mt>svg:last-child{display:none}
 .mn-btn.ep-mt{width:100%;text-align:left}
 .ep-tile-wrap{position:relative;min-width:0}
 .ep-new{position:absolute;top:-6px;right:6px;font-style:normal;font-size:10px;font-weight:800;background:var(--badge-pink);color:#fff;border-radius:6px;padding:2px 7px;pointer-events:none}
 .ep-x{position:absolute;top:6px;right:6px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border:0;border-radius:50%;background:rgba(13,14,16,.8);color:#fff;cursor:pointer}
 .ep-x:hover{background:#000}
-.ep-add{position:relative;display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px;border:1.5px dashed var(--line-strong);border-radius:12px;background:var(--field);color:var(--ink);font-size:14px;cursor:pointer;transition:border-color .15s,background-color .15s}
+.ep-add{position:relative;display:flex;width:100%;font:inherit;text-align:left;align-items:center;gap:12px;min-height:56px;padding:8px 12px;border:1.5px dashed var(--line-strong);border-radius:12px;background:var(--field);color:var(--ink);font-size:14px;cursor:pointer;transition:border-color .15s,background-color .15s}
 .ep-add:hover{border-color:var(--ink-4);background:var(--surface)}
 .ep-chips{display:flex;flex:none}
 .ep-chips i{display:flex;align-items:center;justify-content:center;width:26px;height:26px;margin-left:-6px;border-radius:50%;background:var(--fill);border:2px solid var(--field);color:var(--ink-2)}
@@ -71,8 +71,8 @@
 .ep-pfoot .mn-btn.ep-chip>svg:last-child{margin-left:0}
 .ep-opts.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 
-.ep-lib{position:absolute;right:6px;bottom:6px;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border:0;border-radius:8px;background:rgba(13,14,16,.78);color:#e6e6e2;cursor:pointer;transition:background-color .15s}
-.ep-lib:hover{background:#000;color:#fff}
+.ep-lib{position:absolute;right:6px;bottom:6px;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border:0;border-radius:8px;background:rgba(13,14,16,.78);color:#e6e6e2;transition:background-color .15s}
+.ep-tile:hover .ep-lib{background:#000;color:#fff}
 @media (pointer:coarse){.ep-lib{width:36px;height:36px}}
 .ep-brand{display:flex;margin:0 0 8px}
 .ep-brand .ep-chip{min-height:34px;padding:0 12px;text-decoration:none}
@@ -88,4 +88,4 @@
 .ep-tile[style*="background-image"]{color:#fff}
 .ep-tile[style*="background-image"]>span{text-shadow:0 1px 6px rgba(0,0,0,.7)}
 .ep-tile:not([style*="background-image"]) .ep-lib{background:var(--fill);color:var(--ink-2)}
-.ep-tile:not([style*="background-image"]) .ep-lib:hover{background:var(--fill-hover);color:var(--ink-hi)}
+.ep-tile:not([style*="background-image"]):hover .ep-lib{background:var(--fill-hover);color:var(--ink-hi)}

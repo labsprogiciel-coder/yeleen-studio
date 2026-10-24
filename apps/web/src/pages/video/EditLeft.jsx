@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Icon from '../../lib/icons.jsx'
 import Menu from '../../components/Menu.jsx'
-import { Section, QualityMenu, DropTile, AddMedia, PlanSection, OptionChips, GenerateBar } from '../../components/GenPanel.jsx'
+import { Section, QualityMenu, DropTile, AddMedia, citeAssets, PlanSection, OptionChips, GenerateBar } from '../../components/GenPanel.jsx'
 import useGenSettings, { next } from '../../lib/useGenSettings.js'
 import { EXTEND_MODEL, durationOptions, priceLabel, videoCost } from '@studio/catalog'
 import { useAssets } from '../../lib/assets.jsx'
@@ -105,7 +105,7 @@ export function EditLeft({ tool, setTool, banner = true, panel }) {
             </div>
           )}
         </div>
-        {!extend && <AddMedia />}
+        {!extend && <AddMedia onAdd={(assets) => citeAssets(s, assets)} />}
       </Section>
 
       <PlanSection
