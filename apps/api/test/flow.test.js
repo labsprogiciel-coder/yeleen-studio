@@ -351,7 +351,8 @@ test('outil du studio : envoyé au point d’accès du catalogue avec l’entré
   try {
     const start = (await (await t.req('/wallet')).json()).balance
     // L'audio est d'abord téléversé ici : le serveur le mesure (5 s de MP3 à 128 kbit/s) avant d'accepter l'outil limité à 60 s.
-    const mp3 = new Uint8Array(16000 * 5); mp3.set([0xff, 0xfb, 0x90, 0x00])
+    const { frames } = await import('./media.test.js')
+    const mp3 = frames(128, 192)
     const up = await (await t.req('/uploads?name=voix.mp3', { method: 'POST', headers: { 'content-type': 'audio/mpeg', 'content-length': String(mp3.length) }, body: mp3 })).json()
     assert.equal(up.secs, 5)
     const inputs = { audio: up.url, voice: 'Aria' }
@@ -413,5 +414,27 @@ test('outil limité en résolution : une vidéo 4K est refusée par SDR vers HDR
     const up = await (await t.req('/uploads?name=a.mp4', { method: 'POST', headers: { 'content-type': 'video/mp4', 'content-length': String(buf.byteLength) }, body: buf })).json()
     const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'video-hdr', inputs: { video: up.url } }))
     assert.equal((await res.json()).error, 'media_too_large')
+  } finally { t.restore() }
+})
+
+test('sans taille d’image lisible, une vidéo est refusée par un outil limité en résolution ; un MP3 VBR long, par un outil limité en durée', async () => {
+  const { mp4, frames, mp3Frame, bytes } = await import('./media.test.js')
+  let n = 0
+  let submitted = 0
+  const t = setup((url) => {
+    if (url.includes('storage/upload/initiate')) { n++; return { body: { file_url: `https://v3b.fal.media/files/f${n}`, upload_url: `https://v3b.fal.media/upload/${n}` } } }
+    if (url.startsWith('https://queue.fal.run/')) { submitted++; return { body: queued } }
+    return { body: {} }
+  })
+  const upload = (buf, type) => t.req('/uploads?name=f', { method: 'POST', headers: { 'content-type': type, 'content-length': String(buf.byteLength) }, body: buf })
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const audioOnly = await (await upload(mp4(8, 0, 0), 'video/mp4')).json() // piste sans largeur ni hauteur
+    assert.equal((await (await t.req('/jobs', post({ kind: 'tool', modelId: 'video-hdr', inputs: { video: audioOnly.url } }))).json()).error, 'unmeasured_media')
+    const vbr = bytes(mp3Frame(320), frames(32, 2600)) // ≈ 68 s, mais 7 s d'après la première trame
+    const up = await (await upload(vbr.buffer, 'audio/mpeg')).json()
+    assert.equal((await (await t.req('/jobs', post({ kind: 'tool', modelId: 'voice-changer', inputs: { audio: up.url } }))).json()).error, 'media_too_long')
+    assert.equal((await (await t.req('/wallet')).json()).balance, start)
+    assert.equal(submitted, 0)
   } finally { t.restore() }
 })

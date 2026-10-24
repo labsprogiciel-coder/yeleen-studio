@@ -239,6 +239,7 @@ async function mediaIssue(c, tool, inputs) {
     const m = await account(c).fetch(`https://account/media/get?url=${encodeURIComponent(inputs[f.key])}`).then((r) => r.json())
     if (!m) return 'unmeasured_media'
     if (tool.maxSecs && m.secs > tool.maxSecs + 0.5) return 'media_too_long'
+    if (tool.maxP && !(m.short > 0)) return 'unmeasured_media' // taille de l'image inconnue : rien ne garantit la résolution
     if (tool.maxP && m.short > tool.maxP) return 'media_too_large'
   }
   return null

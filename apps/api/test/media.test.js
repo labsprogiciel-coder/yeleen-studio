@@ -35,10 +35,26 @@ test('WAV : durée = taille des données / octets par seconde', () => {
   assert.equal(mediaInfo(wav.buffer, 'audio/wav').secs, Math.round((64 / rate) * 10) / 10) // la partie réellement présente
 })
 
-test('MP3 : débit constant d’après la taille, ou nombre de trames de l’en-tête Xing', () => {
+/** Trames MP3 MPEG-1 couche III à 44,1 kHz : `kbps` 128 (index 9) ou 32 (index 1), chacune de 1152 échantillons. */
+const KBPS_INDEX = { 32: 1, 128: 9, 320: 14 }
+const mp3Frame = (kbps) => {
+  const size = Math.floor((144 * kbps * 1000) / 44100)
+  return bytes([0xff, 0xfb, (KBPS_INDEX[kbps] << 4), 0x00], new Array(size - 4).fill(0))
+}
+const frames = (kbps, n) => bytes(...Array.from({ length: n }, () => mp3Frame(kbps)))
+const secsOf = (n) => Math.round(((n * 1152) / 44100) * 10) / 10
+
+test('MP3 : durée de chaque trame additionnée, même quand le débit change (VBR sans Xing)', () => {
+  assert.equal(mediaInfo(frames(128, 192).buffer, 'audio/mpeg').secs, secsOf(192))
+  // Première trame à 320 kbit/s, puis 32 kbit/s : d'après la seule première trame, le fichier paraîtrait dix fois plus court.
+  const vbr = bytes(mp3Frame(320), frames(32, 2600))
+  assert.equal(mediaInfo(vbr.buffer, 'audio/mpeg').secs, secsOf(2601))
+  // Des données qui ne sont pas des trames : durée non sûre.
+  assert.equal(mediaInfo(bytes(mp3Frame(128), new Array(50000).fill(0)).buffer, 'audio/mpeg'), null)
+})
+
+test('MP3 : nombre de trames de l’en-tête Xing', () => {
   const frame = [0xff, 0xfb, 0x90, 0x00] // MPEG-1 couche III, 128 kbit/s, 44,1 kHz, stéréo
-  const cbr = bytes(frame, new Array(16000 * 5 - 4).fill(0)) // 5 s à 16 000 octets par seconde
-  assert.equal(mediaInfo(cbr.buffer, 'audio/mpeg').secs, 5)
   const xing = bytes(frame, new Array(32).fill(0), ascii('Xing'), u32(1), u32(Math.round((60 * 44100) / 1152)), new Array(100).fill(0))
   assert.equal(Math.round(mediaInfo(xing.buffer, 'audio/mpeg').secs), 60)
 })
@@ -48,4 +64,4 @@ test('formats non lus : non mesurés (null)', () => {
   assert.equal(mediaInfo(new Uint8Array(64).buffer, 'audio/ogg'), null)
 })
 
-export { mp4 }
+export { mp4, frames, mp3Frame, bytes }

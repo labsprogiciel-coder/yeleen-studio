@@ -94,5 +94,28 @@ function mp3Info(b) {
   if (x + 12 <= b.byteLength && ['Xing', 'Info'].includes(tag(b, x)) && b.getUint32(x + 4) & 1) {
     return { secs: Math.round(((b.getUint32(x + 8) * perFrame) / rate) * 10) / 10, short: null }
   }
-  return { secs: Math.round((((b.byteLength - at) * 8) / (kbps * 1000)) * 10) / 10, short: null } // débit constant
+  return mp3Frames(b, at)
+}
+
+/**
+ * Sans en-tête Xing : on additionne la durée de chaque trame (le débit peut changer d'une trame à l'autre). Si les trames lues
+ * ne couvrent pas presque tout le fichier (données inconnues, trames abîmées), la durée n'est pas sûre : non mesuré.
+ */
+function mp3Frames(b, first) {
+  let at = first
+  let secs = 0
+  while (at + 4 <= b.byteLength) {
+    const h = b.getUint32(at)
+    if ((h >>> 21) !== 0x7ff) break
+    const version = (h >>> 19) & 3
+    const kbps = KBPS[version === 3 ? 1 : 2][(h >>> 12) & 15]
+    const rate = RATES[version]?.[(h >>> 10) & 3]
+    if (((h >>> 17) & 3) !== 1 || !kbps || !rate) break
+    const perFrame = version === 3 ? 1152 : 576
+    const size = Math.floor(((perFrame / 8) * kbps * 1000) / rate) + ((h >>> 9) & 1)
+    secs += perFrame / rate
+    at += size
+  }
+  if (at - first < (b.byteLength - first) * 0.9) return null
+  return { secs: Math.round(secs * 10) / 10, short: null }
 }
