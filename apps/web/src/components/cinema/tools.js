@@ -1,3 +1,4 @@
+import { RECIPES } from '@studio/catalog/recipes'
 import { PREVIEW } from '../../lib/templatePreviews.js'
 import montage from '../../assets/hero/montage.jpg'
 import portrait from '../../assets/hero/influenceur.jpg'
@@ -41,7 +42,8 @@ export const TOOLS = {
     { id: 'sound-effect-generator', icon: 'effect', title: 'Générateur d’effets sonores', desc: 'Créez des effets sonores personnalisés' },
     { id: 'voice-changer', icon: 'changer', title: 'Changeur de voix', desc: 'Transformez les caractéristiques de la voix' },
     { id: 'audio-isolation', icon: 'isolation', title: 'Isolation audio', desc: 'Supprimez le bruit de fond de l’audio' },
-  ]
+  ],
+  recipe: RECIPES.map((r) => ({ id: r.id, thumb: THUMBS[r.id], title: r.name, desc: r.blurb })),
 }
 export const TAB_LABEL = { image: 'Image', video: 'Vidéo', recipe: 'Modèles', audio: 'Audio' }
 export const toolById = (id) => Object.values(TOOLS).flat().find((t) => t.id === id)
