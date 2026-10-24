@@ -1,4 +1,4 @@
-import { toJetons } from './models.js'
+import { EXTEND_MODEL, toJetons } from './models.js'
 import { VOICES } from './voices.js'
 
 /**
@@ -11,7 +11,8 @@ import { VOICES } from './voices.js'
  * - `select` : une valeur parmi `options` ({ id, label, value? } ; `value` est ce que reçoit fal, `id` par défaut) ;
  * - `number` : un nombre entre `min` et `max`.
  * `usd(v)` : coût fournisseur d'un lancement, d'après la page du modèle chez fal ; `build(v)` : l'entrée envoyée à fal.
- * `v` : les entrées vérifiées, choix par défaut compris (voir `toolValues`).
+ * `v` : les entrées vérifiées, choix par défaut compris (voir `toolValues`). `maxHeight` : hauteur maximale d'une vidéo fournie
+ * (vérifiée dans le navigateur), quand le prix dépend de la résolution de la source.
  *
  * Fichiers vidéo et audio : le serveur ne mesure pas encore leur durée. Un outil facturé à la seconde est donc facturé pour
  * `maxSecs` (la durée maximale acceptée, affichée dans l'interface, qui refuse un fichier plus long) : le prix affiché n'est
@@ -158,6 +159,63 @@ export const TOOLS = [
     build: (v) => ({ image_url: v.image, lighting_style: v.light }),
   },
 
+  {
+    id: 'image-extend',
+    name: 'Étendre l’image',
+    output: 'image',
+    // Nano Banana Pro au format visé : prix fixe. L'outpainting de fal (image-apps-v2/outpaint) est facturé au mégapixel produit,
+    // que le serveur ne connaît pas avant l'envoi.
+    endpoint: 'fal-ai/nano-banana-pro/edit', // 0,15 $ l'image
+    inputs: [
+      { key: 'image', type: 'image', label: 'Image à étendre' },
+      { key: 'ratio', type: 'select', label: 'Nouveau format', options: [opt('9:16', 'Story 9:16'), opt('4:5', 'Post 4:5'), opt('1:1', 'Carré 1:1'), opt('16:9', 'Paysage 16:9')] },
+      { key: 'prompt', type: 'text', required: false, max: 500, label: 'Ce qu’il faut ajouter (facultatif)', placeholder: 'Ex. : prolonger la plage et le ciel' },
+    ],
+    usd: () => 0.15,
+    build: (v) => ({
+      prompt: `Outpaint: extend this image to fill the new frame, keeping the original content unchanged and seamless.${v.prompt ? ` ${v.prompt}.` : ''}`,
+      image_urls: [v.image], aspect_ratio: v.ratio, resolution: '2K', num_images: 1, output_format: 'png',
+    }),
+  },
+  {
+    id: 'photo-restore',
+    name: 'Restaurer une photo',
+    output: 'image',
+    endpoint: 'fal-ai/image-apps-v2/photo-restoration', // 0,04 $ l'image
+    inputs: [
+      { key: 'image', type: 'image', label: 'Photo ancienne ou abîmée' },
+      { key: 'colors', type: 'select', label: 'Couleurs', options: [opt('fix', 'Corriger', true), opt('keep', 'Garder', false)] },
+    ],
+    usd: () => 0.04,
+    build: (v) => ({ image_url: v.image, remove_scratches: true, enhance_resolution: true, fix_colors: v.colors }),
+  },
+  {
+    id: 'product-photo',
+    name: 'Photo produit pro',
+    output: 'image',
+    endpoint: 'fal-ai/nano-banana-pro/edit', // 0,15 $ l'image : détourage, nouveau décor et netteté en un seul passage
+    inputs: [
+      { key: 'image', type: 'image', label: 'Photo du produit' },
+      {
+        key: 'scene', type: 'select', label: 'Décor',
+        options: [
+          opt('studio', 'Studio blanc', 'a clean white studio background with soft shadows'),
+          opt('color', 'Fond coloré', 'a solid colour backdrop that matches the product'),
+          opt('market', 'Étal de marché', 'a colourful West African market stall'),
+          opt('wood', 'Table en bois', 'a wooden table in a bright room, lifestyle photo'),
+          opt('outdoor', 'Extérieur', 'an outdoor setting in natural daylight'),
+        ],
+      },
+      { key: 'prompt', type: 'text', required: false, max: 500, label: 'Détails (facultatif)', placeholder: 'Ex. : avec des feuilles de bananier' },
+      { key: 'ratio', type: 'select', label: 'Format', options: [opt('1:1', 'Carré 1:1'), opt('4:5', 'Post 4:5'), opt('9:16', 'Story 9:16')] },
+    ],
+    usd: () => 0.15,
+    build: (v) => ({
+      prompt: `Professional product photo: cut out the product exactly as it is and place it on ${v.scene}${v.prompt ? `, ${v.prompt}` : ''}. Sharp focus, realistic lighting and shadows, e-commerce quality. Do not change the product.`,
+      image_urls: [v.image], aspect_ratio: v.ratio, resolution: '2K', num_images: 1, output_format: 'png',
+    }),
+  },
+
   // ── Vidéo ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
   {
     id: 'clip-editor',
@@ -208,6 +266,86 @@ export const TOOLS = [
     inputs: [{ key: 'videos', type: 'videos', min: 2, max: 6, label: 'Vos clips, dans l’ordre' }],
     usd: () => 0.01,
     build: (v) => ({ video_urls: v.videos, resolution_aspect_ratio_video_index: 0 }),
+  },
+  {
+    id: 'video-extend',
+    name: 'Prolonger la vidéo',
+    output: 'video',
+    endpoint: EXTEND_MODEL.endpoint, // à la seconde générée
+    inputs: [
+      { key: 'video', type: 'video', label: 'Clip à prolonger' },
+      { key: 'prompt', type: 'text', required: false, max: 1000, label: 'La suite (facultatif)', placeholder: 'Ex. : elle se retourne et s’éloigne' },
+      { key: 'mode', type: 'select', label: 'Où', options: [opt('end', 'Après la fin'), opt('start', 'Avant le début')] },
+      { key: 'duration', type: 'select', label: 'Durée ajoutée', options: [opt('5', '5 s', 5), opt('10', '10 s', 10), opt('20', '20 s', 20)] },
+    ],
+    usd: (v) => EXTEND_MODEL.price.usd * v.duration,
+    build: (v) => ({ video_url: v.video, mode: v.mode, duration: v.duration, ...(v.prompt ? { prompt: v.prompt } : {}) }),
+  },
+  {
+    id: 'video-fps',
+    name: 'Fluidifier la vidéo',
+    output: 'video',
+    // Topaz facture les images créées : ≈ 0,001 $ l'image en 1080p, 0,002 $ en 4K. Pire cas : 10 s, source à 24 i/s, tarif 4K.
+    endpoint: 'topaz/interpolate/video',
+    maxSecs: 10,
+    inputs: [
+      { key: 'video', type: 'video', label: 'Vidéo à fluidifier' },
+      { key: 'fps', type: 'select', label: 'Images par seconde', options: [opt('60', '60 i/s', 60), opt('120', '120 i/s', 120)] },
+    ],
+    usd: (v) => (v.fps - 24) * 10 * 0.002,
+    build: (v) => ({ video_url: v.video, target_fps: v.fps, model: 'Apollo', H264_output: true }),
+  },
+  {
+    id: 'video-hdr',
+    name: 'SDR vers HDR',
+    output: 'video',
+    // 2,40 $ pour 10 s jusqu'en 1080p à 30 i/s (4K : 5,10 $) : la source est limitée à 10 s et à 1080p.
+    endpoint: 'topaz/sdr-to-hdr/video',
+    maxSecs: 10,
+    maxHeight: 1080,
+    inputs: [{ key: 'video', type: 'video', label: 'Vidéo SDR' }],
+    usd: () => 2.4,
+    build: (v) => ({ video_url: v.video, output_format: 'mp4' }),
+  },
+  {
+    id: 'video-remove-bg',
+    name: 'Supprimer l’arrière-plan vidéo',
+    output: 'video',
+    endpoint: 'veed/video-background-removal', // 0,0225 $ les 30 images (bords affinés) ; pire cas : 20 s à 60 i/s
+    maxSecs: 20,
+    inputs: [
+      { key: 'video', type: 'video', label: 'Vidéo à détourer' },
+      { key: 'subject', type: 'select', label: 'Sujet', options: [opt('person', 'Une personne', true), opt('object', 'Un objet', false)] },
+    ],
+    usd: () => 0.0225 * 2 * 20,
+    build: (v) => ({ video_url: v.video, subject_is_person: v.subject, refine_foreground_edges: true, output_codec: 'vp9' }),
+  },
+  {
+    id: 'video-reframe',
+    name: 'Recadrer la vidéo',
+    output: 'video',
+    endpoint: 'fal-ai/ltx-2.3/reframe', // à la seconde de la source : 0,10 $ en 720p, 0,20 $ en 1080p
+    maxSecs: 10,
+    inputs: [
+      { key: 'video', type: 'video', label: 'Vidéo à recadrer' },
+      { key: 'ratio', type: 'select', label: 'Nouveau format', options: [opt('9:16', 'Story 9:16'), opt('1:1', 'Carré 1:1'), opt('4:5', 'Post 4:5'), opt('16:9', 'Paysage 16:9')] },
+      { key: 'resolution', type: 'select', label: 'Résolution', options: [opt('720p', '720p'), opt('1080p', '1080p')] },
+    ],
+    usd: (v) => per({ '720p': 0.1, '1080p': 0.2 })(v.resolution) * 10,
+    build: (v) => ({ video_url: v.video, aspect_ratio: v.ratio, resolution: v.resolution }),
+  },
+  {
+    id: 'video-depth',
+    name: 'Carte de profondeur',
+    output: 'video',
+    endpoint: 'fal-ai/depth-anything-video', // 0,04 $ la seconde
+    maxSecs: 20,
+    inputs: [
+      { key: 'video', type: 'video', label: 'Vidéo à analyser' },
+      { key: 'colormap', type: 'select', label: 'Rendu', options: [opt('grayscale', 'Niveaux de gris'), opt('turbo', 'Couleurs')] },
+    ],
+    usd: () => 0.04 * 20,
+    build: (v) => ({ video_url: v.video, colormap: v.colormap }),
   },
   {
     id: 'speak-text',

@@ -24,6 +24,9 @@ export const TOOLS = {
     { id: 'mockup-generator', icon: 'mockup', title: 'Générateur de maquettes', desc: 'Placez des designs sur des maquettes de produits' },
     { id: 'remove-background', icon: 'scissors', title: 'Supprimer l’arrière-plan', desc: 'Isolez les sujets des arrière-plans' },
     { id: 'relight', icon: 'sun', title: 'Rééclairage', desc: 'Modifiez l’éclairage et l’atmosphère' },
+    { id: 'product-photo', icon: 'cube', title: 'Photo produit pro', desc: 'Votre produit détouré, sur un nouveau décor, net et prêt à vendre' },
+    { id: 'image-extend', icon: 'expand', title: 'Étendre l’image', desc: 'Passez une image en story, en carré ou en paysage' },
+    { id: 'photo-restore', icon: 'wand', title: 'Restaurer une photo', desc: 'Rayures, flou et couleurs passées : une vieille photo comme neuve' },
   ],
   video: [
     { id: 'video-refs', icon: 'layers', title: 'Références et montage', desc: 'Citez images, vidéos et sons ; prolongez ou modifiez une vidéo' },
@@ -34,6 +37,12 @@ export const TOOLS = {
     { id: 'video-project-editor', icon: 'project', title: 'Éditeur de projet vidéo', desc: 'Éditez des projets vidéo multi-clips' },
     { id: 'speak', icon: 'speak', title: 'Parler', desc: 'Générez des vidéos de discussion réalistes' },
     { id: 'video-relight', icon: 'sun', title: 'Rééclairage vidéo', desc: 'Modifiez l’éclairage et l’atmosphère' },
+    { id: 'video-extend', icon: 'extend', title: 'Prolonger la vidéo', desc: 'Ajoutez quelques secondes avant ou après le clip' },
+    { id: 'video-reframe', icon: 'crop', title: 'Recadrer la vidéo', desc: 'Passez une vidéo en story, en carré ou en paysage' },
+    { id: 'video-remove-bg', icon: 'cutout', title: 'Supprimer l’arrière-plan vidéo', desc: 'Isolez la personne ou l’objet de la vidéo' },
+    { id: 'video-fps', icon: 'gauge', title: 'Fluidifier la vidéo', desc: 'Passez à 60 ou 120 images par seconde' },
+    { id: 'video-hdr', icon: 'hdr', title: 'SDR vers HDR', desc: 'Plus de contraste et de couleurs, en HDR' },
+    { id: 'video-depth', icon: 'shapes', title: 'Carte de profondeur', desc: 'La profondeur de chaque image, pour le montage et les effets' },
   ],
   audio: [
     { id: 'voice-generator', icon: 'mic', title: 'Générateur de voix', desc: 'Générez des voix off réalistes' },

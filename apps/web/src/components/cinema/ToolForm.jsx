@@ -5,19 +5,35 @@ import Segmented from '../Segmented.jsx'
 import MentionTextarea from '../MentionTextarea.jsx'
 import { Section, DropTile, GenerateButton } from '../GenPanel.jsx'
 import { jetons, useJobs } from '../../lib/jobs.jsx'
-import useMediaSecs from '../../lib/useMediaSecs.js'
 import { findTool, isFileField, toolCheck, toolCost } from '@studio/catalog/tools'
 
 const ICON = { image: 'img', images: 'img', video: 'vid', videos: 'vid', audio: 'mus' }
 const one = (type) => type.replace(/s$/, '') // images → image
+const lower = (label) => label.charAt(0).toLowerCase() + label.slice(1) // « Vidéo SDR » → « vidéo SDR »
 // Un outil de l'interface peut regrouper plusieurs outils du catalogue (Parler : depuis un texte ou depuis un audio).
 const VARIANTS = { speak: [{ id: 'speak-text', title: 'Script' }, { id: 'speak-audio', title: 'Ajouter un audio' }] }
 export const toolJobs = (id) => VARIANTS[id] ?? (findTool(id) ? [{ id }] : null)
 
-/** Tuile d'un fichier vidéo ou audio : mesure sa durée dans le navigateur (le serveur ne la mesure pas encore). */
-function MediaTile({ field, file, onFile, onSecs }) {
-  const secs = useMediaSecs(file, one(field.type) === 'video' ? 'video' : 'audio')
-  useEffect(() => onSecs(secs), [secs]) // eslint-disable-line react-hooks/exhaustive-deps
+/** Durée (s) et hauteur (px, vidéo) d'un fichier, lues dans le navigateur : le serveur ne les mesure pas encore. */
+function useMediaInfo(file, kind) {
+  const [info, setInfo] = useState(null)
+  useEffect(() => {
+    if (!file) return setInfo(null)
+    const url = URL.createObjectURL(file)
+    const el = document.createElement(kind)
+    el.preload = 'metadata'
+    el.onloadedmetadata = () => setInfo({ secs: Math.round(el.duration * 10) / 10, height: el.videoHeight || null })
+    el.onerror = () => setInfo(null)
+    el.src = url
+    return () => { el.removeAttribute('src'); URL.revokeObjectURL(url) }
+  }, [file, kind])
+  return info
+}
+
+/** Tuile d'un fichier vidéo ou audio : remonte sa durée et sa hauteur. */
+function MediaTile({ field, file, onFile, onInfo }) {
+  const info = useMediaInfo(file, one(field.type) === 'video' ? 'video' : 'audio')
+  useEffect(() => onInfo(info), [info]) // eslint-disable-line react-hooks/exhaustive-deps
   return <DropTile icon={ICON[field.type]} label={field.label} accept={`${one(field.type)}/*`} file={file} onFile={onFile} required />
 }
 
@@ -53,7 +69,8 @@ export default function ToolForm({ tool: uiTool, onDone }) {
   const { submit } = useJobs()
   const [values, setValues] = useState({})
   const [files, setFiles] = useState({})
-  const [secs, setSecs] = useState({})
+  const [media, setMedia] = useState({}) // { [clé]: { secs, height } }
+  const secs = Object.fromEntries(Object.entries(media).map(([k, m]) => [k, m?.secs]))
   const [error, setError] = useState('')
   const set = (key) => (v) => { setValues((o) => ({ ...o, [key]: v })); setError('') }
   const setFile = (key) => (f) => { setFiles((o) => ({ ...o, [key]: f })); setError('') }
@@ -70,13 +87,15 @@ export default function ToolForm({ tool: uiTool, onDone }) {
 
   const blocker = (() => {
     for (const f of fields) {
-      if (isFileField(f) && f.type.endsWith('s') ? (files[f.key]?.filter(Boolean).length ?? 0) < f.min : isFileField(f) && !files[f.key]) return `Ajoutez : ${f.label.toLowerCase()}.`
-      if (f.type === 'text' && f.required && !values[f.key]?.trim()) return `Renseignez : ${f.label.toLowerCase()}.`
+      if (isFileField(f) && f.type.endsWith('s') ? (files[f.key]?.filter(Boolean).length ?? 0) < f.min : isFileField(f) && !files[f.key]) return `Ajoutez : ${lower(f.label)}.`
+      if (f.type === 'text' && f.required && !values[f.key]?.trim()) return `Renseignez : ${lower(f.label)}.`
       if (f.type === 'text' && (values[f.key]?.length ?? 0) > f.max) return `${f.label} : ${f.max} caractères au maximum.`
       if (f.type === 'number' && !(typeof values[f.key] === 'number' && values[f.key] >= f.min && values[f.key] <= f.max)) return `${f.label} : entre ${f.min} et ${f.max}.`
     }
     const long = tool.maxSecs && Object.values(secs).find((s) => s > tool.maxSecs)
     if (long) return `${tool.maxSecs} s au maximum : raccourcissez le fichier (il dure ${Math.round(long)} s).`
+    const tall = tool.maxHeight && Object.values(media).find((m) => m?.height > tool.maxHeight)
+    if (tall) return `${tool.maxHeight}p au maximum : cette vidéo fait ${tall.height}p.`
     if (tool.id === 'clip-editor' && clip > 0 && values.end > clip) return `Le clip dure ${clip} s : la fin doit venir avant.`
     if (toolCheck(tool, inputs)) return 'La fin doit venir après le début.'
     return null
@@ -106,13 +125,13 @@ export default function ToolForm({ tool: uiTool, onDone }) {
       )}
 
       {fileFields.length > 0 && (
-        <Section id="tf-files" title={tool.maxSecs ? `Fichiers · ${tool.maxSecs} s au maximum` : 'Fichiers'}>
+        <Section id="tf-files" title={tool.maxSecs ? `Fichiers · ${[`${tool.maxSecs} s`, tool.maxHeight && `${tool.maxHeight}p`].filter(Boolean).join(', ')} au maximum` : 'Fichiers'}>
           <div className={`ep-tiles${fileFields.length === 1 && !fileFields[0].type.endsWith('s') ? ' one' : ''}`}>
             {fileFields.map((f) => (f.type.endsWith('s')
               ? <FileList key={f.key} field={f} files={files[f.key]} onFiles={setFile(f.key)} />
               : f.type === 'image'
                 ? <DropTile key={f.key} icon="img" label={f.label} accept="image/*" file={files[f.key] ?? null} onFile={setFile(f.key)} required />
-                : <MediaTile key={f.key} field={f} file={files[f.key] ?? null} onFile={setFile(f.key)} onSecs={(s) => setSecs((o) => ({ ...o, [f.key]: s }))} />))}
+                : <MediaTile key={f.key} field={f} file={files[f.key] ?? null} onFile={setFile(f.key)} onInfo={(m) => setMedia((o) => ({ ...o, [f.key]: m }))} />))}
           </div>
         </Section>
       )}

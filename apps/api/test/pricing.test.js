@@ -94,3 +94,12 @@ test('outil du studio : le prix suit la durée et la taille choisies, au pire ca
   assert.equal(toolCost(findTool('speak-text'), { text: 'x'.repeat(95), resolution: '720p' }), toJetons(10 * 0.15)) // 10 s de parole
   for (const t of (await import('@studio/catalog/tools')).TOOLS) assert.ok(toolCost(t, {}) <= 250, `${t.id} dépasse le plafond d'une génération`)
 })
+
+test('outils ajoutés : prix au pire cas affiché (durée ajoutée, images créées, durée maximale)', async () => {
+  const { findTool, toolCost } = await import('@studio/catalog/tools')
+  const { EXTEND_MODEL, toJetons } = await import('@studio/catalog')
+  assert.equal(toolCost(findTool('video-extend'), { duration: '20' }), toJetons(EXTEND_MODEL.price.usd * 20))
+  assert.equal(toolCost(findTool('video-fps'), { fps: '60' }), toJetons((60 - 24) * 10 * 0.002))
+  assert.equal(toolCost(findTool('video-reframe'), { resolution: '1080p' }), toJetons(2))
+  assert.equal(findTool('video-hdr').maxHeight, 1080)
+})
