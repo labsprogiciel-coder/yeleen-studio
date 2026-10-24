@@ -172,3 +172,11 @@
   .cx-card{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:14px}
   .cx-cards{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Formulaire d'un outil (ToolForm) : compteur de caractères, découpe en secondes et raison du bouton Générer éteint. */
+.cx-panel .tf-count{margin-right:auto;font-size:12.5px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.cx-panel .tf-nums{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cx-panel .tf-num{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-3)}
+.cx-panel .tf-num input{min-height:44px;padding:0 12px;border:1px solid var(--line-strong);border-radius:12px;background:var(--card);color:var(--ink);font:inherit;font-size:15px;font-variant-numeric:tabular-nums}
+.cx-panel .tf-num input:focus{outline:0;border-color:var(--lime)}
+.cx-panel .tf-hint{margin:0 2px;font-size:13px;line-height:1.4;color:var(--ink-3)}

@@ -5,6 +5,7 @@ import { FalError, falClient } from './fal.js'
 import { buildInput, endpointFor, outputsOf, runwareInput } from './inputs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, removeFavorite, SCOPES } from './library.js'
+import { mediaInfo } from './media.js'
 import { ledgerOf } from './mirror.js'
 import { isBlocked } from './moderation.js'
 import { PaygateError, paygateClient, verifySignature } from './paygate.js'
@@ -89,7 +90,8 @@ const runware = (c) => runwareClient({ key: c.env.RUNWARE_KEY })
 const onRunware = (model) => model.provider === 'runware' // voir le catalogue : Seedance 2.5, Kling 3.0, Veo 3.1 Lite
 
 const MAX_UPLOAD = 25 * 1024 * 1024
-const UPLOAD_TYPES = /^(image\/(png|jpeg|webp|gif)|audio\/(mpeg|mp3|wav|x-wav|mp4|x-m4a|aac|ogg|webm|flac))$/
+const MAX_VIDEO_UPLOAD = 60 * 1024 * 1024 // une vidéo de téléphone de 30 s en 1080p ; le fichier est gardé en mémoire le temps de l'envoi
+const UPLOAD_TYPES = /^(image\/(png|jpeg|webp|gif)|audio\/(mpeg|mp3|wav|x-wav|mp4|x-m4a|aac|ogg|webm|flac)|video\/(mp4|quicktime|webm))$/
 
 app.get('/health', (c) => c.json({ ok: true }))
 
@@ -97,13 +99,18 @@ app.get('/health', (c) => c.json({ ok: true }))
 app.post('/uploads', async (c) => {
   const type = (c.req.header('content-type') ?? '').split(';')[0]
   if (!UPLOAD_TYPES.test(type)) return c.json({ error: 'unsupported_type' }, 415)
-  if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD) return c.json({ error: 'too_large' }, 413)
+  const max = type.startsWith('video/') ? MAX_VIDEO_UPLOAD : MAX_UPLOAD
+  if (Number(c.req.header('content-length') ?? 0) > max) return c.json({ error: 'too_large' }, 413)
   const bytes = await c.req.arrayBuffer()
   if (!bytes.byteLength) return c.json({ error: 'empty' }, 400)
-  if (bytes.byteLength > MAX_UPLOAD) return c.json({ error: 'too_large' }, 413)
+  if (bytes.byteLength > max) return c.json({ error: 'too_large' }, 413)
   const name = (c.req.query('name') ?? 'fichier').replace(/[^\w.-]+/g, '_').slice(0, 80)
   try {
-    return c.json({ url: await fal(c).upload(bytes, type, name) })
+    const url = await fal(c).upload(bytes, type, name)
+    // Durée et taille mesurées ici, gardées pour le compte : un outil facturé pour une durée maximale vérifie le fichier avant le débit.
+    const info = /^(video|audio)\//.test(type) ? mediaInfo(bytes, type) : null
+    if (info) await call(c, '/media/put', { url, ...info })
+    return c.json({ url, ...(info ?? {}) })
   } catch (e) {
     console.error('upload fal', e.message)
     return c.json({ error: 'provider' }, 502)
@@ -222,19 +229,41 @@ function requestOf(req, texts) {
   return { prompt: texts.map((t) => t.trim()).filter(Boolean).join(' / ').slice(0, 2000) || null, params: params.length <= 4000 ? params : null, secs: typeof req.secs === 'number' ? req.secs : null }
 }
 
+/**
+ * Outil facturé pour une durée ou une résolution maximale (`maxSecs`, `maxP`) : chaque vidéo ou audio fourni doit avoir été
+ * téléversé et mesuré par ce compte (POST /uploads) et rester dans ces limites. Sinon le prix débité ne couvrirait pas le coût.
+ */
+async function mediaIssue(c, tool, inputs) {
+  if (!tool.maxSecs && !tool.maxP) return null
+  for (const f of tool.inputs.filter((x) => x.type === 'video' || x.type === 'audio')) {
+    const m = await account(c).fetch(`https://account/media/get?url=${encodeURIComponent(inputs[f.key])}`).then((r) => r.json())
+    if (!m) return 'unmeasured_media'
+    if (tool.maxSecs && m.secs > tool.maxSecs + 0.5) return 'media_too_long'
+    if (tool.maxP && !(m.short > 0)) return 'unmeasured_media' // taille de l'image inconnue : rien ne garantit la résolution
+    if (tool.maxP && m.short > tool.maxP) return 'media_too_large'
+  }
+  return null
+}
+
 // Soumission : contrôle du texte et prix serveur → débit → envoi au fournisseur du modèle (fal ou Runware). Si l'envoi échoue,
 // remboursement immédiat.
 app.post('/jobs', async (c) => {
   const req = await c.req.json()
   const price = priceJob(req)
   if (!price.ok) return c.json({ error: price.error }, 400)
-  const texts = req.kind === 'video' ? req.plans.map((p) => p.text) : req.kind === 'workflow' ? Object.values(req.inputs ?? {}).filter((v) => typeof v === 'string') : [req.prompt ?? '']
+  const texts = req.kind === 'video' ? req.plans.map((p) => p.text)
+    : req.kind === 'tool' ? price.model.inputs.filter((f) => f.type === 'text').map((f) => req.inputs?.[f.key] ?? '')
+      : req.kind === 'workflow' ? Object.values(req.inputs ?? {}).filter((v) => typeof v === 'string') : [req.prompt ?? '']
   if (isBlocked(texts.join(' '))) return c.json({ error: 'moderation' }, 422)
   // Garde-fou tant qu'il n'y a ni connexion ni plafond par compte : on refuse une seule demande très coûteuse.
   const cap = Number(c.env.MAX_JOB_COST ?? 250)
   if (price.cost > cap) return c.json({ error: 'too_expensive', max: cap }, 400)
   // Sans clé Runware, ses modèles sont refusés avant tout débit : les servir chez fal coûterait plus que leur prix au catalogue.
   if (onRunware(price.model) && !c.env.RUNWARE_KEY) return c.json({ error: 'provider_unavailable' }, 503)
+  if (req.kind === 'tool') {
+    const issue = await mediaIssue(c, price.model, req.inputs ?? {})
+    if (issue) return c.json({ error: issue }, 400)
+  }
 
   const id = crypto.randomUUID()
   // Clé de demande : la même demande rejouée (double clic, nouvel essai après une coupure) ne coûte qu'une fois.

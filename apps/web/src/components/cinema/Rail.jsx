@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom'
 import Icon from '../../lib/icons.jsx'
 import icon from '../../assets/brand/yeelen-icon.svg'
-import { features } from '../../lib/features.js'
 import { useLibrary } from '../../lib/libraryDialog.jsx'
 import { useRecharge } from '../../lib/rechargeDialog.jsx'
 
 const TABS = [
   { id: 'image', icon: 'img', label: 'Image' },
   { id: 'video', icon: 'vid', label: 'Vidéo' },
+  { id: 'audio', icon: 'mic', label: 'Audio' },
   { id: 'recipe', icon: 'layers', label: 'Modèles' },
 ]
 // Chaque entrée ouvre la fenêtre de la bibliothèque sur la bonne vue.
@@ -32,9 +32,6 @@ export default function Rail({ tab, onTab, onNew }) {
       <button type="button" className="cx-new" aria-label="Nouvelle création" title="Nouvelle création" onClick={onNew}><Icon name="plus" size={20} /></button>
       <ul className="cx-rl" aria-label="Type de création">
         {TABS.map((t) => item(t.id, t.label, t.icon, { 'aria-current': tab === t.id ? 'true' : undefined, onClick: () => onTab(t.id) }))}
-        {features.audio && (
-          <li><Link className="cx-ri" to="/audio" aria-label="Audio" title="Audio"><Icon name="mic" size={20} /></Link></li>
-        )}
       </ul>
       <i className="cx-sep" aria-hidden="true" />
       <ul className="cx-rl" aria-label="Mes fichiers">

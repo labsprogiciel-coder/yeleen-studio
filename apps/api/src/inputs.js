@@ -3,6 +3,7 @@
  * (https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=…) ; on n'envoie que ce que le modèle accepte.
  */
 import { splitLines } from '@studio/catalog/workflows'
+import { toolInput } from '@studio/catalog/tools'
 
 const joinPrompt = (req) => [req.prompt?.trim(), req.styleHint, req.brandStyle].filter(Boolean).join(', ')
 const ratio = (r) => (!r || r === 'Auto' ? 'auto' : r)
@@ -21,6 +22,7 @@ function workflowInput(model, inputs) {
 
 export function buildInput(kind, model, req) {
   if (kind === 'workflow') return workflowInput(model, req.inputs ?? {})
+  if (kind === 'tool') return toolInput(model, req.inputs ?? {})
   if (kind === 'tryon') return { model_image: req.modelImageUrl, garment_image: req.garmentImageUrl, num_samples: 1, output_format: 'png' }
   if (kind === 'image') {
     const prompt = joinPrompt(req)
@@ -49,12 +51,15 @@ export function buildInput(kind, model, req) {
  * Un workflow rend les champs de son nœud de sortie : on ne connaît pas leur forme à l'avance, on cherche donc tous les fichiers
  * (objets avec une adresse et un type de média ou un nom de fichier), vidéos d'abord.
  */
+const TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', mp3: 'audio/mpeg', wav: 'audio/wav' }
+const typeOf = (name) => TYPES[/\.([a-z0-9]+)(\?|$)/i.exec(name)?.[1]?.toLowerCase()]
+
 export function workflowFiles(result) {
   const found = []
   const walk = (x) => {
     if (Array.isArray(x)) return x.forEach(walk)
     if (x && typeof x === 'object') {
-      if (typeof x.url === 'string' && /^https:\/\//.test(x.url) && (x.content_type || x.file_name)) found.push({ url: x.url, contentType: x.content_type ?? (/\.mp4(\?|$)/.test(x.url) ? 'video/mp4' : undefined), width: x.width, height: x.height })
+      if (typeof x.url === 'string' && /^https:\/\//.test(x.url) && (x.content_type || x.file_name || typeOf(x.url))) found.push({ url: x.url, contentType: x.content_type ?? typeOf(x.file_name ?? x.url), width: x.width, height: x.height })
       else Object.values(x).forEach(walk)
     }
   }
@@ -66,7 +71,7 @@ export function workflowFiles(result) {
 export function outputsOf(kind, result) {
   const file = (f) => ({ url: f.url, contentType: f.content_type, width: f.width, height: f.height })
   if (kind === 'image' || kind === 'tryon') return (result.images ?? []).map(file)
-  if (kind === 'workflow') return workflowFiles(result)
+  if (kind === 'workflow' || kind === 'tool') return workflowFiles(result)
   if (kind === 'audio') return result.audio ? [file(result.audio)] : []
   if (kind === 'video') return result.video ? [file(result.video)] : []
   return []

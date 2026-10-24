@@ -134,6 +134,14 @@ export class Account {
       return Response.json({ ok: true })
     }
 
+    // Fichiers téléversés mesurés (durée, plus petit côté) : `media:<adresse fal>`, lus avant le débit d'un outil limité.
+    if (pathname === '/media/put') {
+      const { url: file, secs, short } = await request.json()
+      await this.state.storage.put(`media:${file}`, { secs, short: short ?? null })
+      return Response.json({ ok: true })
+    }
+    if (pathname === '/media/get') return Response.json((await this.state.storage.get(`media:${url.searchParams.get('url')}`)) ?? null)
+
     // Recharges Mobile Money : `topup:<référence>`, plus la liste des références (les plus récentes d'abord) pour l'historique.
     if (pathname === '/topup/get') return Response.json((await this.state.storage.get(`topup:${url.searchParams.get('ref')}`)) ?? null)
     if (pathname === '/topup/list') {
