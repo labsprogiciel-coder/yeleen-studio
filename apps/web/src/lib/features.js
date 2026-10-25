@@ -5,8 +5,8 @@
  *   VITE_FEATURES=image,video            allume Image et Vidéo ; `all` allume tout
  *
  * Écrans concernés : image, video, audio, spot (Spot pub), brand (Marque) ; catalog : la Bibliothèque Yeleen (personnages, objets, vidéos)
- * dans la fenêtre de choix des références, éteinte tant que ses contenus ne sont pas prêts ; tools : tous les outils de Cinéma (éteint :
- * cinq par onglet, voir SHOWN dans components/cinema/tools.js). C'est un choix de présentation, pas une protection :
+ * dans la fenêtre de choix des références, éteinte tant que ses contenus ne sont pas prêts ; tools : tous les outils de Cinéma (éteint : une sélection,
+ * voir SHOWN dans components/cinema/tools.js). C'est un choix de présentation, pas une protection :
  * l'API reste la même (la garde de l'accès, c'est Clerk). En développement, `.env.development` allume tout.
  */
 export const FEATURE_NAMES = ['image', 'video', 'audio', 'spot', 'brand', 'catalog', 'tools']

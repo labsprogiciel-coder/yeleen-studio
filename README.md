@@ -56,7 +56,7 @@ Le MVP est le studio Cinéma, avec la bibliothèque. Image, Vidéo, Audio, Spot 
 
 - Pour en allumer, construire avec `VITE_FEATURES` (liste séparée par des virgules, ou `all`) : `VITE_FEATURES=image,video pnpm build`. Dans Cloudflare : variable de **build**, comme `VITE_CLERK_PUBLISHABLE_KEY`.
 - En développement, `apps/web/.env.development` allume tout. Pour voir ce que voient les utilisateurs : `VITE_FEATURES= pnpm dev`.
-- Drapeaux : `image`, `video`, `audio`, `spot`, `brand`, `catalog` (la Bibliothèque Yeleen, voir plus bas) et `tools` (tous les outils de Cinéma ; éteint, chaque onglet n'en montre que cinq, la liste `SHOWN` de `apps/web/src/components/cinema/tools.js`), dans `apps/web/src/lib/features.js`. C'est de la présentation, pas une protection : l'API accepte toujours les mêmes demandes (la garde d'accès, c'est Clerk).
+- Drapeaux : `image`, `video`, `audio`, `spot`, `brand`, `catalog` (la Bibliothèque Yeleen, voir plus bas) et `tools` (tous les outils de Cinéma ; éteint, chaque onglet n'en montre qu'une sélection (cinq, six en Image), la liste `SHOWN` de `apps/web/src/components/cinema/tools.js`), dans `apps/web/src/lib/features.js`. C'est de la présentation, pas une protection : l'API accepte toujours les mêmes demandes (la garde d'accès, c'est Clerk).
 
 ## Fenêtre de choix des références (Cinéma)
 

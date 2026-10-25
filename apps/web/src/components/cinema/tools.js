@@ -10,11 +10,11 @@ import pubs from '../../assets/hero/pubs.jpg'
 export const THUMBS = Object.fromEntries(Object.entries(PREVIEW).map(([id, p]) => [id, p.poster]))
 
 /**
- * Les outils proposés tant que le drapeau `tools` est éteint : cinq par onglet, pour tester avant d'ouvrir les autres.
+ * Les outils proposés tant que le drapeau `tools` est éteint : cinq par onglet (six en Image), pour tester avant d'ouvrir les autres.
  * Pour en ajouter un, ajoutez son id ici ; `VITE_FEATURES=tools` les montre tous.
  */
 export const SHOWN = new Set([
-  'image', 'editor', 'product-photo', 'remove-background', 'upscaler',
+  'image', 'editor', 'product-photo', 'remove-background', 'upscaler', 'photo-restore',
   'video-gen', 'video-refs', 'speak', 'video-extend', 'video-reframe',
   'voice-generator', 'music-generator', 'sound-effect-generator', 'audio-isolation', 'voice-changer',
 ])
