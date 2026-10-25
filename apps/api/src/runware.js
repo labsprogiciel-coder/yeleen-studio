@@ -26,18 +26,43 @@ const parse = async (res) => {
   try { return JSON.parse(text) } catch { return text }
 }
 
-export function runwareClient({ key, fetch: f = fetch }) {
+// Refus pour capacité (https://runware.ai/docs/models-api/rate-limits) : la tâche n'est pas entrée dans la file, la renvoyer ne la
+// lance pas deux fois. 429 : file du modèle pleine ou limite de l'organisation ; 503 : capacité momentanément insuffisante.
+const BUSY = new Set(['serviceOverloaded', 'inferenceRateLimitExceeded'])
+const busy = (r) => r.status === 429 || r.status === 503 || r.errors.some((e) => BUSY.has(e.code))
+const RETRIES = 3 // au plus 4 envois
+const MAX_WAIT = 8 // secondes par attente : l'utilisateur attend la réponse de « Générer »
+
+/** Attente avant le prochain envoi : celle que Runware indique (en-tête Retry-After ou champ retryAfter), sinon 1, 2, 4 s. */
+export function retryDelay(r, attempt) {
+  const hinted = Number(r.retryAfter ?? r.errors.find((e) => typeof e.retryAfter === 'number')?.retryAfter)
+  const secs = Number.isFinite(hinted) && hinted > 0 ? hinted : 2 ** attempt
+  return Math.min(secs, MAX_WAIT) * 1000
+}
+
+export function runwareClient({ key, fetch: f = fetch, sleep = (ms) => new Promise((ok) => setTimeout(ok, ms)) }) {
   if (!key) throw new Error('RUNWARE_KEY manquante')
   const send = async (tasks, where) => {
     const res = await f(API, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(tasks) })
     const body = await parse(res)
-    return { ok: res.ok, status: res.status, body, data: Array.isArray(body?.data) ? body.data : [], errors: Array.isArray(body?.errors) ? body.errors : [] }
+    return { ok: res.ok, status: res.status, body, retryAfter: res.headers?.get?.('Retry-After'), data: Array.isArray(body?.data) ? body.data : [], errors: Array.isArray(body?.errors) ? body.errors : [] }
+  }
+  /** Envoi qui réessaie tant que Runware refuse pour capacité, avec l'attente qu'il demande. */
+  const sendRetrying = async (tasks, where) => {
+    for (let attempt = 0; ; attempt++) {
+      const r = await send(tasks, where)
+      if (!busy(r) || attempt === RETRIES) return r
+      await sleep(retryDelay(r, attempt))
+    }
   }
   return {
-    /** Lance une vidéo ; `task` : modèle et paramètres (voir runwareInput). Rend l'identifiant à interroger ensuite. */
+    /**
+     * Lance une vidéo ; `task` : modèle et paramètres (voir runwareInput). Rend l'identifiant à interroger ensuite. Un refus pour
+     * capacité est réessayé (même taskUUID) avant d'abandonner ; le suivi (poll) n'en a pas besoin, il repasse de lui-même.
+     */
     async submit(task) {
       const taskUUID = crypto.randomUUID()
-      const r = await send([{ ...task, taskType: 'videoInference', taskUUID, deliveryMethod: 'async', outputType: 'URL', outputFormat: 'MP4', includeCost: true }], 'submit')
+      const r = await sendRetrying([{ ...task, taskType: 'videoInference', taskUUID, deliveryMethod: 'async', outputType: 'URL', outputFormat: 'MP4', includeCost: true }], 'submit')
       if (!r.ok || r.errors.length) throw new RunwareError(r.status, r.errors.length ? r.errors : r.body, 'submit')
       return { taskUUID, requestId: taskUUID } // requestId : copié dans D1 (jobs.request_id), comme celui de fal
     },
