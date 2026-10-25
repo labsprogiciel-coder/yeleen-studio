@@ -1,4 +1,5 @@
 import { RECIPES } from '@studio/catalog/recipes'
+import { features } from '../../lib/features.js'
 import { PREVIEW } from '../../lib/templatePreviews.js'
 import montage from '../../assets/hero/montage.jpg'
 import portrait from '../../assets/hero/influenceur.jpg'
@@ -9,10 +10,20 @@ import pubs from '../../assets/hero/pubs.jpg'
 export const THUMBS = Object.fromEntries(Object.entries(PREVIEW).map(([id, p]) => [id, p.poster]))
 
 /**
- * Outils de chaque onglet du panneau : l'outil ouvre son formulaire dans le panneau, et la zone principale présente sa visite
- * guidée tant qu'il n'y a pas de création. Seuls des outils qui fonctionnent figurent ici.
+ * Les outils proposés tant que le drapeau `tools` est éteint : cinq par onglet (six en Image), pour tester avant d'ouvrir les autres.
+ * Pour en ajouter un, ajoutez son id ici ; `VITE_FEATURES=tools` les montre tous.
  */
-export const TOOLS = {
+export const SHOWN = new Set([
+  'image', 'editor', 'product-photo', 'remove-background', 'upscaler', 'photo-restore',
+  'video-gen', 'video-refs', 'speak', 'video-extend', 'video-reframe',
+  'voice-generator', 'music-generator', 'sound-effect-generator', 'audio-isolation', 'voice-changer',
+])
+
+/**
+ * Tous les outils de chaque onglet du panneau : l'outil ouvre son formulaire dans le panneau, et la zone principale présente sa
+ * visite guidée tant qu'il n'y a pas de création. Seuls des outils qui fonctionnent figurent ici.
+ */
+export const ALL_TOOLS = {
   image: [
     { id: 'image', icon: 'img', title: 'Générateur d’images', desc: 'Créez des images à partir d’un texte' },
     { id: 'editor', icon: 'edit', title: 'Éditeur d’images', desc: 'Éditez et modifiez des images existantes' },
@@ -54,6 +65,8 @@ export const TOOLS = {
   ],
   recipe: RECIPES.map((r) => ({ id: r.id, thumb: THUMBS[r.id], title: r.name, desc: r.blurb })),
 }
+/** Les outils de chaque onglet affichés (filtrés par SHOWN sans le drapeau `tools` ; les modèles restent tous). */
+export const TOOLS = Object.fromEntries(Object.entries(ALL_TOOLS).map(([tab, list]) => [tab, tab === 'recipe' || features.tools ? list : list.filter((t) => SHOWN.has(t.id))]))
 export const TAB_LABEL = { image: 'Image', video: 'Vidéo', recipe: 'Modèles', audio: 'Audio' }
 export const toolById = (id) => Object.values(TOOLS).flat().find((t) => t.id === id)
 export const tabOf = (id) => Object.keys(TOOLS).find((k) => TOOLS[k].some((t) => t.id === id))
