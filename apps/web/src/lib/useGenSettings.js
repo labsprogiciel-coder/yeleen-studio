@@ -72,7 +72,7 @@ export default function useGenSettings(model, { audioSecs = null } = {}) {
   const patch = (i, v) => setPlans((ps) => ps.map((p, k) => (k === i ? { ...p, ...v } : p)))
 
   return {
-    quality, setQuality, mode, setMode, plans, active, setActive, res, setRes, ratio, setRatio, sound, setSound,
+    modelId, quality, setQuality, mode, setMode, plans, active, setActive, res, setRes, ratio, setRatio, sound, setSound,
     picks, resolutions, ratios, multiAllowed, soundMode, caps, fromAudio, fps, setFps, camera, setCamera, refs, addRef: (token, assetId) => setRefs((r) => ({ ...r, [token]: assetId })),
     multi, draft, total, cost, current: plans[active], ready: plans.some((p) => p.text.trim()), patch,
     addPlan: () => {

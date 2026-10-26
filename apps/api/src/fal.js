@@ -4,6 +4,7 @@
  * de submit : on les stocke et on les réutilise, on ne les reconstruit pas (les sous-chemins de point d'accès diffèrent).
  */
 const QUEUE = 'https://queue.fal.run'
+const RUN = 'https://fal.run' // appel direct (réponse dans la même requête) : pour les modèles de texte, rapides
 const STORAGE = 'https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3'
 
 export class FalError extends Error {
@@ -36,6 +37,10 @@ export function falClient({ key, fetch: f = fetch }) {
     return body
   }
   return {
+    /** Appel direct, sans file : la réponse du modèle arrive dans la même requête. Réservé aux appels courts (texte). */
+    run(endpoint, input) {
+      return call(`${RUN}/${endpoint}`, { method: 'POST', body: JSON.stringify(input) }, 'run')
+    },
     async submit(endpoint, input, { webhookUrl } = {}) {
       const qs = webhookUrl ? `?fal_webhook=${encodeURIComponent(webhookUrl)}` : ''
       const b = await call(`${QUEUE}/${endpoint}${qs}`, { method: 'POST', body: JSON.stringify(input) }, 'submit')

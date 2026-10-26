@@ -14,6 +14,8 @@
   // CLERK_ISSUER (adresse de l'instance Clerk) se règle dans Cloudflare (Variables et secrets) ou à la commande ; `keep_vars` empêche
   // un déploiement d'effacer ce qui est réglé dans le tableau de bord (sauf les variables écrites ici, qui l'emportent).
   // FAL_KEY est un secret : `wrangler secret put FAL_KEY` ou le tableau de bord, jamais ici.
+  // « Améliorer » (texte réécrit par fal, openrouter/router) : MAX_ENHANCE_PER_DAY (30 par défaut, par compte) et ENHANCE_MODEL
+  // (google/gemini-2.5-flash par défaut), à régler dans le tableau de bord si besoin ; la clé est FAL_KEY.
   // Recharges (paygate) : PAYGATE_URL (variable), PAYGATE_KEY et PAYGATE_WEBHOOK_SECRET (secrets), TOPUP_COUNTRIES (« BF » par défaut).
   "vars": { "ENV": "production", "ALLOWED_ORIGINS": "https://yeleen-studio.labsprogiciel.workers.dev" },
   "keep_vars": true,

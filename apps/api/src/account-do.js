@@ -134,6 +134,17 @@ export class Account {
       return Response.json({ ok: true })
     }
 
+    // Quota du jour d'une fonction gratuite (ex. `enhance`) : `quota:<nom>:<AAAA-MM-JJ>`. `undo` rend une utilisation qui a échoué.
+    if (pathname === '/quota/use') {
+      const { name, day, max, undo = false } = await request.json()
+      const key = `quota:${name}:${day}`
+      const used = (await this.state.storage.get(key)) ?? 0
+      if (undo) { await this.state.storage.put(key, Math.max(0, used - 1)); return Response.json({ ok: true }) }
+      if (used >= max) return Response.json({ ok: false, error: 'daily_limit', max }, { status: 429 })
+      await this.state.storage.put(key, used + 1)
+      return Response.json({ ok: true, remaining: max - used - 1 })
+    }
+
     // Fichiers téléversés mesurés (durée, plus petit côté) : `media:<adresse fal>`, lus avant le débit d'un outil limité.
     if (pathname === '/media/put') {
       const { url: file, secs, short } = await request.json()

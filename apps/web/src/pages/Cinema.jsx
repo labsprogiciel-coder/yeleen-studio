@@ -256,6 +256,7 @@ export default function Cinema() {
         <PromptBox
           id="cn-plan" role={video && s.multi ? 'tabpanel' : undefined} aria-labelledby={video && s.multi ? `plan-tab-${s.active}` : undefined}
           canClear={Boolean(text)} onClear={() => setText('')} clearLabel={video ? 'Effacer le plan' : 'Effacer la description'}
+          enhance={{ value: text, onChange: (t) => { setText(t); setError('') }, kind: video ? 'video' : 'image', modelId: model.id }}
           note={hint && <p className="ep-refnote" role="status">{hint}</p>}
           foot={video && <button type="button" className="ep-at" aria-label="Citer une référence" onClick={() => area.current?.insertAt()}><Icon name="at" size={16} /></button>}
         >

@@ -53,6 +53,8 @@ export const api = {
   favorites: () => request('/favorites'),
   setFavorite: (scope, id, on) => request(`/favorites/${scope}/${encodeURIComponent(id)}`, { method: on ? 'PUT' : 'DELETE' }),
   ledger: (q = {}) => request(`/ledger?${new URLSearchParams(q)}`),
+  /** « Améliorer » : réécrit l'instruction pour le modèle choisi ({ text, kind: 'video' | 'image', modelId }) ; gratuit, quota par jour. */
+  enhance: (spec) => request('/enhance', { method: 'POST', body: JSON.stringify(spec) }),
   /** Dépose un fichier d'entrée (image, audio) chez le fournisseur ; renvoie son adresse. */
   upload: async (file) => (await sendFile(`/uploads?name=${encodeURIComponent(file.name)}`, file)).url,
   /** Importe un fichier dans Ma bibliothèque (gardé dans R2, retrouvé sur tous les appareils) ; renvoie l'asset du serveur. */
