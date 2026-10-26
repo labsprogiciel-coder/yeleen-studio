@@ -7,7 +7,7 @@ export const QUALITY = [
 ]
 export const MODES = [
   { id: 'manual', title: 'Manuel', desc: 'Vous décrivez chaque plan.' },
-  { id: 'auto', title: 'Auto', desc: 'Le modèle propose le découpage à partir de votre idée.' },
+  { id: 'auto', title: 'Auto', desc: 'Décrivez votre idée : l’étincelle la découpe en plans (modèles multi-plans).' },
 ]
 export const DURATIONS = [2, 3, 5, 8, 10] // durées proposées pour un plan (Kling accepte des plans dès 1 s ; la durée totale reste bornée par le modèle)
 export const RESOLUTIONS = ['720p', '1080p', '4K']
@@ -78,6 +78,11 @@ export default function useGenSettings(model, { audioSecs = null } = {}) {
     addPlan: () => {
       setPlans((ps) => [...ps, { text: '', dur: 5 }])
       setActive(plans.length)
+    },
+    /** Remplace tous les plans (découpage par « Améliorer »), sauf si `expected` est donné et que les plans ont changé depuis. */
+    replacePlans: (ps, expected) => {
+      setPlans((cur) => (expected && cur !== expected ? cur : ps))
+      setActive(0)
     },
     removePlan: (i) => {
       setPlans((ps) => ps.filter((_, k) => k !== i))
