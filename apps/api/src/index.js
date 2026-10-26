@@ -6,7 +6,7 @@ import { buildInput, endpointFor, outputsOf, runwareInput } from './inputs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, removeFavorite, SCOPES } from './library.js'
 import { mediaInfo } from './media.js'
-import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, today } from './enhance.js'
+import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
 import { isBlocked } from './moderation.js'
 import { PaygateError, paygateClient, verifySignature } from './paygate.js'
@@ -256,9 +256,9 @@ app.post('/enhance', async (c) => {
   const req = await c.req.json().catch(() => ({}))
   const text = typeof req.text === 'string' ? req.text.trim() : ''
   if (text.length < MIN_CHARS || text.length > MAX_CHARS) return c.json({ error: 'invalid_text', min: MIN_CHARS, max: MAX_CHARS }, 400)
-  const kind = ['image', 'voice', 'template'].includes(req.kind) ? req.kind : 'video'
+  const kind = ['image', 'voice', 'template', 'shots'].includes(req.kind) ? req.kind : 'video'
   const input = enhanceInput({ text, kind, modelId: req.modelId, language: req.language, workflowId: req.workflowId, field: req.field }, c.env.ENHANCE_MODEL ?? ENHANCE_MODEL)
-  if (!input) return c.json({ error: 'not_enhanceable' }, 400) // champ de modèle inconnu, ou à garder tel quel
+  if (!input) return c.json({ error: 'not_enhanceable' }, 400) // champ de modèle inconnu ou à garder tel quel, modèle vidéo sans plans multiples
   if (isBlocked(text)) return c.json({ error: 'moderation' }, 422)
   const day = today()
   const quota = await call(c, '/quota/use', { name: 'enhance', day, max: Number(c.env.MAX_ENHANCE_PER_DAY ?? 30) })
@@ -268,15 +268,15 @@ app.post('/enhance', async (c) => {
   try {
     const r = await fal(c).run(ENHANCE_ENDPOINT, input)
     if (r.error) throw new Error(String(r.error))
-    out = cleanOutput(r.output, text)
+    out = kind === 'shots' ? parseShots(r.output, text, shotModel(req.modelId)) : cleanOutput(r.output, text)
   } catch (e) {
     console.error('améliorer', e.message)
     await undo()
     return c.json({ error: 'provider' }, 502)
   }
   if (!out) { await undo(); return c.json({ error: 'provider' }, 502) }
-  if (isBlocked(out)) { await undo(); return c.json({ error: 'moderation' }, 422) }
-  return c.json({ text: out, remaining: quota.remaining })
+  if (isBlocked(kind === 'shots' ? out.map((p) => p.text).join('\n') : out)) { await undo(); return c.json({ error: 'moderation' }, 422) }
+  return c.json({ ...(kind === 'shots' ? { plans: out } : { text: out }), remaining: quota.remaining })
 })
 
 app.post('/jobs', async (c) => {

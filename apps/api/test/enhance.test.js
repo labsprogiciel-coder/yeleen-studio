@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Account } from '../src/account-do.js'
 import app from '../src/index.js'
-import { cleanOutput, enhanceInput, ENHANCE_MODEL } from '../src/enhance.js'
+import { cleanOutput, enhanceInput, ENHANCE_MODEL, parseShots, shotModel } from '../src/enhance.js'
 
 /** L'API avec le vrai Account (stockage en mémoire) et un faux fal ; `calls` : les appels faits à fal. */
 function setup(fal, vars = {}) {
@@ -128,4 +128,37 @@ test('modèles : un champ à garder tel quel ou inconnu est refusé sans appel n
     assert.equal(t.calls.length, 0)
     assert.equal((await t.req({ text: 'un logo de maquis', kind: 'template', workflowId: 'logo_maker', field: 'prompt' })).status, 200) // le quota est intact
   } finally { t.restore() }
+})
+
+test('plans : l’idée est découpée en plans pour un modèle multi-plans', async () => {
+  const shots = [{ text: '@Awa ouvre son étal au lever du jour.', dur: 5 }, { text: 'Gros plan sur les beignets qui dorent.', dur: 3 }]
+  const t = setup(() => ({ body: { output: `Voici :\n\`\`\`json\n${JSON.stringify(shots)}\n\`\`\`` } }))
+  try {
+    const res = await t.req({ text: '@Awa vend des beignets au marché', kind: 'shots', modelId: 'kling-3-pro' })
+    assert.equal(res.status, 200)
+    assert.deepEqual((await res.json()).plans, shots)
+    assert.match(t.calls[0].body.prompt, /Kling 3\.0 Pro.*15 s au plus en tout/s)
+  } finally { t.restore() }
+})
+
+test('plans : refusé sans appel pour un modèle à plan unique ; réponse illisible remboursée', async () => {
+  const t = setup(() => ({ body: { output: 'pas de JSON ici' } }), { MAX_ENHANCE_PER_DAY: '1' })
+  try {
+    assert.equal((await t.req({ text: 'une idée', kind: 'shots', modelId: 'veo-3-1-lite' })).status, 400)
+    assert.equal(t.calls.length, 0)
+    assert.equal((await t.req({ text: 'une idée', kind: 'shots', modelId: 'kling-3-pro' })).status, 502)
+    assert.equal((await t.req({ text: 'une idée', kind: 'shots', modelId: 'kling-3-pro' })).status, 502) // le quota a été rendu
+  } finally { t.restore() }
+})
+
+test('plans : durées ramenées aux choix et à la durée maximale, références gardées', () => {
+  const m = shotModel('kling-3-pro')
+  const out = JSON.stringify([{ text: 'Plan un.', dur: 9 }, { text: 'Plan deux.', dur: 7 }, { text: 'Plan trois.', dur: 'x' }, { text: '', dur: 3 }, { text: 'Plan quatre.', dur: 2 }, { text: 'Plan cinq.', dur: 2 }])
+  const ps = parseShots(out, 'idée avec @Image1', m)
+  assert.equal(ps.length, 4)
+  assert.ok(ps.reduce((n, p) => n + p.dur, 0) <= 15)
+  assert.ok(ps.every((p) => [2, 3, 5, 8, 10].includes(p.dur)))
+  assert.ok(ps[0].text.endsWith('@Image1'))
+  assert.equal(parseShots('[{"text": "Un seul plan.", "dur": 5}]', 'x', m), null)
+  assert.equal(shotModel('veo-3-1-lite'), null)
 })

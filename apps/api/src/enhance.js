@@ -3,7 +3,8 @@ import { findWorkflow } from '@studio/catalog/workflows'
 
 /**
  * « Améliorer » : réécrit l'instruction d'une génération (vidéo ou image) pour le modèle choisi, ou écrit le script d'une voix off
- * à partir d'une idée (`kind: 'voice'`), ou précise un texte d'un modèle de la page Modèles (`kind: 'template'`), par un modèle de texte chez fal
+ * à partir d'une idée (`kind: 'voice'`), précise un texte d'un modèle de la page Modèles (`kind: 'template'`), ou découpe une idée en
+ * plans pour un modèle vidéo multi-plans (`kind: 'shots'`, mode Auto), par un modèle de texte chez fal
  * (point d'accès `openrouter/router`, modèle réglable par ENHANCE_MODEL). Gratuit, avec un quota par jour et par compte.
  * Les références « @mot » de l'utilisateur doivent survivre telles quelles : sans elles, la génération perdrait ses images.
  */
@@ -56,14 +57,76 @@ Règles :
 - Recopie à l'identique chaque mot commençant par @.
 - Texte continu : pas de titre, pas de liste, pas de guillemets, pas de commentaire.`
 
+// Découpage en plans (Kling 3.0) : une réponse JSON, une instruction et une durée par plan, dans la durée totale du modèle.
+const SYSTEM_SHOTS = `Tu découpes l'idée d'un utilisateur en plans successifs pour un modèle de génération vidéo multi-plans.
+Règles :
+- Garde la langue de l'utilisateur (français par défaut) et son idée : même sujet, mêmes personnages, même lieu, une histoire qui se suit.
+- 2 à 4 plans. Chaque plan : une instruction autonome de 25 à 60 mots (sujet, action, cadrage, mouvement de caméra, lumière, sons) et une durée en secondes.
+- Recopie à l'identique chaque mot commençant par @ (des références à des fichiers) dans les plans où ils apparaissent.
+- Réponds uniquement par un tableau JSON, sans texte autour : [{"text": "…", "dur": 5}, …]`
+
+export const MAX_SHOTS = 4
+export const SHOT_DURS = [2, 3, 5, 8, 10] // les durées d'un plan proposées par l'éditeur (DURATIONS de apps/web/src/lib/useGenSettings.js)
+
+/** Le modèle vidéo multi-plans visé par un découpage, ou null. */
+export function shotModel(modelId) {
+  const m = modelId && findModel(VIDEO_MODELS, modelId)
+  return m?.caps?.multiShot ? m : null
+}
+
+/**
+ * Plans tirés de la réponse : le tableau JSON (même entouré de texte ou de ```), au plus MAX_SHOTS plans non vides, chaque durée
+ * ramenée à SHOT_DURS, puis raccourcie (la plus longue d'abord) jusqu'à tenir dans la durée maximale du modèle. Les références « @mot »
+ * absentes de tous les plans sont rajoutées au premier. Rend null si la réponse ne donne pas au moins 2 plans.
+ */
+export function parseShots(output, original, model) {
+  const raw = String(output ?? '')
+  const start = raw.indexOf('[')
+  const end = raw.lastIndexOf(']')
+  if (start < 0 || end < start) return null
+  let list
+  try { list = JSON.parse(raw.slice(start, end + 1)) } catch { return null }
+  if (!Array.isArray(list)) return null
+  const snap = (d) => SHOT_DURS.reduce((a, b) => (Math.abs(b - d) < Math.abs(a - d) ? b : a))
+  let plans = list
+    .map((p) => ({ text: typeof p?.text === 'string' ? cleanOutput(p.text, '') : null, dur: snap(Number(p?.dur) || 5) }))
+    .filter((p) => p.text)
+    .slice(0, MAX_SHOTS)
+  const max = model.caps.duration.max
+  for (;;) {
+    const total = plans.reduce((n, p) => n + p.dur, 0)
+    if (total <= max) break
+    const longest = plans.reduce((a, p) => (p.dur > a.dur ? p : a))
+    if (longest.dur === SHOT_DURS[0]) plans = plans.slice(0, -1) // tous au plus court : un plan de moins
+    else longest.dur = SHOT_DURS[SHOT_DURS.indexOf(longest.dur) - 1]
+  }
+  if (plans.length < 2) return null
+  const kept = new Set(plans.flatMap((p) => tokensOf(p.text)))
+  const missing = tokensOf(original).filter((t) => !kept.has(t))
+  if (missing.length) plans[0].text = cleanOutput(plans[0].text, `${plans[0].text} ${missing.join(' ')}`)
+  return plans
+}
+
 /** Le champ texte d'un workflow que « Améliorer » peut préciser, ou null (inconnu, pas un texte, ou `enhance: false`). */
 export function templateField(workflowId, key) {
   const f = findWorkflow(workflowId)?.inputs.find((x) => x.key === key)
   return f && f.type === 'text' && f.enhance !== false ? f : null
 }
 
-/** Entrée du point d'accès fal : réécrire `text` (vidéo, image), en tirer un script de voix off (voice) ou préciser le texte d'un modèle (template). */
+/** Entrée du point d'accès fal : réécrire `text` (vidéo, image), en tirer un script de voix off (voice) ou des plans (shots), ou préciser le texte d'un modèle (template). */
 export function enhanceInput({ text, kind, modelId, language, workflowId, field }, model = ENHANCE_MODEL) {
+  if (kind === 'shots') {
+    const m = shotModel(modelId)
+    if (!m) return null
+    const sound = m.caps.audio && m.caps.audio !== 'none' ? ', avec le son' : ''
+    return {
+      model,
+      system_prompt: SYSTEM_SHOTS,
+      prompt: `Modèle ${m.name}${sound}. Durées possibles d'un plan : ${SHOT_DURS.join(', ')} s ; ${m.caps.duration.max} s au plus en tout.\nIdée à découper :\n${text}`,
+      temperature: 0.7,
+      max_tokens: 900,
+    }
+  }
   if (kind === 'template') {
     const w = findWorkflow(workflowId)
     const f = templateField(workflowId, field)

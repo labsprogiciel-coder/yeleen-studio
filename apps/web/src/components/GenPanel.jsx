@@ -126,15 +126,17 @@ const ENHANCE_ERRORS = {
   daily_limit: (e) => `Limite du jour atteinte : ${e.body.max} améliorations. Revenez demain.`,
   moderation: () => 'Ce texte ne peut pas être amélioré.',
   invalid_text: () => 'Écrivez d’abord quelques mots.',
+  not_enhanceable: () => 'Ce modèle ne génère qu’un seul plan : choisissez Kling 3.0 pour découper une idée.',
 }
 
 /**
  * Bouton étincelle « Améliorer » : réécrit le texte pour le modèle choisi (voir apps/api/src/enhance.js), écrit le script d'une
  * voix off à partir de l'idée tapée (`kind: 'voice'`, dans `language`), ou précise le texte d'un champ de la page Modèles
- * (`kind: 'template'`, `workflowId` et `field`). Annuler dans le message de confirmation.
- * `enhance` : { value, onChange, kind, …ce que l'API attend pour ce kind }. Absent sans l'API (moteur simulé).
+ * (`kind: 'template'`, `workflowId` et `field`), ou découpe l'idée en plans (`kind: 'shots'`, `modelId` multi-plans) : la réponse
+ * va alors à `onPlans(plans)`, qui rend de quoi l'annuler. Annuler dans le message de confirmation.
+ * `enhance` : { value, onChange, onPlans, kind, …ce que l'API attend pour ce kind }. Absent sans l'API (moteur simulé).
  */
-function EnhanceButton({ value, onChange, kind, ...spec }) {
+function EnhanceButton({ value, onChange, onPlans, kind, ...spec }) {
   const [busy, setBusy] = useState(false)
   const toast = useToast()
   const current = useRef(value) // le texte au retour de l'appel : une saisie faite entre-temps n'est pas écrasée
@@ -142,13 +144,14 @@ function EnhanceButton({ value, onChange, kind, ...spec }) {
   if (!apiEnabled) return null
   const short = value.trim().length < 3
   const voice = kind === 'voice'
-  const label = voice ? 'Écrire le script à partir de cette idée' : 'Améliorer le texte'
+  const label = voice ? 'Écrire le script à partir de cette idée' : kind === 'shots' ? 'Découper cette idée en plans' : 'Améliorer le texte'
   const run = async () => {
     const before = value
     setBusy(true)
     try {
-      const { text } = await api.enhance({ text: before, kind, ...spec })
+      const { text, plans } = await api.enhance({ text: before, kind, ...spec })
       if (current.current !== before) return toast('Le texte a changé pendant l’amélioration : il est gardé tel quel.')
+      if (plans) return toast(`Idée découpée en ${plans.length} plans.`, { label: 'Annuler', onClick: onPlans(plans) })
       onChange(text)
       toast(voice ? 'Script écrit.' : 'Texte amélioré.', { label: 'Annuler', onClick: () => { if (current.current === text) onChange(before) } })
     } catch (e) {
@@ -208,6 +211,10 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
   const roles = resolved ? Object.fromEntries(resolved.mentions.map((m) => [m.token, m.role])) : {}
   const unused = resolved ? tokensIn(s.current.text, s.refs).filter((t) => roles[t] === 'unused') : [] // cités dans ce plan mais inutilisables par le modèle
   const value = modeValue ?? s.mode
+  // Mode Auto sur un modèle multi-plans : l'étincelle découpe l'idée du plan affiché en plans (instruction et durée chacun).
+  const split = !modeValue && s.mode === 'auto' && s.caps?.multiShot
+  const idea = split && !s.multi ? 'Décrivez toute votre idée : l’étincelle la découpe en plans.' : hint
+  const onPlans = (ps) => { s.replacePlans(ps); const before = s.plans; return () => s.replacePlans(before, ps) }
   const insertAt = () => (mentions ? area.current?.insertAt() : (s.patch(s.active, { text: `${s.current.text}@` }), area.current?.focus()))
   return (
     <section className="ep-sec" aria-labelledby="ep-plan">
@@ -220,7 +227,7 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
       <PromptBox
         role={s.multi ? 'tabpanel' : undefined} id="plan-panel" aria-labelledby={s.multi ? `plan-tab-${s.active}` : undefined}
         canClear={Boolean(s.current.text)} onClear={() => s.patch(s.active, { text: '' })} clearLabel="Effacer l’instruction"
-        enhance={{ value: s.current.text, onChange: (text) => s.patch(s.active, { text }), kind: 'video', modelId: s.modelId }}
+        enhance={{ value: s.current.text, onChange: (text) => s.patch(s.active, { text }), onPlans, kind: split ? 'shots' : 'video', modelId: s.modelId }}
         note={unused.length > 0 && <p className="ep-refnote">{unused.map((t) => `@${t}`).join(', ')} : {ROLE_LABEL.unused.toLowerCase()}.</p>}
         foot={<>
           <button type="button" className="ep-at" aria-label="Insérer une référence" onClick={insertAt}><Icon name="at" size={16} /></button>
@@ -246,7 +253,7 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
             roles={roles}
             onPick={(it) => s.addRef(it.token, it.asset.id)}
             emptyHint="La bibliothèque est vide : générez ou importez un fichier."
-            placeholder={s.multi ? `Décrivez le plan ${s.active + 1} : qui y figure, ce qu’il fait, le mouvement de caméra… Tapez @ pour citer un asset.` : `${hint} Tapez @ pour citer un asset.`}
+            placeholder={s.multi ? `Décrivez le plan ${s.active + 1} : qui y figure, ce qu’il fait, le mouvement de caméra… Tapez @ pour citer un asset.` : `${idea} Tapez @ pour citer un asset.`}
             aria-label={s.multi ? `Instruction du plan ${s.active + 1}` : 'Instruction'}
             rows={4}
             data-prompt
@@ -256,7 +263,7 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
             ref={area}
             value={s.current.text}
             onChange={(e) => s.patch(s.active, { text: e.target.value })}
-            placeholder={s.multi ? `Décrivez le plan ${s.active + 1} : qui y figure, ce qu’il fait, le mouvement de caméra…` : hint}
+            placeholder={s.multi ? `Décrivez le plan ${s.active + 1} : qui y figure, ce qu’il fait, le mouvement de caméra…` : idea}
             aria-label={s.multi ? `Instruction du plan ${s.active + 1}` : 'Instruction'}
             rows={4}
             data-prompt
