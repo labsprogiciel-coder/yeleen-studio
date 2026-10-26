@@ -18,6 +18,7 @@ import ModelLogo from '../components/ModelLogo.jsx'
 import '../styles/shell.css'
 import '../styles/image.css'
 import Cauri from '../components/Cauri.jsx'
+import { EnhanceButton } from '../components/GenPanel.jsx'
 
 const g = (i) => gradient(i, 'image')
 const COLLAGE = [
@@ -98,6 +99,7 @@ export default function ImageGen() {
               >
                 <Icon name="mic" size={18} />
               </button>
+              <EnhanceButton value={prompt} onChange={setPrompt} kind="image" modelId={model.id} />
             </div>
             {voice.error && <p className="verr" role="status">{voice.error}</p>}
             {error && <p className="verr" role="alert">{error}</p>}

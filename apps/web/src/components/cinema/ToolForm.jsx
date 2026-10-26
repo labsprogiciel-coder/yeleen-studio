@@ -146,6 +146,12 @@ export default function ToolForm({ tool: uiTool, onDone }) {
   }
 
   const fileFields = fields.filter(isFileField)
+  // « Améliorer » dans les textes des outils image : une retouche quand l'outil part d'une image (pour le modèle choisi), sinon une
+  // image à créer. Les autres outils (vidéo, audio) n'en ont pas.
+  const enhanceFor = (f) => (tool.output !== 'image' ? null : {
+    value: values[f.key] ?? '', onChange: set(f.key),
+    ...(fileFields.length ? { kind: 'edit', modelId: values.model ?? modelField?.options[0].id } : { kind: 'image' }),
+  })
   return (
     <div className="ep">
       {variants.length > 1 && (
@@ -174,7 +180,7 @@ export default function ToolForm({ tool: uiTool, onDone }) {
 
       {fields.filter((f) => f.type === 'text').map((f) => (
         <Section key={f.key} id={`tf-${f.key}`} title={f.label}>
-          <PromptBox canClear={Boolean(values[f.key])} onClear={() => set(f.key)('')} clearLabel={`Effacer : ${f.label}`}
+          <PromptBox canClear={Boolean(values[f.key])} onClear={() => set(f.key)('')} clearLabel={`Effacer : ${f.label}`} enhance={enhanceFor(f)}
             foot={<span className="tf-count" aria-live="polite">{(values[f.key] ?? '').length} / {f.max}</span>}>
             <MentionTextarea mentions={false} value={values[f.key] ?? ''} onChange={set(f.key)} placeholder={f.placeholder} aria-label={f.label} rows={f.max > 500 ? 4 : 2} data-prompt />
           </PromptBox>

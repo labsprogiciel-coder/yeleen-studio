@@ -136,7 +136,7 @@ const ENHANCE_ERRORS = {
  * va alors à `onPlans(plans)`, qui rend de quoi l'annuler. Annuler dans le message de confirmation.
  * `enhance` : { value, onChange, onPlans, kind, …ce que l'API attend pour ce kind }. Absent sans l'API (moteur simulé).
  */
-function EnhanceButton({ value, onChange, onPlans, kind, ...spec }) {
+export function EnhanceButton({ value, onChange, onPlans, kind, ...spec }) {
   const [busy, setBusy] = useState(false)
   const toast = useToast()
   const current = useRef(value) // le texte au retour de l'appel : une saisie faite entre-temps n'est pas écrasée
