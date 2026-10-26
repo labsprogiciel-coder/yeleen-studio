@@ -127,7 +127,12 @@ export default function ToolForm({ tool: uiTool, onDone }) {
     const tall = tool.maxP && Object.values(media).find((m) => m?.short > tool.maxP)
     if (tall) return `${tool.maxP}p au maximum : cette vidéo est en ${tall.short}p.`
     if (tool.id === 'clip-editor' && clip > 0 && values.end > clip) return `Le clip dure ${clip} s : la fin doit venir avant.`
-    if (toolCheck(tool, inputs)) return 'La fin doit venir après le début.'
+    const issue = toolCheck(tool, priced)
+    if (issue === 'too_many_images') {
+      const m = findEditModel(values.model) ?? findEditModel(modelField.options[0].id)
+      return `${m.name} accepte ${m.maxImages} images au plus : retirez-en une ou changez de modèle.`
+    }
+    if (issue) return 'La fin doit venir après le début.'
     return null
   })()
 

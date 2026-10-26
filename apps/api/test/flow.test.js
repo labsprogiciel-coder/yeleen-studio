@@ -398,6 +398,11 @@ test('outil image au modèle choisi : envoyé au point d’accès du modèle (Kr
     assert.equal(sent[1].body.resolution, '2K')
     assert.ok(start - kreaCost - (await nb.json()).balance > kreaCost) // Nano Banana Pro coûte plus que Krea 3 ici
     assert.equal((await (await t.req('/jobs', post({ kind: 'tool', modelId: 'product-photo', inputs: { image, model: 'inconnu' } }))).json()).error, 'invalid_option')
+    // Qwen Image 3 n'accepte que 3 images : 4 sont refusées avant le débit et sans appel à fal
+    const calls = sent.length
+    const four = await t.req('/jobs', post({ kind: 'tool', modelId: 'editor', inputs: { images: [image, image, image, image], prompt: 'fond bleu', model: 'qwen-image-3' } }))
+    assert.equal(four.status, 400)
+    assert.equal(sent.length, calls)
   } finally { t.restore() }
 })
 

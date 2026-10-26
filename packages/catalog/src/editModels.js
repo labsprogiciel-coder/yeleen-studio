@@ -4,6 +4,7 @@
  * d'accès (`build`) et en donne le coût fournisseur en USD (`usd`), d'après sa page chez fal (octobre 2026).
  *
  * - `ratio` : 'auto' (le format de l'image fournie) ou 'L:H' ; `size` : '1K', '2K' ou '4K' (ramenée à ce que le modèle accepte) ;
+ * - `images` : au plus `maxImages` (vérifié par l'outil, voir `editTool`) ;
  * - `count` : nombre d'images ; un modèle sans `multi` n'en produit qu'une par appel et n'est pas proposé pour les variations.
  * Les modèles facturés à la surface reçoivent une taille exacte (largeur × hauteur), calculée ici : le prix est connu avant l'envoi.
  */
@@ -89,7 +90,7 @@ export const EDIT_MODELS = [
     tagline: 'Le plus économique',
     endpoint: 'alibaba/qwen-image-3/edit',
     sizes: ['1K', '2K'],
-    maxImages: 8,
+    maxImages: 3, // de 1 à 3 images de référence (page du modèle chez fal)
     multi: true,
     // 0,04 $ l'image en 1K, 0,075 $ en 2K. Format « auto » : le modèle choisit la taille, on compte le tarif 2K.
     usd(r) { return (r.ratio !== 'auto' && sizeFor(this, r.size) === '1K' ? 0.04 : 0.075) * r.count },

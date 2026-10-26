@@ -134,4 +134,10 @@ test('outils image au modèle choisi : point d’accès, entrée et prix du mod�
   const ed = findTool('editor')
   assert.equal(toolInput(ed, { images: [img], prompt: 'x', model: 'seedream-5-pro', resolution: '4K' }).image_size, 'auto_2K')
   for (const m of EDIT_MODELS) assert.ok(toolCost(ed, { images: [img], prompt: 'x', model: m.id }) >= 0.1, m.id)
+  // Qwen Image 3 : 3 images de référence au plus ; les autres modèles en gardent 4 dans l'éditeur
+  const { toolCheck } = await import('../src/tools.js')
+  const four = { images: [img, img, img, img], prompt: 'x' }
+  assert.equal(toolCheck(ed, { ...four, model: 'qwen-image-3' }), 'too_many_images')
+  assert.equal(toolCheck(ed, { ...four, images: four.images.slice(0, 3), model: 'qwen-image-3' }), null)
+  assert.equal(toolCheck(ed, four), null)
 })

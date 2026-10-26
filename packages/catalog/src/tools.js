@@ -39,6 +39,8 @@ function editTool({ models, request, ...tool }) {
     output: 'image',
     inputs: [{ key: 'model', type: 'model', label: 'Modèle', options: models.map((id) => opt(id, findEditModel(id).name)) }, ...tool.inputs],
     endpoint: (v) => pick(v).endpoint,
+    // Plus d'images que le modèle choisi n'en accepte (Qwen Image 3 : 3) : refusé avant le débit.
+    check: (v) => (req(v).images.length > pick(v).maxImages ? 'too_many_images' : tool.check?.(v) ?? null),
     usd: (v) => pick(v).usd(req(v)),
     build: (v) => pick(v).build(req(v)),
   }
