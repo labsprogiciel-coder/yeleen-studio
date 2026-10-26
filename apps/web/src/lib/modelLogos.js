@@ -5,6 +5,7 @@ import kling from '../assets/logos/kling-color.svg'
 import minimax from '../assets/logos/minimax-color.svg'
 import lightricks from '../assets/logos/lightricks.svg'
 import bytedance from '../assets/logos/bytedance-color.svg'
+import deepmind from '../assets/logos/deepmind-color.svg'
 
 /**
  * Logo de la marque d'un modèle, d'après son identifiant. `color: true` : le logo a ses propres couleurs ;
@@ -18,5 +19,6 @@ const BY_PREFIX = [
   ['h3-', { src: minimax, color: true, brand: 'MiniMax' }],
   ['ltx', { src: lightricks, color: false, brand: 'Lightricks' }],
   ['seedance', { src: bytedance, color: true, brand: 'ByteDance' }], // pas de logo « Seedance » dans la collection : celui de ByteDance, son éditeur
+  ['veo', { src: deepmind, color: true, brand: 'Google DeepMind' }], // pas de logo « Veo » dans la collection : celui de Google DeepMind, son éditeur
 ]
 export const logoFor = (modelId) => BY_PREFIX.find(([p]) => modelId?.startsWith(p))?.[1] ?? null
