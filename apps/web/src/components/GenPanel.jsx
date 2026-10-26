@@ -7,6 +7,7 @@ import { useAssets } from '../lib/assets.jsx'
 import AssetModal from './cinema/AssetModal.jsx'
 import AssetThumb from './AssetThumb.jsx'
 import { useToast } from '../lib/toasts.jsx'
+import { api, apiEnabled } from '../lib/api.js'
 import MentionTextarea from './MentionTextarea.jsx'
 import PlanTabs from './PlanTabs.jsx'
 import { ROLE_LABEL, resolveMentions, tokenFor, tokensIn } from '../lib/mentions.js'
@@ -121,17 +122,58 @@ export function RefTile({ asset, token, off = false, onCite, onRemove }) {
   )
 }
 
+const ENHANCE_ERRORS = {
+  daily_limit: (e) => `Limite du jour atteinte : ${e.body.max} améliorations. Revenez demain.`,
+  moderation: () => 'Ce texte ne peut pas être amélioré.',
+  invalid_text: () => 'Écrivez d’abord quelques mots.',
+}
+
+/**
+ * Bouton étincelle « Améliorer » : réécrit le texte pour le modèle choisi (voir apps/api/src/enhance.js), écrit le script d'une
+ * voix off à partir de l'idée tapée (`kind: 'voice'`, dans `language`), ou précise le texte d'un champ de la page Modèles
+ * (`kind: 'template'`, `workflowId` et `field`). Annuler dans le message de confirmation.
+ * `enhance` : { value, onChange, kind, …ce que l'API attend pour ce kind }. Absent sans l'API (moteur simulé).
+ */
+function EnhanceButton({ value, onChange, kind, ...spec }) {
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  const current = useRef(value) // le texte au retour de l'appel : une saisie faite entre-temps n'est pas écrasée
+  current.current = value
+  if (!apiEnabled) return null
+  const short = value.trim().length < 3
+  const voice = kind === 'voice'
+  const label = voice ? 'Écrire le script à partir de cette idée' : 'Améliorer le texte'
+  const run = async () => {
+    const before = value
+    setBusy(true)
+    try {
+      const { text } = await api.enhance({ text: before, kind, ...spec })
+      if (current.current !== before) return toast('Le texte a changé pendant l’amélioration : il est gardé tel quel.')
+      onChange(text)
+      toast(voice ? 'Script écrit.' : 'Texte amélioré.', { label: 'Annuler', onClick: () => { if (current.current === text) onChange(before) } })
+    } catch (e) {
+      toast(ENHANCE_ERRORS[e.body?.error]?.(e) ?? 'Amélioration indisponible : réessayez dans un instant.')
+    } finally { setBusy(false) }
+  }
+  return (
+    <button type="button" className="ep-ai" aria-label={label} title={short ? 'Écrivez d’abord quelques mots' : label} aria-busy={busy} disabled={busy || short} onClick={run}>
+      <Icon name="sparkle" size={16} />
+    </button>
+  )
+}
+
 /**
  * Le cadre de texte de tous les panneaux (celui du Générateur de vidéos) : la zone de saisie, une note éventuelle, puis le pied
- * avec `foot` à gauche (@, puces) et le bouton Effacer à droite.
+ * avec `foot` à gauche (@, puces), le bouton Améliorer si `enhance` est donné (voir EnhanceButton) et Effacer à droite.
  */
-export function PromptBox({ children, note = null, foot = null, canClear, onClear, clearLabel = 'Effacer le texte', ...rest }) {
+export function PromptBox({ children, note = null, foot = null, enhance = null, canClear, onClear, clearLabel = 'Effacer le texte', ...rest }) {
   return (
     <div className="ep-prompt" {...rest}>
       {children}
       {note}
       <div className="ep-pfoot">
         {foot}
+        {enhance && <EnhanceButton {...enhance} />}
         <button type="button" className="ep-clear" aria-label={clearLabel} disabled={!canClear} onClick={onClear}><Icon name="close" size={14} /></button>
       </div>
     </div>
@@ -178,6 +220,7 @@ export function PlanSection({ s, hint, modeItems = MODES, modeLabel = 'Mode de d
       <PromptBox
         role={s.multi ? 'tabpanel' : undefined} id="plan-panel" aria-labelledby={s.multi ? `plan-tab-${s.active}` : undefined}
         canClear={Boolean(s.current.text)} onClear={() => s.patch(s.active, { text: '' })} clearLabel="Effacer l’instruction"
+        enhance={{ value: s.current.text, onChange: (text) => s.patch(s.active, { text }), kind: 'video', modelId: s.modelId }}
         note={unused.length > 0 && <p className="ep-refnote">{unused.map((t) => `@${t}`).join(', ')} : {ROLE_LABEL.unused.toLowerCase()}.</p>}
         foot={<>
           <button type="button" className="ep-at" aria-label="Insérer une référence" onClick={insertAt}><Icon name="at" size={16} /></button>

@@ -28,7 +28,8 @@ export function RunStrip({ jobs, onDone }) {
 
 /**
  * Formulaire d'un modèle, sur le modèle du Générateur de vidéos : le modèle choisi, une case par photo (la bibliothèque s'ouvre
- * au toucher), le cadre de texte de chaque entrée, puis Générer avec le prix. `onPhoto(clé, asset)` : null retire la photo.
+ * au toucher), le cadre de texte de chaque entrée (avec l'étincelle « Améliorer » sauf pour les listes et les textes à garder tels
+ * quels), puis Générer avec le prix. `onPhoto(clé, asset)` : null retire la photo.
  */
 export function RecipeForm({ id, texts, onText, photos, onPhoto, onPick, error, onRun }) {
   const r = RECIPES.find((x) => x.id === id)
@@ -53,6 +54,7 @@ export function RecipeForm({ id, texts, onText, photos, onPhoto, onPick, error, 
       {r.texts.map((t) => (
         <Section key={t.key} id={`rc-${t.key}`} title={t.label}>
           <PromptBox canClear={Boolean(texts[t.key])} onClear={() => onText(t.key, '')} clearLabel={`Effacer : ${t.label}`}
+            enhance={t.enhance ? { value: texts[t.key] ?? '', onChange: (v) => onText(t.key, v), kind: 'template', workflowId: r.workflow.id, field: t.key } : null}
             foot={t.lines && <span className="tf-count" aria-live="polite">{splitLines(texts[t.key]).length} / {t.max}</span>}>
             <MentionTextarea mentions={false} value={texts[t.key] ?? ''} onChange={(v) => onText(t.key, v)} placeholder={t.placeholder} aria-label={t.label} rows={t.lines ? t.max : 3} data-prompt />
           </PromptBox>

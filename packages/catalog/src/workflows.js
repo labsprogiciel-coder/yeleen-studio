@@ -6,6 +6,7 @@ import { toJetons } from './models.js'
  * le prix est l'estimation affichée par fal pour un lancement (le coût réel dépend des étapes exécutées).
  * type : `text` (texte), `image` (une photo), `images` (liste de photos, même champ côté fal),
  * `lines` (une valeur par ligne, de `min` à `max` lignes, répartie par `expand` sur plusieurs champs côté fal).
+ * `enhance: false` : pas de bouton « Améliorer » sur ce texte (il doit rester tel quel, ex. le nom exact d'un objet à remplacer).
  */
 export const WORKFLOWS = [
   {
@@ -95,7 +96,7 @@ export const WORKFLOWS = [
     blurb: 'Remplacez un objet de votre photo par un autre, le reste de l’image ne bouge pas',
     inputs: [
       { key: 'image_url', type: 'image', label: 'Votre photo' },
-      { key: 'text_prompt', type: 'text', required: true, label: 'Quoi remplacer', placeholder: 'Ex. : le sac sur la table', example: 'le sac sur la table' },
+      { key: 'text_prompt', type: 'text', required: true, enhance: false, label: 'Quoi remplacer', placeholder: 'Ex. : le sac sur la table', example: 'le sac sur la table' },
       { key: 'prompt', type: 'text', required: true, label: 'Par quoi', placeholder: 'Ex. : un sac en cuir rouge', example: 'un sac en cuir rouge' },
     ],
   },

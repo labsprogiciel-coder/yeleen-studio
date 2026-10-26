@@ -6,6 +6,7 @@ import { buildInput, endpointFor, outputsOf, runwareInput } from './inputs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, removeFavorite, SCOPES } from './library.js'
 import { mediaInfo } from './media.js'
+import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
 import { isBlocked } from './moderation.js'
 import { PaygateError, paygateClient, verifySignature } from './paygate.js'
@@ -247,6 +248,37 @@ async function mediaIssue(c, tool, inputs) {
 
 // Soumission : contrôle du texte et prix serveur → débit → envoi au fournisseur du modèle (fal ou Runware). Si l'envoi échoue,
 // remboursement immédiat.
+// « Améliorer » (bouton étincelle des zones de texte) : réécrit l'instruction pour le modèle choisi, écrit un script de voix off
+// (kind: 'voice', dans la langue choisie) ou précise le texte d'un modèle de la page Modèles (kind: 'template', workflowId + field).
+// Gratuit, MAX_ENHANCE_PER_DAY fois par jour et par compte (30 par défaut, partagé) ; un échec ne compte pas. Le texte est contrôlé
+// avant et après, comme une génération.
+app.post('/enhance', async (c) => {
+  const req = await c.req.json().catch(() => ({}))
+  const text = typeof req.text === 'string' ? req.text.trim() : ''
+  if (text.length < MIN_CHARS || text.length > MAX_CHARS) return c.json({ error: 'invalid_text', min: MIN_CHARS, max: MAX_CHARS }, 400)
+  const kind = ['image', 'voice', 'template'].includes(req.kind) ? req.kind : 'video'
+  const input = enhanceInput({ text, kind, modelId: req.modelId, language: req.language, workflowId: req.workflowId, field: req.field }, c.env.ENHANCE_MODEL ?? ENHANCE_MODEL)
+  if (!input) return c.json({ error: 'not_enhanceable' }, 400) // champ de modèle inconnu, ou à garder tel quel
+  if (isBlocked(text)) return c.json({ error: 'moderation' }, 422)
+  const day = today()
+  const quota = await call(c, '/quota/use', { name: 'enhance', day, max: Number(c.env.MAX_ENHANCE_PER_DAY ?? 30) })
+  if (!quota.ok) return c.json(quota, 429) // { error: 'daily_limit', max }
+  const undo = () => call(c, '/quota/use', { name: 'enhance', day, undo: true })
+  let out
+  try {
+    const r = await fal(c).run(ENHANCE_ENDPOINT, input)
+    if (r.error) throw new Error(String(r.error))
+    out = cleanOutput(r.output, text)
+  } catch (e) {
+    console.error('améliorer', e.message)
+    await undo()
+    return c.json({ error: 'provider' }, 502)
+  }
+  if (!out) { await undo(); return c.json({ error: 'provider' }, 502) }
+  if (isBlocked(out)) { await undo(); return c.json({ error: 'moderation' }, 422) }
+  return c.json({ text: out, remaining: quota.remaining })
+})
+
 app.post('/jobs', async (c) => {
   const req = await c.req.json()
   const price = priceJob(req)
