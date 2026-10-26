@@ -138,27 +138,43 @@ test('Bibliothèque Yeleen : publique, publiés seulement, dans l’ordre, au fo
 test('Vidéos à refaire : publiques, publiées seulement, dans l’ordre, fichiers servis par /files/templates/', async () => {
   const t = setup({ vars: { ENV: 'production', CLERK_ISSUER: 'https://clerk.example' } })
   try {
-    const ins = t.db.raw.prepare(`INSERT INTO templates (id, name, category, video_key, poster_key, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
-    ins.run('maquis', 'Pub de maquis', 'pub', 'templates/maquis/video.mp4', 'templates/maquis/poster.jpg', 'kling-4', '[{"text":"Un maquis le soir","dur":5},{"text":"Gros plan sur le plat","dur":5}]', '1080p', '9:16', 1, 'Une photo de votre plat', 1, 1)
-    ins.run('fete', 'Tabaski', 'fete', 'templates/fete/video.mp4', null, 'wan-3', '[{"text":"Une famille réunie","dur":8}]', '720p', 'auto', 0, null, 0, 1)
-    ins.run('brouillon', 'Pas prêt', 'pub', 'templates/b/video.mp4', null, 'wan-3', '[{"text":"x","dur":5}]', null, null, 1, null, 2, 0)
-    ins.run('casse', 'Plans illisibles', 'pub', 'templates/c/video.mp4', null, 'wan-3', 'pas du json', null, null, 1, null, 3, 1)
+    const ins = t.db.raw.prepare(`INSERT INTO templates (id, name, category, video_key, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+    ins.run('maquis', 'Pub de maquis', 'pub', 'templates/maquis/video.mp4', 'kling-4', '[{"text":"Un maquis le soir","dur":5},{"text":"Gros plan sur le plat","dur":5}]', '1080p', '9:16', 1, 'Une photo de votre plat', 1, 1)
+    ins.run('fete', 'Tabaski', 'fete', 'templates/fete/video.mp4', 'wan-3', '[{"text":"Une famille réunie","dur":8}]', '720p', 'auto', 0, null, 0, 1)
+    ins.run('brouillon', 'Pas prêt', 'pub', 'templates/b/video.mp4', 'wan-3', '[{"text":"x","dur":5}]', null, null, 1, null, 2, 0)
+    ins.run('casse', 'Plans illisibles', 'pub', 'templates/c/video.mp4', 'wan-3', 'pas du json', null, null, 1, null, 3, 1)
     const res = await t.json('/templates')
     assert.equal(res.status, 200)
     assert.match(res.headers.get('cache-control'), /max-age=300/)
     assert.deepEqual(res.body.templates.map((x) => x.id), ['fete', 'maquis'])
     assert.deepEqual(res.body.templates[1], {
-      id: 'maquis', name: 'Pub de maquis', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4', poster: 'http://api/files/templates/maquis/poster.jpg',
+      id: 'maquis', name: 'Pub de maquis', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4',
       modelId: 'kling-4', plans: [{ text: 'Un maquis le soir', dur: 5 }, { text: 'Gros plan sur le plat', dur: 5 }], resolution: '1080p', ratio: '9:16', sound: true, photo: 'Une photo de votre plat',
     })
-    assert.equal(res.body.templates[0].poster, null)
 
     t.objects.set('templates/maquis/video.mp4', { buf: new Uint8Array([1, 2, 3]).buffer, type: 'video/mp4' })
     const file = await app.fetch(new Request('http://api/files/templates/maquis/video.mp4'), t.env)
     assert.equal(file.status, 200)
     assert.equal(file.headers.get('content-type'), 'video/mp4')
     assert.equal((await app.fetch(new Request('http://api/files/autre/x.mp4'), t.env)).status, 404) // les autres dossiers restent fermés
+  } finally { t.restore() }
+})
+
+test('seeds/templates.sql : se charge, et chaque vidéo à refaire est une demande valide pour son modèle', async () => {
+  const { priceJob } = await import('../src/pricing.js')
+  const t = setup()
+  try {
+    t.db.exec(readFileSync(new URL('../seeds/templates.sql', import.meta.url), 'utf8'))
+    t.db.exec(readFileSync(new URL('../seeds/templates.sql', import.meta.url), 'utf8')) // rejouable
+    const { body } = await t.json('/templates')
+    assert.equal(body.templates.length, 5)
+    for (const x of body.templates) {
+      assert.match(x.video, /\/files\/templates\/[\w-]+\/video\.mp4$/)
+      const secs = x.plans.reduce((n, p) => n + p.dur, 0)
+      const r = priceJob({ kind: 'video', modelId: x.modelId, plans: x.plans, secs, resolution: x.resolution, ratio: x.ratio, sound: x.sound, ...(x.photo ? { startImageUrl: 'https://v3b.fal.media/files/a.png' } : {}) })
+      assert.ok(r.ok, `${x.id} : ${r.error}`)
+    }
   } finally { t.restore() }
 })
 

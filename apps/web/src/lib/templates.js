@@ -13,7 +13,7 @@ const load = () => (loaded ??= apiEnabled
   : Promise.resolve([]))
 
 /** Libellés des catégories connues ; une autre s'affiche telle quelle, avec une majuscule. */
-const LABELS = { pub: 'Pub', produit: 'Produit', fete: 'Fête', mode: 'Mode', food: 'Cuisine', cuisine: 'Cuisine', immobilier: 'Immobilier', musique: 'Musique', evenement: 'Événement', voyage: 'Voyage' }
+const LABELS = { cinema: 'Cinéma', explication: 'Explication', pub: 'Pub', produit: 'Produit', fete: 'Fête', mode: 'Mode', food: 'Cuisine', cuisine: 'Cuisine', immobilier: 'Immobilier', musique: 'Musique', evenement: 'Événement', voyage: 'Voyage' }
 export const categoryLabel = (c) => LABELS[c] ?? (c ? c[0].toUpperCase() + c.slice(1) : 'Autres')
 
 /** Durée totale et coût en cauris d'une vidéo à refaire, avec ses réglages. */

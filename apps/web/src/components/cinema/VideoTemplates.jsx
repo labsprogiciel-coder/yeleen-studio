@@ -4,18 +4,20 @@ import { Amount } from '../Cauri.jsx'
 import { categoryLabel, templateCost } from '../../lib/templates.js'
 
 const PAGE = 12 // cartes montrées avant « Voir plus »
+// Les cartes sont en 16:9 ; une vidéo verticale y est montrée entière, sur fond sombre.
+const TALL = new Set(['9:16', '3:4', '4:5'])
 
-/** Carte d'une vidéo à refaire : la vidéo (lue au survol ou au focus, sans le son), son nom et son prix avec ses réglages. */
+/** Carte d'une vidéo à refaire : la vidéo (sa première image au repos, lue au survol ou au focus, sans le son), son nom et son prix. */
 export function TemplateVideoCard({ t, onPick }) {
   const v = useRef(null)
   const play = () => { const el = v.current; if (el && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) el.play().catch(() => {}) }
-  const stop = () => { const el = v.current; if (el) { el.pause(); el.currentTime = 0 } }
+  const stop = () => { const el = v.current; if (el) { el.pause(); el.currentTime = 0.1 } } // revient à la première image
   return (
     <li>
       <button type="button" className="cx-vt" onClick={() => onPick(t)} onMouseEnter={play} onMouseLeave={stop} onFocus={play} onBlur={stop}
         aria-label={`Refaire « ${t.name} »`}>
-        <span className="cx-vt-media">
-          <video ref={v} src={t.video} poster={t.poster ?? undefined} muted loop playsInline preload={t.poster ? 'none' : 'metadata'} aria-hidden="true" tabIndex={-1} />
+        <span className={`cx-vt-media${TALL.has(t.ratio) ? ' tall' : ''}`}>
+          <video ref={v} src={`${t.video}#t=0.1`} muted loop playsInline preload="metadata" aria-hidden="true" tabIndex={-1} />
           <span className="cx-by"><img src={icon} alt="" width="18" height="18" />Par Yeelen</span>
         </span>
         <span className="cx-vt-t">
