@@ -108,6 +108,13 @@ pnpm deploy                         # ensuite : tests, API, site, autorisation d
 - Le site peut aussi se déployer depuis Git (Workers Builds) : la commande de déploiement `npx wrangler deploy` suffit, car `wrangler.jsonc` construit le site lui-même (`pnpm build`). Pour que le site appelle l'API, définissez la variable de build `VITE_API_URL` dans Cloudflare ; sans elle, il garde le moteur simulé.
 
 
+## Erreurs (Sentry)
+
+Facultatif : sans DSN, rien n'est chargé ni envoyé.
+- **Site** : variable de build `VITE_SENTRY_DSN` (et `VITE_SENTRY_RELEASE`, sinon le commit de la construction Cloudflare). Le SDK est chargé à part, après le premier affichage ; une erreur de l'interface affiche « Une erreur est survenue » avec un bouton pour recharger.
+- **API** : secret `SENTRY_DSN` (et variable `SENTRY_RELEASE` facultative). Le Worker et le Durable Object sont enveloppés dans `apps/api/src/worker.js` (drapeau `nodejs_compat`).
+- Rien de personnel : ni adresse IP, ni en-têtes, ni corps de requête, ni paramètres d'adresse, ni journaux de la console ; l'utilisateur n'est connu que par l'identifiant de son compte.
+
 ## Base de données (D1)
 
 D1 tient les **utilisateurs** : une ligne par compte Clerk (`users` : identifiant `sub`, date d'arrivée, dernière activité, pays d'après Cloudflare, e-mail et nom si le jeton les porte). Elle est créée à la première requête authentifiée ; la date d'activité n'est écrite qu'au plus toutes les 10 minutes. Le **portefeuille et les générations restent dans le Durable Object** du compte (un seul écrivain pour l'argent) : D1 sert au profil, à l'analyse et aux rapports. Une panne de D1 n'empêche jamais une requête.

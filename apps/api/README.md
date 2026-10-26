@@ -14,6 +14,7 @@ Cloudflare Worker (Hono). Point d'entrée unique pour tout ce qui coûte de l'ar
 - `src/library.js` : lectures de D1 pour Ma bibliothèque, les favoris et la Bibliothèque Yeleen (`catalog_items`).
 - `src/account-do.js` : Durable Object, un compte = portefeuille + générations + recharges.
 - `src/index.js` : routes `GET /wallet`, `POST /jobs`, `GET /jobs/:id`, `POST /jobs/:id/cancel`, `GET /topups/options`, `GET|POST /topups`, `GET /topups/:reference`, `POST /webhooks/payments`, `POST /webhooks/fal`, `POST /enhance`, `GET /ledger`, `GET|POST /assets`, `DELETE /assets/:id`, `GET|PUT|DELETE /favorites`, `GET /catalog` (publique).
+- `src/worker.js` : point d'entrée du Worker (`main`), l'API et le Durable Object enveloppés par Sentry si `SENTRY_DSN` est réglé (`src/sentry.js`).
 - `src/jobs.js` : suivi d'une génération (état chez fal ou Runware, copie dans R2, remboursement d'un échec), partagé par `GET /jobs/:id`, `/webhooks/fal` et le réveil du compte.
 - `wrangler.jsonc` : liaisons (D1, R2, Queues en commentaire jusqu'à création des ressources).
 

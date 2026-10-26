@@ -12,6 +12,7 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.61.3",
     "@clerk/localizations": "^3.37.9",
+    "@sentry/react": "^11.9.0",
     "@studio/catalog": "workspace:*",
     "@studio/spot": "workspace:*",
     "react": "^18.3.1",

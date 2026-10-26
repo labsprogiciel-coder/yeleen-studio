@@ -1,3 +1,4 @@
+import { setUser } from '@sentry/cloudflare'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { AuthError, verifyClerkToken } from './auth.js'
@@ -53,6 +54,7 @@ app.use('*', async (c, next) => {
     return c.json({ error: e.reason === 'jwks_unavailable' ? 'auth_unavailable' : 'unauthorized', reason: e.reason }, e.reason === 'jwks_unavailable' ? 503 : 401)
   }
   await provision(c, c.get('claims'))
+  setUser({ id: accountId(c) }) // Sentry : le compte seulement (sans effet si Sentry n'est pas actif)
   return next()
 })
 
