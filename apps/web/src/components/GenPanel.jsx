@@ -137,6 +137,8 @@ const ENHANCE_ERRORS = {
 function EnhanceButton({ value, onChange, kind, ...spec }) {
   const [busy, setBusy] = useState(false)
   const toast = useToast()
+  const current = useRef(value) // le texte au retour de l'appel : une saisie faite entre-temps n'est pas écrasée
+  current.current = value
   if (!apiEnabled) return null
   const short = value.trim().length < 3
   const voice = kind === 'voice'
@@ -146,8 +148,9 @@ function EnhanceButton({ value, onChange, kind, ...spec }) {
     setBusy(true)
     try {
       const { text } = await api.enhance({ text: before, kind, ...spec })
+      if (current.current !== before) return toast('Le texte a changé pendant l’amélioration : il est gardé tel quel.')
       onChange(text)
-      toast(voice ? 'Script écrit.' : 'Texte amélioré.', { label: 'Annuler', onClick: () => onChange(before) })
+      toast(voice ? 'Script écrit.' : 'Texte amélioré.', { label: 'Annuler', onClick: () => { if (current.current === text) onChange(before) } })
     } catch (e) {
       toast(ENHANCE_ERRORS[e.body?.error]?.(e) ?? 'Amélioration indisponible : réessayez dans un instant.')
     } finally { setBusy(false) }

@@ -51,11 +51,14 @@ test('améliorer : au-delà du quota du jour, refusé sans appeler fal', async (
 })
 
 test('améliorer : un échec de fal ne compte pas dans le quota', async () => {
-  let fail = true
-  const t = setup(() => (fail ? { status: 500, body: { detail: 'boom' } } : { body: { output: 'Un plan large.' } }), { MAX_ENHANCE_PER_DAY: '1' })
+  let fail = 2
+  const t = setup(() => (fail === 2 ? { status: 500, body: { detail: 'boom' } }
+    : fail === 1 ? { body: { output: 'Un plan.', error: 'upstream' } } : { body: { output: 'Un plan large.' } }), { MAX_ENHANCE_PER_DAY: '1' })
   try {
     assert.equal((await t.req({ text: 'un plan', kind: 'image' })).status, 502)
-    fail = false
+    fail = 1 // réponse 200 mais `error` rempli : un échec aussi
+    assert.equal((await t.req({ text: 'un plan', kind: 'image' })).status, 502)
+    fail = 0
     assert.equal((await t.req({ text: 'un plan', kind: 'image' })).status, 200)
   } finally { t.restore() }
 })
@@ -73,6 +76,10 @@ test('nettoyage : préfixe et guillemets retirés, références @ gardées', () 
   assert.equal(cleanOutput('Instruction réécrite : "Un plan large."', 'un plan'), 'Un plan large.')
   assert.equal(cleanOutput('@Image1 marche dans la rue.', '@Image1 marche @Image2'), '@Image1 marche dans la rue. @Image2')
   assert.equal(cleanOutput('   ', 'un plan'), null)
+  assert.equal(cleanOutput('@Image10 marche.', '@Image1 marche'), '@Image10 marche. @Image1') // jeton entier, pas un préfixe
+  const long = cleanOutput('x'.repeat(3000), 'un plan @Image1 @Video2')
+  assert.equal(long.length, 2000)
+  assert.ok(long.endsWith(' @Image1 @Video2'))
 })
 
 test('entrée : le modèle visé et ses limites sont décrits', () => {

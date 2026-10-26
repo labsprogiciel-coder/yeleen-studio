@@ -107,9 +107,15 @@ export function cleanOutput(output, original) {
     .replace(/^["«“]\s*|\s*["»”]$/g, '')
     .trim()
   if (!t) return null
-  const missing = tokensOf(original).filter((tok) => !t.includes(tok))
-  if (missing.length) t = `${t} ${missing.join(' ')}`
-  return t.slice(0, MAX_CHARS)
+  const wanted = tokensOf(original)
+  let body = t.slice(0, MAX_CHARS)
+  for (;;) {
+    const kept = tokensOf(body)
+    const suffix = wanted.filter((tok) => !kept.includes(tok)).join(' ')
+    if (!suffix) return body
+    if (body.length + 1 + suffix.length <= MAX_CHARS) return `${body} ${suffix}`
+    body = body.slice(0, MAX_CHARS - 1 - suffix.length).trimEnd() // place gardée pour les références, recomptées au tour suivant
+  }
 }
 
 /** Jour UTC « AAAA-MM-JJ » du quota. */

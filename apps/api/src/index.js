@@ -267,6 +267,7 @@ app.post('/enhance', async (c) => {
   let out
   try {
     const r = await fal(c).run(ENHANCE_ENDPOINT, input)
+    if (r.error) throw new Error(String(r.error))
     out = cleanOutput(r.output, text)
   } catch (e) {
     console.error('améliorer', e.message)

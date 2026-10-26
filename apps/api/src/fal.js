@@ -5,6 +5,7 @@
  */
 const QUEUE = 'https://queue.fal.run'
 const RUN = 'https://fal.run' // appel direct (réponse dans la même requête) : pour les modèles de texte, rapides
+const RUN_TIMEOUT = 30_000 // ms : au-delà, l'appel échoue et l'appelant rend son quota
 const STORAGE = 'https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3'
 
 export class FalError extends Error {
@@ -39,7 +40,7 @@ export function falClient({ key, fetch: f = fetch }) {
   return {
     /** Appel direct, sans file : la réponse du modèle arrive dans la même requête. Réservé aux appels courts (texte). */
     run(endpoint, input) {
-      return call(`${RUN}/${endpoint}`, { method: 'POST', body: JSON.stringify(input) }, 'run')
+      return call(`${RUN}/${endpoint}`, { method: 'POST', body: JSON.stringify(input), signal: AbortSignal.timeout(RUN_TIMEOUT) }, 'run')
     },
     async submit(endpoint, input, { webhookUrl } = {}) {
       const qs = webhookUrl ? `?fal_webhook=${encodeURIComponent(webhookUrl)}` : ''
