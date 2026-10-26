@@ -8,6 +8,7 @@ import bytedance from '../assets/logos/bytedance-color.svg'
 import deepmind from '../assets/logos/deepmind-color.svg'
 import krea from '../assets/logos/krea.svg'
 import qwen from '../assets/logos/qwen-color.svg'
+import alibaba from '../assets/logos/alibaba-color.svg'
 
 /**
  * Logo de la marque d'un modèle, d'après son identifiant. `color: true` : le logo a ses propres couleurs ;
@@ -24,6 +25,7 @@ const BY_PREFIX = [
   ['seedream', { src: bytedance, color: true, brand: 'ByteDance' }],
   ['krea', { src: krea, color: false, brand: 'Krea' }],
   ['qwen', { src: qwen, color: true, brand: 'Qwen' }],
+  ['wan-', { src: alibaba, color: true, brand: 'Alibaba' }], // pas de logo « Wan » dans la collection : celui d'Alibaba, son éditeur
   ['veo', { src: deepmind, color: true, brand: 'Google DeepMind' }], // pas de logo « Veo » dans la collection : celui de Google DeepMind, son éditeur
 ]
 export const logoFor = (modelId) => BY_PREFIX.find(([p]) => modelId?.startsWith(p))?.[1] ?? null

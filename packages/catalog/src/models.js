@@ -127,6 +127,57 @@ export const VIDEO_MODELS = [
     },
   },
   {
+    id: 'kling-4',
+    input: 'both',
+    endpoint: 'kling/v4/image-to-video', // avec une image de départ
+    textEndpoint: 'kling/v4/text-to-video', // sans image (voir endpointFor dans apps/api/src/inputs.js)
+    name: 'Kling 4.0',
+    tagline: 'Jusqu’à 30 s en 1080p, son stéréo, plusieurs plans',
+    badge: 'NOUVEAU',
+    tags: ['Jusqu’à 30 s', 'Son stéréo', 'Multi-plans', 'Images clés'],
+    // fal : 0,157 $/s en 720p, 0,235 $/s en 1080p (son compris). Schéma lu : start_image_url, end_image_url, prompt ou multi_prompt
+    // (plans de 1 à 30 s, la durée est leur somme), duration 3 à 30 s, resolution 720p ou 1080p, aspect_ratio en texte seul.
+    price: { per: 's', byRes: { '720p': 0.157, '1080p': 0.235 } },
+    verified: true,
+    caps: {
+      duration: { min: 3, max: 30, integer: true },
+      resolutions: ['720p', '1080p'],
+      ratios: ['16:9', '9:16', '1:1', '21:9'], // en texte seul ; avec une image de départ, le format suit l'image
+      audio: 'always', // son stéréo toujours généré (dialogues, effets, ambiance)
+      startFrame: 'optional',
+      endFrame: true,
+      audioRef: false,
+      elements: false,
+      multiShot: true, // multi_prompt : un prompt et une durée par plan
+      cameraMotion: false,
+    },
+  },
+  {
+    id: 'wan-3',
+    input: 'both',
+    endpoint: 'alibaba/wan-3.0/image-to-video',
+    textEndpoint: 'alibaba/wan-3.0/text-to-video',
+    name: 'Wan 3.0',
+    tagline: 'Jusqu’à 30 s avec le son, le moins cher du catalogue',
+    badge: 'ÉCO',
+    tags: ['Petit prix', 'Jusqu’à 30 s', 'Audio natif', 'Image de fin'],
+    // fal : 0,05 / 0,10 / 0,20 $ la seconde en 480p / 720p / 1080p, son compris (prix « susceptible de changer » selon fal).
+    price: { per: 's', byRes: { '480p': 0.05, '720p': 0.1, '1080p': 0.2 } },
+    verified: true,
+    caps: {
+      duration: { min: 2, max: 30, integer: true },
+      resolutions: ['480p', '720p', '1080p'],
+      ratios: ['auto', '16:9', '4:3', '1:1', '3:4', '9:16'], // auto : « adaptive », le modèle choisit (ou suit l'image)
+      audio: 'toggle', // audio: true|false, même prix
+      startFrame: 'optional',
+      endFrame: true, // seulement avec une image de départ
+      audioRef: false,
+      elements: false,
+      multiShot: false,
+      cameraMotion: false,
+    },
+  },
+  {
     id: 'h3-max',
     input: 'both',
     endpoint: 'minimax/h3-max/image-to-video',

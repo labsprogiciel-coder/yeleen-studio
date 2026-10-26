@@ -188,3 +188,34 @@ test('Les prix du catalogue suivent les fournisseurs (fal le 17 oct. 2026, Runwa
   assert.deepEqual([m('kling-3-pro').price.usd, m('kling-3-pro').price.silentUsd], [0.168, 0.112])
   assert.deepEqual([m('kling-3-std').price.usd, m('kling-3-std').price.silentUsd], [0.126, 0.084])
 })
+
+test('Kling 4.0 et Wan 3.0 (fal) : point d’accès texte ou image, entrée, prix par résolution', async () => {
+  const { endpointFor } = await import('../src/inputs.js')
+  const F = 'https://v3b.fal.media/files/a.png'
+  const k = m('kling-4')
+  const base = { plans: [{ text: 'une vendeuse rit au marché', dur: 10 }], secs: 10, resolution: '1080p', ratio: '21:9' }
+  // Sans image : texte vers vidéo, avec le format choisi ; avec image : image vers vidéo, le format suit l'image
+  assert.equal(endpointFor(k, base), 'kling/v4/text-to-video')
+  assert.deepEqual(buildInput('video', k, base), { prompt: 'une vendeuse rit au marché', duration: 10, resolution: '1080p', aspect_ratio: '21:9' })
+  assert.equal(endpointFor(k, { ...base, startImageUrl: F }), 'kling/v4/image-to-video')
+  const withImage = buildInput('video', k, { ...base, startImageUrl: F, endImageUrl: F })
+  assert.equal(withImage.start_image_url, F)
+  assert.equal(withImage.end_image_url, F)
+  assert.equal(withImage.aspect_ratio, undefined)
+  // Plusieurs plans : multi_prompt, sans duration (la somme des plans)
+  const multi = buildInput('video', k, { ...base, plans: [{ text: 'plan un', dur: 5 }, { text: 'plan deux', dur: 8 }], secs: 13 })
+  assert.deepEqual(multi.multi_prompt, [{ prompt: 'plan un', duration: 5 }, { prompt: 'plan deux', duration: 8 }])
+  assert.equal(multi.duration, undefined)
+  assert.ok(priceJob({ kind: 'video', modelId: 'kling-4', plans: [{ text: 'a', dur: 5 }, { text: 'b', dur: 8 }], secs: 13, resolution: '720p', ratio: '16:9' }).ok)
+  assert.ok(videoCost(k, 10, '1080p') > videoCost(k, 10, '720p'))
+
+  const w = m('wan-3')
+  const wan = { plans: [{ text: 'pluie sur Ouaga', dur: 20 }], secs: 20, resolution: '720p', ratio: 'auto', sound: false }
+  assert.equal(endpointFor(w, wan), 'alibaba/wan-3.0/text-to-video')
+  assert.deepEqual(buildInput('video', w, wan), { prompt: 'pluie sur Ouaga', duration: 20, resolution: '720p', aspect_ratio: 'adaptive', audio: false })
+  assert.equal(buildInput('video', w, { ...wan, endImageUrl: F }).end_image_url, undefined) // la fin exige un départ
+  assert.equal(endpointFor(w, { ...wan, startImageUrl: F }), 'alibaba/wan-3.0/image-to-video')
+  assert.ok(priceJob({ kind: 'video', modelId: 'wan-3', ...wan }).ok)
+  assert.equal(priceJob({ kind: 'video', modelId: 'wan-3', ...wan, secs: 31 }).error, 'invalid_duration')
+  assert.ok(videoCost(w, 10, '480p') < videoCost(m('veo-3-1-lite'), 8, '720p') * 2) // le moins cher au catalogue
+})

@@ -315,7 +315,7 @@ app.post('/jobs', async (c) => {
 
   let sub
   const provider = onRunware(price.model) ? 'runware' : 'fal'
-  const endpoint = endpointFor(price.model)
+  const endpoint = endpointFor(price.model, req)
   const origin = new URL(c.req.url).origin
   try {
     const withUser = { ...req, count: price.count, endUserId: accountId(c) }
