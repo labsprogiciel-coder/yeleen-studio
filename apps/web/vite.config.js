@@ -3,7 +3,9 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   if (mode === 'production') checkAuthKey(loadEnv(mode, process.cwd(), 'VITE_'))
-  return { plugins: [react()] }
+  // Version affichée dans Sentry : VITE_SENTRY_RELEASE, sinon le commit de la construction Git de Cloudflare.
+  const release = process.env.VITE_SENTRY_RELEASE ?? process.env.WORKERS_CI_COMMIT_SHA ?? ''
+  return { plugins: [react()], define: { 'import.meta.env.VITE_SENTRY_RELEASE': JSON.stringify(release) } }
 })
 
 /**

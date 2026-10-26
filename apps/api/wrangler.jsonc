@@ -4,8 +4,9 @@
   // Ce fichier est en .jsonc comme celui de la racine (le site) : wrangler 4 prend le fichier .jsonc le plus proche, et un
   // wrangler.toml ici serait ignoré au profit de celui de la racine, qui publierait le site à la place de l'API.
   "name": "yeleen-studio-backend",
-  "main": "src/index.js",
+  "main": "src/worker.js", // l'API (src/index.js) et le Durable Object, enveloppés par Sentry
   "compatibility_date": "2024-10-01",
+  "compatibility_flags": ["nodejs_compat"], // modules node: (AsyncLocalStorage, events…) dont Sentry a besoin
 
   // Valeurs de production. En local, `.dev.vars` les remplace (ENV=dev offre des jetons de test).
   // ALLOWED_ORIGINS (origines du site, séparées par des virgules) est écrit ici : la construction Git de Cloudflare lance un simple
@@ -16,6 +17,7 @@
   // FAL_KEY est un secret : `wrangler secret put FAL_KEY` ou le tableau de bord, jamais ici.
   // « Améliorer » (texte réécrit par fal, openrouter/router) : MAX_ENHANCE_PER_DAY (30 par défaut, par compte) et ENHANCE_MODEL
   // (google/gemini-2.5-flash par défaut), à régler dans le tableau de bord si besoin ; la clé est FAL_KEY.
+  // Sentry : secret SENTRY_DSN (sans lui, rien n'est envoyé), variable SENTRY_RELEASE facultative (version affichée dans Sentry).
   // Recharges (paygate) : PAYGATE_URL (variable), PAYGATE_KEY et PAYGATE_WEBHOOK_SECRET (secrets), TOPUP_COUNTRIES (« BF » par défaut).
   "vars": { "ENV": "production", "ALLOWED_ORIGINS": "https://yeleen-studio.labsprogiciel.workers.dev" },
   "keep_vars": true,

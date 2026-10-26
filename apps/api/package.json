@@ -13,6 +13,7 @@
     "db:migrate": "wrangler d1 migrations apply DB --remote -c wrangler.jsonc"
   },
   "dependencies": {
+    "@sentry/cloudflare": "^11.9.0",
     "@studio/catalog": "workspace:*",
     "hono": "^4.6.0"
   },

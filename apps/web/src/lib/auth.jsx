@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ClerkProvider, SignIn, SignUp, UserButton, useAuth } from '@clerk/clerk-react'
 import { setTokenGetter } from './api.js'
+import { setSentryUser } from './sentry.js'
 
 /**
  * Connexion avec Clerk. Sans `VITE_CLERK_PUBLISHABLE_KEY` (développement local), il n'y a pas de garde : l'API locale
@@ -36,6 +37,7 @@ function Bridge({ children }) {
     if (!isLoaded) return
     if (last.current && last.current !== userId) { wipeLocal(); location.replace('/'); return }
     last.current = userId ?? null
+    setSentryUser(userId)
   }, [isLoaded, userId])
   useEffect(() => {
     setTokenGetter(isSignedIn ? () => getToken() : null)
