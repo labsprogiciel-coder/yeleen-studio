@@ -178,6 +178,33 @@ export const VIDEO_MODELS = [
     },
   },
   {
+    id: 'flux-3-max',
+    input: 'both',
+    endpoint: 'blackforestlabs/flux-3-max/image-to-video',
+    textEndpoint: 'blackforestlabs/flux-3-max/text-to-video',
+    name: 'Flux 3 Max',
+    tagline: 'Très fidèle au prompt, rendu soigné, son natif',
+    badge: 'NOUVEAU',
+    tags: ['Fidèle au prompt', 'Jusqu’à 20 s', 'Audio natif', 'Image de fin'],
+    // fal : 0,17 $/s en 720p, 0,29 $/s en 1080p. fal fait 75 % de remise jusqu'au 7 novembre 2026 ; on compte le tarif normal
+    // pour ne pas vendre à perte ensuite. Schéma lu : image_url, end_image_url, duration 5 à 20 s, resolution 720p ou 1080p,
+    // aspect_ratio (auto : 16:9 sans image, sinon le format de l'image), generate_audio.
+    price: { per: 's', byRes: { '720p': 0.17, '1080p': 0.29 } },
+    verified: true,
+    caps: {
+      duration: { min: 5, max: 20, integer: true },
+      resolutions: ['720p', '1080p'],
+      ratios: ['auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+      audio: 'toggle', // generate_audio, même prix
+      startFrame: 'optional',
+      endFrame: true, // seulement avec une image de départ
+      audioRef: false,
+      elements: false,
+      multiShot: false,
+      cameraMotion: false,
+    },
+  },
+  {
     id: 'h3-max',
     input: 'both',
     endpoint: 'minimax/h3-max/image-to-video',

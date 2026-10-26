@@ -137,6 +137,17 @@ function videoInput(model, req) {
       audio: sound,
     })
   }
+  if (model.id === 'flux-3-max') {
+    return clean({
+      prompt: text,
+      image_url: req.startImageUrl,
+      end_image_url: req.startImageUrl ? req.endImageUrl : undefined, // la fin exige un départ
+      duration: Math.round(secs),
+      resolution: res,
+      aspect_ratio: req.ratio || 'auto',
+      generate_audio: sound,
+    })
+  }
   if (model.id === 'ltx-2-3-a2v') {
     return clean({ audio_url: req.audioUrl, image_url: req.startImageUrl, prompt: text || undefined, aspect_ratio: req.ratio })
   }

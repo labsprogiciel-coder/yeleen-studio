@@ -219,3 +219,22 @@ test('Kling 4.0 et Wan 3.0 (fal) : point d’accès texte ou image, entrée, pri
   assert.equal(priceJob({ kind: 'video', modelId: 'wan-3', ...wan, secs: 31 }).error, 'invalid_duration')
   assert.ok(videoCost(w, 10, '480p') < videoCost(m('veo-3-1-lite'), 8, '720p') * 2) // le moins cher au catalogue
 })
+
+test('Flux 3 Max (fal) : point d’accès texte ou image, entrée, prix au tarif normal', async () => {
+  const { endpointFor } = await import('../src/inputs.js')
+  const F = 'https://v3b.fal.media/files/a.png'
+  const f = m('flux-3-max')
+  const base = { plans: [{ text: 'un griot chante au crépuscule', dur: 8 }], secs: 8, resolution: '1080p', ratio: '16:9', sound: false }
+  assert.equal(endpointFor(f, base), 'blackforestlabs/flux-3-max/text-to-video')
+  assert.deepEqual(buildInput('video', f, base), { prompt: 'un griot chante au crépuscule', duration: 8, resolution: '1080p', aspect_ratio: '16:9', generate_audio: false })
+  assert.equal(buildInput('video', f, { ...base, endImageUrl: F }).end_image_url, undefined) // la fin exige un départ
+  assert.equal(endpointFor(f, { ...base, startImageUrl: F }), 'blackforestlabs/flux-3-max/image-to-video')
+  const withImage = buildInput('video', f, { ...base, startImageUrl: F, endImageUrl: F, ratio: 'auto' })
+  assert.equal(withImage.image_url, F)
+  assert.equal(withImage.end_image_url, F)
+  assert.equal(withImage.aspect_ratio, 'auto')
+  assert.ok(priceJob({ kind: 'video', modelId: 'flux-3-max', ...base }).ok)
+  assert.equal(priceJob({ kind: 'video', modelId: 'flux-3-max', ...base, secs: 4 }).error, 'invalid_duration')
+  assert.equal(priceJob({ kind: 'video', modelId: 'flux-3-max', ...base, secs: 21 }).error, 'invalid_duration')
+  assert.deepEqual(f.price.byRes, { '720p': 0.17, '1080p': 0.29 }) // tarif normal, pas la remise temporaire
+})
