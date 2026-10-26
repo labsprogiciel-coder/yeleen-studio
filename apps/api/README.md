@@ -13,7 +13,8 @@ Cloudflare Worker (Hono). Point d'entrée unique pour tout ce qui coûte de l'ar
 - `src/mirror.js` : copie dans D1 du grand livre des jetons (`ledger`), des recharges (`topups`), des générations (`jobs`) et des fichiers générés (`assets`), idempotente.
 - `src/library.js` : lectures de D1 pour Ma bibliothèque, les favoris et la Bibliothèque Yeleen (`catalog_items`).
 - `src/account-do.js` : Durable Object, un compte = portefeuille + générations + recharges.
-- `src/index.js` : routes `GET /wallet`, `POST /jobs`, `GET /jobs/:id`, `POST /jobs/:id/cancel`, `GET /topups/options`, `GET|POST /topups`, `GET /topups/:reference`, `POST /webhooks/payments`, `GET /ledger`, `GET|POST /assets`, `DELETE /assets/:id`, `GET|PUT|DELETE /favorites`, `GET /catalog` (publique). À écrire : `/webhooks/fal`.
+- `src/index.js` : routes `GET /wallet`, `POST /jobs`, `GET /jobs/:id`, `POST /jobs/:id/cancel`, `GET /topups/options`, `GET|POST /topups`, `GET /topups/:reference`, `POST /webhooks/payments`, `POST /webhooks/fal`, `POST /enhance`, `GET /ledger`, `GET|POST /assets`, `DELETE /assets/:id`, `GET|PUT|DELETE /favorites`, `GET /catalog` (publique).
+- `src/jobs.js` : suivi d'une génération (état chez fal ou Runware, copie dans R2, remboursement d'un échec), partagé par `GET /jobs/:id`, `/webhooks/fal` et le réveil du compte.
 - `wrangler.jsonc` : liaisons (D1, R2, Queues en commentaire jusqu'à création des ressources).
 
 ## Générations réelles
@@ -24,7 +25,12 @@ Seedance 2.5 (texte, image de départ et de fin, ou références d'images, de vi
 2. `pnpm dev:api` (http://localhost:8787), puis `pnpm dev`. L'application active le mode réel quand `VITE_API_URL` est défini (`apps/web/.env.development`).
 3. En développement, un compte neuf reçoit 240 jetons.
 
-Chaque génération réelle est facturée par fal. `MAX_JOB_COST` (150 jetons par défaut) refuse une demande unique trop chère tant qu'il n'y a pas de plafond par compte. Le suivi se fait par interrogation (toutes les 1,5 s).
+Chaque génération réelle est facturée par fal. `MAX_JOB_COST` (150 jetons par défaut) refuse une demande unique trop chère tant qu'il n'y a pas de plafond par compte. Une génération avance de trois façons, toutes par `advanceJob` (src/jobs.js) :
+- l'interface interroge `GET /jobs/:id` (toutes les 1,5 s) tant que la page est ouverte ;
+- fal appelle `POST /webhooks/fal` à la fin, si le secret `WEBHOOK_SECRET` est réglé : l'adresse porte le compte, la génération et un jeton HMAC ; le corps n'est pas lu, l'état et le résultat sont relus chez fal ;
+- le Durable Object du compte se réveille toutes les minutes (alarme) tant qu'il a une génération active, pour fal comme pour Runware.
+
+Ainsi une génération se termine, est copiée dans R2 ou remboursée même si l'utilisateur a fermé la page. Le remboursement est idempotent, et une seule copie dans R2 se fait à la fois.
 
 ## Recharges Mobile Money (paygate)
 

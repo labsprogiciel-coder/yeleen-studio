@@ -1,3 +1,4 @@
+import { advanceJob, isActive } from './jobs.js'
 import { assetItems, jobItem, ledgerItem, topupItem, walletHistory, write } from './mirror.js'
 import { applyPayment, isOpen } from './topups.js'
 import { credit, debit, emptyWallet, refund } from './wallet.js'
@@ -7,6 +8,7 @@ const TOPUP_INDEX = 200 // recharges gardées dans l'historique du compte
 const OPEN_WINDOW = 20 * 60_000 // une recharge ouverte depuis plus longtemps ne compte plus dans la limite
 const OUTBOX_WARN = 5000 // au-delà, D1 est en panne depuis longtemps : on le signale (rien n'est jeté)
 const ACCOUNT_ID = /^[\w-]{3,100}$/
+const WAKE_EVERY = 60_000 // tant qu'une génération est active, le compte se réveille pour la faire avancer (voir alarm)
 
 /**
  * Durable Object : un compte = un portefeuille + ses générations + ses recharges. Les requêtes d'un même compte passent l'une
@@ -15,6 +17,9 @@ const ACCOUNT_ID = /^[\w-]{3,100}$/
  * Chaque mouvement de jetons et chaque recharge est aussi copié dans D1 (voir mirror.js) : d'abord dans une file (`outbox`) gardée ici,
  * puis écrit dans D1. Si D1 ne répond pas, la file attend la requête suivante ; la réponse au client n'en dépend jamais.
  * Le Durable Object ne connaît pas son propre nom : le Worker l'envoie dans l'en-tête `x-account`.
+ *
+ * Tant qu'une génération est active, une alarme réveille le compte toutes les minutes pour la faire avancer (voir jobs.js) :
+ * elle se termine, est copiée dans R2 ou remboursée même si personne n'interroge l'API (page fermée, webhook perdu, Runware).
  */
 export class Account {
   constructor(state, env) {
@@ -95,8 +100,33 @@ export class Account {
     const map = (await this.state.storage.get('active')) ?? {}
     for (const [id, at] of Object.entries(map)) if (now - at > 3 * 3600_000) delete map[id]
     if (active) map[jobId] = map[jobId] ?? now
-    else delete map[jobId]
+    else if (jobId) delete map[jobId]
     await this.state.storage.put('active', map)
+    return Object.keys(map)
+  }
+
+  /** Programme le prochain réveil, s'il n'y en a pas déjà un (le runtime de test n'a pas d'alarmes). */
+  async wake() {
+    const storage = this.state.storage
+    if (!storage.setAlarm || (await storage.getAlarm())) return
+    await storage.setAlarm(Date.now() + WAKE_EVERY)
+  }
+
+  /** Réveil : fait avancer chaque génération active, puis se reprogramme tant qu'il en reste. */
+  async alarm() {
+    const account = this.accountId ?? (this.accountId = (await this.state.storage.get('account')) ?? null)
+    const acct = async (path, body) => (await this.fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))).json()
+    for (const id of await this.track(null, false)) {
+      const job = await this.state.storage.get(`job:${id}`)
+      // Réservée mais pas encore envoyée, ou d'avant ce réveil (sans `origin` pour ses adresses /files) : l'interface s'en charge.
+      if (!account || !job || !isActive(job) || (!job.origin && this.env.FILES)) continue
+      try {
+        await advanceJob({ env: this.env, acct, accountId: account, origin: job.origin, job })
+      } catch (e) {
+        console.error('réveil du compte', job.provider ?? 'fal', e.message) // erreur passagère : au prochain réveil
+      }
+    }
+    if ((await this.track(null, false)).length) await this.wake()
   }
 
   async fetch(request) {
@@ -113,7 +143,8 @@ export class Account {
     if (pathname === '/job/put') {
       const job = await request.json()
       await this.state.storage.put(`job:${job.id}`, job)
-      await this.track(job.id, job.status === 'IN_QUEUE' || job.status === 'IN_PROGRESS') // une génération terminée libère sa place
+      await this.track(job.id, isActive(job)) // une génération terminée libère sa place
+      if (isActive(job)) await this.wake()
       if (!job.storingAt) await this.record(jobItem(job), ...assetItems(job)) // l'étape « enregistrement en cours » n'est pas copiée
       return Response.json({ ok: true })
     }
