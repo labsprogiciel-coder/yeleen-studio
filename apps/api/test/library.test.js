@@ -138,18 +138,18 @@ test('Bibliothèque Yeleen : publique, publiés seulement, dans l’ordre, au fo
 test('Vidéos à refaire : publiques, publiées seulement, dans l’ordre, fichiers servis par /files/templates/', async () => {
   const t = setup({ vars: { ENV: 'production', CLERK_ISSUER: 'https://clerk.example' } })
   try {
-    const ins = t.db.raw.prepare(`INSERT INTO templates (id, name, category, video_key, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
-    ins.run('maquis', 'Pub de maquis', 'pub', 'templates/maquis/video.mp4', 'kling-4', '[{"text":"Un maquis le soir","dur":5},{"text":"Gros plan sur le plat","dur":5}]', '1080p', '9:16', 1, 'Une photo de votre plat', 1, 1)
-    ins.run('fete', 'Tabaski', 'fete', 'templates/fete/video.mp4', 'wan-3', '[{"text":"Une famille réunie","dur":8}]', '720p', 'auto', 0, null, 0, 1)
-    ins.run('brouillon', 'Pas prêt', 'pub', 'templates/b/video.mp4', 'wan-3', '[{"text":"x","dur":5}]', null, null, 1, null, 2, 0)
-    ins.run('casse', 'Plans illisibles', 'pub', 'templates/c/video.mp4', 'wan-3', 'pas du json', null, null, 1, null, 3, 1)
+    const ins = t.db.raw.prepare(`INSERT INTO templates (id, name, blurb, category, video_key, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+    ins.run('maquis', 'Pub de maquis', 'Le soir au maquis, puis le plat en gros plan', 'pub', 'templates/maquis/video.mp4', 'kling-4', '[{"text":"Un maquis le soir","dur":5},{"text":"Gros plan sur le plat","dur":5}]', '1080p', '9:16', 1, 'Une photo de votre plat', 1, 1)
+    ins.run('fete', 'Tabaski', null, 'fete', 'templates/fete/video.mp4', 'wan-3', '[{"text":"Une famille réunie","dur":8}]', '720p', 'auto', 0, null, 0, 1)
+    ins.run('brouillon', 'Pas prêt', null, 'pub', 'templates/b/video.mp4', 'wan-3', '[{"text":"x","dur":5}]', null, null, 1, null, 2, 0)
+    ins.run('casse', 'Plans illisibles', null, 'pub', 'templates/c/video.mp4', 'wan-3', 'pas du json', null, null, 1, null, 3, 1)
     const res = await t.json('/templates')
     assert.equal(res.status, 200)
     assert.match(res.headers.get('cache-control'), /max-age=300/)
     assert.deepEqual(res.body.templates.map((x) => x.id), ['fete', 'maquis'])
     assert.deepEqual(res.body.templates[1], {
-      id: 'maquis', name: 'Pub de maquis', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4',
+      id: 'maquis', name: 'Pub de maquis', blurb: 'Le soir au maquis, puis le plat en gros plan', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4',
       modelId: 'kling-4', plans: [{ text: 'Un maquis le soir', dur: 5 }, { text: 'Gros plan sur le plat', dur: 5 }], resolution: '1080p', ratio: '9:16', sound: true, photo: 'Une photo de votre plat',
     })
 

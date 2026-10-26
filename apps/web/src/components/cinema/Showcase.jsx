@@ -9,7 +9,7 @@ import useTabKeys from '../../lib/useTabKeys.js'
 import { inProject, useProjects } from '../../lib/projects.js'
 import { RECIPES, recipeById, recipeCost } from '@studio/catalog/recipes'
 import { THUMBS, TOURS, toolById } from './tools.js'
-import VideoTemplates, { TemplateVideoCard } from './VideoTemplates.jsx'
+import VideoTemplates, { VideoGrid } from './VideoTemplates.jsx'
 
 const VIEWS = [{ id: 'creations', icon: 'sparkle', label: 'Créations' }, { id: 'templates', icon: 'layers', label: 'Modèles' }]
 const KINDS = ['video', 'image', 'audio'] // ordre d'affichage des créations en cours
@@ -115,7 +115,7 @@ export default function Showcase({ view, onView, tool, onPickTemplate, templates
                   <h2 id="cx-vt-new-h">Vidéos à refaire</h2>
                   <button type="button" className="cx-all" onClick={() => onView('templates')}>Tout voir<Icon name="chevR" size={14} /></button>
                 </div>
-                <ul className="cx-vts">{templates.slice(0, 4).map((t) => <TemplateVideoCard key={t.id} t={t} onPick={onRecreate} />)}</ul>
+                <VideoGrid templates={templates.slice(0, 4)} onPick={onRecreate} />
               </section>
             )}
           </>

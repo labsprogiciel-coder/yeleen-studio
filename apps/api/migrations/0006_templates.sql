@@ -3,6 +3,7 @@
 CREATE TABLE IF NOT EXISTS templates (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
+  blurb       TEXT,                         -- une phrase : ce que la vidéo montre, affichée au survol
   category    TEXT NOT NULL,                -- regroupement à l'écran (pub, produit, fête…)
   video_key   TEXT NOT NULL,                -- clé R2 de la vidéo d'exemple (aperçu léger en H.264, sans le son)
   model_id    TEXT NOT NULL,                -- modèle du générateur de vidéos (catalogue)
