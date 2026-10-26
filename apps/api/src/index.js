@@ -1,8 +1,9 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { AuthError, verifyClerkToken } from './auth.js'
-import { FalError, falClient } from './fal.js'
-import { buildInput, endpointFor, outputsOf, runwareInput } from './inputs.js'
+import { falClient } from './fal.js'
+import { buildInput, endpointFor, runwareInput } from './inputs.js'
+import { advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, removeFavorite, SCOPES } from './library.js'
 import { mediaInfo } from './media.js'
@@ -12,7 +13,7 @@ import { isBlocked } from './moderation.js'
 import { PaygateError, paygateClient, verifySignature } from './paygate.js'
 import { priceJob } from './pricing.js'
 import { runwareClient } from './runware.js'
-import { serveFile, storeOutputs, uploadKey } from './storage.js'
+import { serveFile, uploadKey } from './storage.js'
 import { newReference, topupView } from './topups.js'
 import { ensureUser, getUser, markWelcomed } from './users.js'
 
@@ -22,7 +23,8 @@ export { Account } from './account-do.js'
  * API du studio. Le navigateur ne parle jamais à fal : tout passe ici (prix serveur, débit, appel, remboursement).
  * Chaque route (hors /health, /files et les webhooks) exige un jeton de session Clerk ; le compte est le `sub` du jeton. En local
  * (ENV=dev) sans CLERK_ISSUER, un compte `demo` unique sert à développer sans connexion. Les fichiers restent chez fal
- * (adresses temporaires) tant que R2 n'est pas branché ; le suivi se fait par interrogation, le webhook viendra ensuite.
+ * (adresses temporaires) tant que R2 n'est pas branché. Une génération avance par l'interrogation de l'interface, par le webhook
+ * de fal (si WEBHOOK_SECRET est réglé) et par le réveil du Durable Object du compte : elle se termine même page fermée (voir jobs.js).
  * Quand le bucket R2 (`FILES`) existe, chaque sortie y est copiée à la fin de la génération et servie par `/files/…`.
  * Les jetons s'achètent en FCFA par Mobile Money via paygate (`/topups`) ; paygate confirme par `/webhooks/payments` (signé).
  */
@@ -312,9 +314,11 @@ app.post('/jobs', async (c) => {
   let sub
   const provider = onRunware(price.model) ? 'runware' : 'fal'
   const endpoint = endpointFor(price.model)
+  const origin = new URL(c.req.url).origin
   try {
     const withUser = { ...req, count: price.count, endUserId: accountId(c) }
-    sub = provider === 'runware' ? await runware(c).submit(runwareInput(price.model, withUser)) : await fal(c).submit(endpoint, buildInput(req.kind, price.model, withUser))
+    sub = provider === 'runware' ? await runware(c).submit(runwareInput(price.model, withUser))
+      : await fal(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { webhookUrl: await falWebhook(c, origin, id) })
   } catch (e) {
     const back = await call(c, '/refund', { jobId: id })
     await call(c, '/job/release', { jobId: id })
@@ -325,66 +329,22 @@ app.post('/jobs', async (c) => {
 
   // Runware n'a pas de file visible ni d'annulation : la génération est « en cours » dès l'envoi (et une annulation n'est pas remboursée).
   const status = provider === 'runware' ? 'IN_PROGRESS' : 'IN_QUEUE'
-  const job = { id, kind: req.kind, modelId: price.model.id, provider, endpoint, cost: price.cost, count: price.count, status, createdAt: Date.now(), ...(provider === 'runware' ? { startedAt: Date.now() } : {}), ...sub, ...requestOf(req, texts) }
+  const job = { id, kind: req.kind, modelId: price.model.id, provider, endpoint, cost: price.cost, count: price.count, status, origin, createdAt: Date.now(), ...(provider === 'runware' ? { startedAt: Date.now() } : {}), ...sub, ...requestOf(req, texts) }
   await call(c, '/job/put', job)
   return c.json({ jobId: id, status: job.status, cost: price.cost, balance: debit.balance }, 202)
 })
 
 const view = (job, extra = {}) => ({ jobId: job.id, status: job.status, outputs: job.outputs, failure: job.failure, refund: job.refund ?? 0, ...extra })
+const ended = (job) => !isActive(job)
 
-/**
- * État d'une génération chez son fournisseur, au même format pour fal et Runware :
- * { status: IN_QUEUE | IN_PROGRESS | COMPLETED | FAILED, queuePosition?, logs?, result?, failure? }.
- */
-async function providerStatus(c, job) {
-  if (job.provider === 'runware') {
-    const st = await runware(c).poll(job.taskUUID)
-    if (st.status === 'FAILED') {
-      console.error('résultat runware', st.error.message)
-      return { status: 'FAILED', failure: st.error.isContentPolicy ? 'moderation' : 'provider' }
-    }
-    return { status: st.status, result: st.result, logs: typeof st.progress === 'number' ? [`${st.progress} %`] : [] }
-  }
-  const client = fal(c)
-  const st = await client.status(job.statusUrl)
-  if (st.status !== 'COMPLETED') return st
-  try {
-    return { status: 'COMPLETED', result: await client.result(job.responseUrl) }
-  } catch (e) {
-    console.error('résultat fal', e.message)
-    return { status: 'FAILED', failure: e instanceof FalError && e.isContentPolicy ? 'moderation' : 'provider' }
-  }
-}
-
-// Suivi : on interroge le fournisseur tant que la génération est active ; un échec rembourse (une seule fois).
+// Suivi par l'interface : on fait avancer la génération tant qu'elle est active (voir jobs.js ; le webhook et le réveil du compte aussi).
 app.get('/jobs/:id', async (c) => {
   const job = await account(c).fetch(`https://account/job/get?id=${c.req.param('id')}`).then((r) => r.json())
   if (!job) return c.json({ error: 'not_found' }, 404)
-  if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELED') return c.json(view(job, { balance: (await call(c, '/balance')).balance }))
-
-  const fail = async (failure) => {
-    const back = await call(c, '/refund', { jobId: job.id })
-    const next = { ...job, status: 'FAILED', failure, refund: back.refunded ?? job.cost, finishedAt: Date.now() }
-    await call(c, '/job/put', next)
-    return c.json(view(next, { balance: back.balance }))
-  }
+  if (ended(job)) return c.json(view(job, { balance: (await call(c, '/balance')).balance }))
   try {
-    const st = await providerStatus(c, job)
-    if (st.status === 'FAILED') return fail(st.failure)
-    if (st.status !== 'COMPLETED') {
-      const next = { ...job, status: st.status, ...(st.status === 'IN_PROGRESS' && !job.startedAt ? { startedAt: Date.now() } : {}) }
-      if (next.status !== job.status) await call(c, '/job/put', next)
-      return c.json(view(next, { queuePosition: st.queuePosition ?? 0, logs: (st.logs ?? []).slice(-3), balance: (await call(c, '/balance')).balance }))
-    }
-    const found = outputsOf(job.kind, st.result)
-    if (!found.length) return fail('provider')
-    // Copie dans R2 : un seul suivi à la fois s'en charge ; les autres voient « enregistrement » et réessaient.
-    if (job.storingAt && Date.now() - job.storingAt < 60_000) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { logs: ['Enregistrement du résultat'], balance: (await call(c, '/balance')).balance }))
-    if (c.env.FILES) await call(c, '/job/put', { ...job, status: 'IN_PROGRESS', storingAt: Date.now() })
-    const outputs = await storeOutputs({ bucket: c.env.FILES, origin: new URL(c.req.url).origin, accountId: accountId(c), jobId: job.id, outputs: found })
-    const next = { ...job, status: 'COMPLETED', outputs, finishedAt: Date.now(), storingAt: undefined }
-    await call(c, '/job/put', next)
-    return c.json(view(next, { balance: (await call(c, '/balance')).balance }))
+    const { job: next, balance, ...extra } = await advanceJob({ env: c.env, acct: (path, body) => call(c, path, body), accountId: accountId(c), origin: new URL(c.req.url).origin, job })
+    return c.json(view(next, { ...extra, balance: balance ?? (await call(c, '/balance')).balance }))
   } catch (e) {
     console.error(`suivi ${job.provider ?? 'fal'}`, e.message) // erreur passagère : l'interface réessaiera
     return c.json({ error: 'upstream' }, 502)
@@ -407,8 +367,32 @@ app.post('/jobs/:id/cancel', async (c) => {
   return c.json(view(next, { balance: back.balance }))
 })
 
-// Retours de fal par webhook : à écrire pour la production (signature, copie dans R2) ; en local le suivi par interrogation suffit.
-app.post('/webhooks/fal', (c) => c.json({ error: 'not_implemented' }, 501))
+/** Adresse du webhook fal d'une génération, signée pour ce compte et cette génération ; sans WEBHOOK_SECRET, pas de webhook. */
+async function falWebhook(c, origin, jobId) {
+  if (!c.env.WEBHOOK_SECRET) return undefined
+  const q = new URLSearchParams({ a: accountId(c), j: jobId, t: await webhookToken(c.env.WEBHOOK_SECRET, accountId(c), jobId) })
+  return `${origin}/webhooks/fal?${q}`
+}
+
+/**
+ * Webhook de fal : la génération est terminée chez fal. Le corps n'est pas lu : on fait avancer la génération comme le suivi, en
+ * relisant l'état et le résultat chez fal avec notre clé ; le jeton de l'adresse prouve que c'est bien notre génération.
+ * La suite (copie dans R2, remboursement) se fait après la réponse ; si elle échoue, le réveil du compte la reprendra.
+ */
+app.post('/webhooks/fal', async (c) => {
+  const { a, j, t } = c.req.query()
+  if (!c.env.WEBHOOK_SECRET || !a || !j || !sameToken(t, await webhookToken(c.env.WEBHOOK_SECRET, a, j))) return c.json({ error: 'unauthorized' }, 401)
+  const stub = accountStub(c.env, a)
+  const acct = async (path, body) => (await stub.fetch(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) })).json()
+  const job = await stub.fetch(`https://account/job/get?id=${encodeURIComponent(j)}`).then((r) => r.json())
+  if (!job || !isActive(job)) return c.json({ ok: true })
+  const work = advanceJob({ env: c.env, acct, accountId: a, origin: job.origin ?? new URL(c.req.url).origin, job }).catch((e) => console.error('webhook fal', e.message))
+  let ctx = null
+  try { ctx = c.executionCtx } catch { /* tests : pas de contexte d'exécution */ }
+  if (ctx) ctx.waitUntil(work)
+  else await work
+  return c.json({ ok: true })
+})
 
 // ── Recharges Mobile Money (paygate) ──────────────────────────────────────────
 // Le prix vient du catalogue (packs), jamais du navigateur. La recharge est enregistrée dans le compte avant l'appel à paygate,
