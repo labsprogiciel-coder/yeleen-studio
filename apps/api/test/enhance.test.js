@@ -81,3 +81,21 @@ test('entrée : le modèle visé et ses limites sont décrits', () => {
   assert.match(enhanceInput({ text: 'un chat', kind: 'image', modelId: 'flux-3' }).prompt, /Image fixe, modèle Flux 3/)
   assert.ok(v.system_prompt.includes('@'))
 })
+
+test('voix off : script écrit à partir d’une idée, dans la langue choisie', async () => {
+  const t = setup(() => ({ body: { output: 'Script : Envie de beignets chauds ? Chez Awa, au marché central, ils sortent de l’huile chaque matin. Passez nous voir !' } }))
+  try {
+    const res = await t.req({ text: 'beignets chez Awa, marché central, tous les matins', kind: 'voice', language: 'fr' })
+    const out = await res.json()
+    assert.equal(res.status, 200)
+    assert.equal(out.text, 'Envie de beignets chauds ? Chez Awa, au marché central, ils sortent de l’huile chaque matin. Passez nous voir !')
+    assert.match(t.calls[0].body.system_prompt, /voix off/)
+    assert.match(t.calls[0].body.prompt, /20 à 30 secondes, en français/)
+  } finally { t.restore() }
+})
+
+test('voix off : sans langue choisie (détection auto), aucune langue imposée', () => {
+  const i = enhanceInput({ text: 'promo', kind: 'voice', language: 'auto' })
+  assert.doesNotMatch(i.prompt, /, en /)
+  assert.match(i.system_prompt, /n'invente ni prix/)
+})

@@ -159,6 +159,7 @@ export default function AudioPanel({ tool = 'voice-generator', onTool }) {
 
       <Section id="ap-script" title="Texte à lire">
         <PromptBox canClear={Boolean(script)} onClear={() => setScript('')}
+          enhance={{ value: script, onChange: setScript, kind: 'voice', language }}
           foot={has('language') && (
             <Menu items={LANGUAGES} value={language} onChange={setLanguage} label="Langue" menuWidth={220} className="ep-chip">
               <Icon name="globe" size={15} />
@@ -169,7 +170,7 @@ export default function AudioPanel({ tool = 'voice-generator', onTool }) {
             mentions={false}
             value={script}
             onChange={setScript}
-            placeholder="Écrivez le texte exact que la voix off doit lire à voix haute…"
+            placeholder="Écrivez le texte exact que la voix off doit lire, ou une idée (produit, offre, ton) puis touchez l’étincelle pour en faire un script."
             aria-label="Script audio"
             rows={5}
             data-prompt

@@ -248,13 +248,14 @@ async function mediaIssue(c, tool, inputs) {
 
 // Soumission : contrôle du texte et prix serveur → débit → envoi au fournisseur du modèle (fal ou Runware). Si l'envoi échoue,
 // remboursement immédiat.
-// « Améliorer » (bouton étincelle des zones de texte) : réécrit l'instruction pour le modèle choisi. Gratuit, MAX_ENHANCE_PER_DAY
-// fois par jour et par compte (30 par défaut) ; un échec ne compte pas. Le texte est contrôlé avant et après, comme une génération.
+// « Améliorer » (bouton étincelle des zones de texte) : réécrit l'instruction pour le modèle choisi, ou écrit un script de voix off
+// (kind: 'voice', dans la langue choisie). Gratuit, MAX_ENHANCE_PER_DAY fois par jour et par compte (30 par défaut, partagé) ;
+// un échec ne compte pas. Le texte est contrôlé avant et après, comme une génération.
 app.post('/enhance', async (c) => {
   const req = await c.req.json().catch(() => ({}))
   const text = typeof req.text === 'string' ? req.text.trim() : ''
   if (text.length < MIN_CHARS || text.length > MAX_CHARS) return c.json({ error: 'invalid_text', min: MIN_CHARS, max: MAX_CHARS }, 400)
-  const kind = req.kind === 'image' ? 'image' : 'video'
+  const kind = req.kind === 'image' || req.kind === 'voice' ? req.kind : 'video'
   if (isBlocked(text)) return c.json({ error: 'moderation' }, 422)
   const day = today()
   const quota = await call(c, '/quota/use', { name: 'enhance', day, max: Number(c.env.MAX_ENHANCE_PER_DAY ?? 30) })
@@ -262,7 +263,7 @@ app.post('/enhance', async (c) => {
   const undo = () => call(c, '/quota/use', { name: 'enhance', day, undo: true })
   let out
   try {
-    const r = await fal(c).run(ENHANCE_ENDPOINT, enhanceInput({ text, kind, modelId: req.modelId }, c.env.ENHANCE_MODEL ?? ENHANCE_MODEL))
+    const r = await fal(c).run(ENHANCE_ENDPOINT, enhanceInput({ text, kind, modelId: req.modelId, language: req.language }, c.env.ENHANCE_MODEL ?? ENHANCE_MODEL))
     out = cleanOutput(r.output, text)
   } catch (e) {
     console.error('améliorer', e.message)

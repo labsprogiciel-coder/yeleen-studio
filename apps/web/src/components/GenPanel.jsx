@@ -129,27 +129,30 @@ const ENHANCE_ERRORS = {
 }
 
 /**
- * Bouton étincelle « Améliorer » : réécrit le texte pour le modèle choisi (voir apps/api/src/enhance.js), avec Annuler dans le
- * message de confirmation. `enhance` : { value, onChange, kind: 'video' | 'image', modelId }. Absent sans l'API (moteur simulé).
+ * Bouton étincelle « Améliorer » : réécrit le texte pour le modèle choisi (voir apps/api/src/enhance.js), ou, pour une voix off
+ * (`kind: 'voice'`), écrit le script à partir de l'idée tapée, dans `language`. Annuler dans le message de confirmation.
+ * `enhance` : { value, onChange, kind: 'video' | 'image' | 'voice', modelId?, language? }. Absent sans l'API (moteur simulé).
  */
-function EnhanceButton({ value, onChange, kind, modelId }) {
+function EnhanceButton({ value, onChange, kind, modelId, language }) {
   const [busy, setBusy] = useState(false)
   const toast = useToast()
   if (!apiEnabled) return null
   const short = value.trim().length < 3
+  const voice = kind === 'voice'
+  const label = voice ? 'Écrire le script à partir de cette idée' : 'Améliorer le texte'
   const run = async () => {
     const before = value
     setBusy(true)
     try {
-      const { text } = await api.enhance({ text: before, kind, modelId })
+      const { text } = await api.enhance({ text: before, kind, modelId, language })
       onChange(text)
-      toast('Texte amélioré.', { label: 'Annuler', onClick: () => onChange(before) })
+      toast(voice ? 'Script écrit.' : 'Texte amélioré.', { label: 'Annuler', onClick: () => onChange(before) })
     } catch (e) {
       toast(ENHANCE_ERRORS[e.body?.error]?.(e) ?? 'Amélioration indisponible : réessayez dans un instant.')
     } finally { setBusy(false) }
   }
   return (
-    <button type="button" className="ep-ai" aria-label="Améliorer le texte" title={short ? 'Écrivez d’abord quelques mots' : 'Améliorer le texte'} aria-busy={busy} disabled={busy || short} onClick={run}>
+    <button type="button" className="ep-ai" aria-label={label} title={short ? 'Écrivez d’abord quelques mots' : label} aria-busy={busy} disabled={busy || short} onClick={run}>
       <Icon name="sparkle" size={16} />
     </button>
   )
@@ -157,7 +160,7 @@ function EnhanceButton({ value, onChange, kind, modelId }) {
 
 /**
  * Le cadre de texte de tous les panneaux (celui du Générateur de vidéos) : la zone de saisie, une note éventuelle, puis le pied
- * avec `foot` à gauche (@, puces), le bouton Améliorer si `enhance` est donné ({ value, onChange, kind, modelId }) et Effacer à droite.
+ * avec `foot` à gauche (@, puces), le bouton Améliorer si `enhance` est donné (voir EnhanceButton) et Effacer à droite.
  */
 export function PromptBox({ children, note = null, foot = null, enhance = null, canClear, onClear, clearLabel = 'Effacer le texte', ...rest }) {
   return (
