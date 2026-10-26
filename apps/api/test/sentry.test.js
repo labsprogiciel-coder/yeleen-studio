@@ -14,3 +14,21 @@ test('Sentry : ni paramètres d’adresse (jeton du webhook), ni en-têtes, ni c
   assert.deepEqual(e.request, { url: 'https://api/webhooks/fal' })
   assert.deepEqual(scrub({ message: 'm' }), { message: 'm' })
 })
+
+test('Sentry : une erreur imprévue dans une route arrive à Sentry (Hono ne la relance pas), et la réponse reste un 500', async () => {
+  const { default: worker } = await import('../src/worker.js')
+  const sent = []
+  const transport = () => ({ send: async (envelope) => { sent.push(JSON.stringify(envelope)); return {} }, flush: async () => true })
+  const env = { ENV: 'dev', SENTRY_DSN: 'https://k@o0.ingest.de.sentry.io/1', SENTRY_TRANSPORT: transport }
+  const waits = []
+  const ctx = { waitUntil: (p) => waits.push(p), passThroughOnException() {} }
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    const res = await worker.fetch(new Request('http://api/debug/sentry'), env, ctx)
+    await Promise.all(waits)
+    assert.equal(res.status, 500)
+    assert.equal(await res.text(), 'Internal Server Error')
+  } finally { console.error = quiet }
+  assert.ok(sent.some((e) => e.includes('Essai Sentry')), 'l’erreur doit être envoyée à Sentry')
+})

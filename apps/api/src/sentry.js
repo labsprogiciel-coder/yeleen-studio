@@ -12,6 +12,7 @@ export function sentryOptions(env) {
     sendDefaultPii: false,
     tracesSampleRate: 0,
     beforeSend: scrub,
+    ...(env.SENTRY_TRANSPORT ? { transport: env.SENTRY_TRANSPORT } : {}), // tests seulement : envoi simulé
   }
 }
 
