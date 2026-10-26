@@ -338,6 +338,17 @@ export const IMAGE_MODELS = [
     verified: false,
     caps: { ratios: RATIOS_IMG, resolutions: ['1K', '2K'], resUnits: { '1K': 1, '2K': 4 }, maxImages: 1 },
   },
+  {
+    id: 'krea-3',
+    endpoint: 'krea/v3/text-to-image', // une image par appel ; taille exacte envoyée (voir editModels.js, `dims`)
+    name: 'Krea 3',
+    tagline: 'Rendu photo naturel, facturé à la surface',
+    tags: ['Photoréaliste', 'Facturation au mégapixel'],
+    price: { usd: 0.025, per: 'Mpx' }, // fal : 0,025 $ le mégapixel produit (prix provisoire)
+    verified: false,
+    // Pas de format « Auto » : Krea le choisirait, et le prix (à la surface) ne serait plus connu d'avance.
+    caps: { ratios: RATIOS_IMG.filter((r) => r !== 'Auto'), resolutions: ['1K', '2K'], resUnits: { '1K': 1.05, '2K': 2.1 }, maxImages: 1 },
+  },
 ]
 
 export const AUDIO_MODELS = [

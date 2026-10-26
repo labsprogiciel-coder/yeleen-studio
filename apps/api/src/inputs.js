@@ -4,6 +4,7 @@
  */
 import { splitLines } from '@studio/catalog/workflows'
 import { toolInput } from '@studio/catalog/tools'
+import { dims } from '@studio/catalog/edit-models'
 
 const joinPrompt = (req) => [req.prompt?.trim(), req.styleHint, req.brandStyle].filter(Boolean).join(', ')
 const ratio = (r) => (!r || r === 'Auto' ? 'auto' : r)
@@ -29,6 +30,10 @@ export function buildInput(kind, model, req) {
     const res = req.resolution ?? model.caps.resolutions[0]
     if (model.id === 'flux-3') {
       return { prompt, aspect_ratio: ratio(req.ratio), resolution: res.toLowerCase(), output_format: 'png' }
+    }
+    if (model.id === 'krea-3') { // taille exacte au format choisi : le prix (au mégapixel) est celui calculé à l'envoi
+      const r = model.caps.ratios.includes(req.ratio) ? req.ratio : model.caps.ratios[0]
+      return { prompt, image_size: dims(r, model.caps.resUnits[res]), output_format: 'png' }
     }
     // Nano Banana (Pro et 2) : même schéma
     return { prompt, num_images: Math.min(Math.max(1, req.count ?? 1), model.caps.maxImages), aspect_ratio: ratio(req.ratio), resolution: res, output_format: 'png' }

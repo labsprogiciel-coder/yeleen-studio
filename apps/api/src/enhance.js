@@ -1,10 +1,12 @@
 import { IMAGE_MODELS, VIDEO_MODELS, findModel } from '@studio/catalog'
+import { findEditModel } from '@studio/catalog/edit-models'
 import { findWorkflow } from '@studio/catalog/workflows'
 
 /**
  * « Améliorer » : réécrit l'instruction d'une génération (vidéo ou image) pour le modèle choisi, ou écrit le script d'une voix off
- * à partir d'une idée (`kind: 'voice'`), précise un texte d'un modèle de la page Modèles (`kind: 'template'`), ou découpe une idée en
- * plans pour un modèle vidéo multi-plans (`kind: 'shots'`, mode Auto), par un modèle de texte chez fal
+ * à partir d'une idée (`kind: 'voice'`), précise un texte d'un modèle de la page Modèles (`kind: 'template'`) ou une retouche
+ * d'image (`kind: 'edit'`, outils image), ou découpe une idée en plans pour un modèle vidéo multi-plans (`kind: 'shots'`, mode Auto),
+ * par un modèle de texte chez fal
  * (point d'accès `openrouter/router`, modèle réglable par ENHANCE_MODEL). Gratuit, avec un quota par jour et par compte.
  * Les références « @mot » de l'utilisateur doivent survivre telles quelles : sans elles, la génération perdrait ses images.
  */
@@ -19,8 +21,12 @@ export const tokensOf = (text) => [...new Set(text.match(TOKEN) ?? [])]
 /** Ce que l'on sait du modèle visé, en une ligne pour le modèle de texte. */
 function modelLine(kind, modelId) {
   if (kind === 'image') {
-    const m = modelId && findModel(IMAGE_MODELS, modelId)
+    const m = IMAGE_MODELS.find((x) => x.id === modelId)
     return `Image fixe${m ? `, modèle ${m.name}` : ''}.`
+  }
+  if (kind === 'edit') {
+    const m = findEditModel(modelId)
+    return `Retouche d'une image existante${m ? `, modèle ${m.name}` : ''}.`
   }
   const m = modelId && findModel(VIDEO_MODELS, modelId)
   if (!m) return 'Vidéo courte.'
@@ -107,6 +113,15 @@ export function parseShots(output, original, model) {
   return plans
 }
 
+// Retouche (outils image : éditeur, photo produit, maquettes…) : l'instruction dit ce qui change dans une image fournie, pas une scène.
+const SYSTEM_EDIT = `Tu précises l'instruction de retouche qu'un utilisateur donne à un modèle d'édition d'image, sur une image qu'il fournit.
+Règles :
+- Garde la langue de l'utilisateur (français par défaut) et son intention : ne change ni ce qu'il veut modifier, ni le sujet.
+- Dis clairement ce qui change (décor, lumière, couleurs, matières, cadrage) et ce qui doit rester identique (le sujet, le produit, son texte et ses couleurs).
+- Ne décris pas l'image d'origine que tu ne vois pas ; n'invente ni marque, ni texte à écrire.
+- Recopie à l'identique chaque mot commençant par @.
+- Une seule instruction, 20 à 60 mots, en texte continu : pas de titre, pas de liste, pas de guillemets, pas de commentaire.`
+
 /** Le champ texte d'un workflow que « Améliorer » peut préciser, ou null (inconnu, pas un texte, ou `enhance: false`). */
 export function templateField(workflowId, key) {
   const f = findWorkflow(workflowId)?.inputs.find((x) => x.key === key)
@@ -153,7 +168,7 @@ export function enhanceInput({ text, kind, modelId, language, workflowId, field 
   }
   return {
     model,
-    system_prompt: SYSTEM,
+    system_prompt: kind === 'edit' ? SYSTEM_EDIT : SYSTEM,
     prompt: `${modelLine(kind, modelId)}\nInstruction à réécrire :\n${text}`,
     temperature: 0.7,
     max_tokens: 400,

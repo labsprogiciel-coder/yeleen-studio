@@ -18,6 +18,7 @@ import ModelLogo from '../components/ModelLogo.jsx'
 import '../styles/shell.css'
 import '../styles/image.css'
 import Cauri from '../components/Cauri.jsx'
+import { EnhanceButton } from '../components/GenPanel.jsx'
 
 const g = (i) => gradient(i, 'image')
 const COLLAGE = [
@@ -38,11 +39,12 @@ export default function ImageGen() {
   const hasJobs = jobs.some((j) => j.kind === 'image')
   const [modelId, setModelId] = useState(IMAGE_MODELS[0].id)
   const [styleId, setStyleId] = useState('none')
-  const [ratio, setRatio] = useState('Auto')
+  const [pickedRatio, setRatio] = useState('Auto')
   const [res, setRes] = useState('2K')
   const model = findModel(IMAGE_MODELS, modelId)
   const { caps } = model
   // Les valeurs choisies sont ramenées dans ce que le modèle courant accepte.
+  const ratio = caps.ratios.includes(pickedRatio) ? pickedRatio : caps.ratios[0] // Krea 3 n'a pas « Auto »
   const resolution = caps.resolutions.includes(res) ? res : caps.resolutions.includes('2K') ? '2K' : caps.resolutions[0]
   const n = Math.min(count, caps.maxImages)
   const cost = imageCost(model, resolution, n)
@@ -97,6 +99,7 @@ export default function ImageGen() {
               >
                 <Icon name="mic" size={18} />
               </button>
+              <EnhanceButton value={prompt} onChange={setPrompt} kind="image" modelId={model.id} />
             </div>
             {voice.error && <p className="verr" role="status">{voice.error}</p>}
             {error && <p className="verr" role="alert">{error}</p>}

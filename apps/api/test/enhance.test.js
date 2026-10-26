@@ -162,3 +162,15 @@ test('plans : durées ramenées aux choix et à la durée maximale, références
   assert.equal(parseShots('[{"text": "Un seul plan.", "dur": 5}]', 'x', m), null)
   assert.equal(shotModel('veo-3-1-lite'), null)
 })
+
+test('retouche d’image : l’instruction dit ce qui change et ce qui reste, pour le modèle d’édition choisi', async () => {
+  const t = setup(() => ({ body: { output: 'Remplace le fond par un étal de marché coloré ; garde le flacon, son étiquette et ses couleurs identiques.' } }))
+  try {
+    const res = await t.req({ text: 'fond marché', kind: 'edit', modelId: 'krea-3' })
+    assert.equal(res.status, 200)
+    assert.match(t.calls[0].body.prompt, /Retouche d'une image existante, modèle Krea 3/)
+    assert.match(t.calls[0].body.system_prompt, /ce qui doit rester identique/)
+  } finally { t.restore() }
+  // Un modèle inconnu n'est pas pris pour le premier de la liste
+  assert.equal(enhanceInput({ text: 'un chat', kind: 'image', modelId: 'inconnu' }).prompt.split('\n')[0], 'Image fixe.')
+})

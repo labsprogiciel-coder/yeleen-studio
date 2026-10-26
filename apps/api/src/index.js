@@ -260,7 +260,7 @@ app.post('/enhance', async (c) => {
   const req = await c.req.json().catch(() => ({}))
   const text = typeof req.text === 'string' ? req.text.trim() : ''
   if (text.length < MIN_CHARS || text.length > MAX_CHARS) return c.json({ error: 'invalid_text', min: MIN_CHARS, max: MAX_CHARS }, 400)
-  const kind = ['image', 'voice', 'template', 'shots'].includes(req.kind) ? req.kind : 'video'
+  const kind = ['image', 'edit', 'voice', 'template', 'shots'].includes(req.kind) ? req.kind : 'video'
   const input = enhanceInput({ text, kind, modelId: req.modelId, language: req.language, workflowId: req.workflowId, field: req.field }, c.env.ENHANCE_MODEL ?? ENHANCE_MODEL)
   if (!input) return c.json({ error: 'not_enhanceable' }, 400) // champ de modèle inconnu ou à garder tel quel, modèle vidéo sans plans multiples
   if (isBlocked(text)) return c.json({ error: 'moderation' }, 422)

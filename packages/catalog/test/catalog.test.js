@@ -98,13 +98,46 @@ test('workflows fal : champs, prix et contrôle des entrées', async () => {
 })
 
 test('outils : identifiants uniques, un point d’accès, des choix et un prix pour chacun', async () => {
-  const { TOOLS, toolCost, toolInputIssue } = await import('../src/tools.js')
+  const { TOOLS, toolCost, toolEndpoint, toolInputIssue } = await import('../src/tools.js')
   assert.equal(new Set(TOOLS.map((t) => t.id)).size, TOOLS.length)
   for (const t of TOOLS) {
-    assert.match(t.endpoint, /^[\w-]+\/[\w./-]+$/, t.id)
+    assert.match(toolEndpoint(t, {}), /^[\w-]+\/[\w./-]+$/, t.id)
+    for (const f of t.inputs.filter((x) => x.type === 'model')) for (const o of f.options) assert.match(toolEndpoint(t, { [f.key]: o.id }), /^[\w-]+\/[\w./-]+$/, `${t.id} ${o.id}`)
     assert.ok(['image', 'video', 'audio'].includes(t.output), t.id)
     for (const f of t.inputs.filter((x) => x.type === 'select')) assert.ok(f.options.length > 0, `${t.id}.${f.key}`)
     assert.ok(toolCost(t, {}) >= 0.1, t.id)
     assert.ok(toolInputIssue(t, {}) !== null || t.inputs.every((f) => f.type === 'select' || (f.type === 'text' && !f.required)), `${t.id} : entrées vides acceptées`)
   }
+})
+
+test('outils image au modèle choisi : point d’accès, entrée et prix du modèle choisi', async () => {
+  const { findTool, toolCost, toolEndpoint, toolInput, toolInputIssue } = await import('../src/tools.js')
+  const { EDIT_MODELS, dims } = await import('../src/editModels.js')
+  const photo = findTool('product-photo')
+  const img = 'https://v3b.fal.media/files/p.png'
+  // Krea 3 par défaut : taille exacte au format choisi, prix à la surface (sortie + référence)
+  assert.equal(toolEndpoint(photo, {}), 'krea/v3/edit')
+  const krea = toolInput(photo, { image: img, ratio: '4:5' })
+  assert.deepEqual(krea.image_urls, [img])
+  assert.deepEqual(krea.image_size, dims('4:5', 2.1))
+  assert.ok(krea.image_size.width % 16 === 0 && krea.image_size.width * krea.image_size.height <= 2.1e6)
+  assert.ok(toolCost(photo, { image: img, ratio: '4:5' }) > toolCost(photo, { ratio: '4:5' })) // la référence compte
+  // Nano Banana Pro au choix : son point d'accès et son schéma
+  const nb = { image: img, model: 'nano-banana-pro', ratio: '1:1' }
+  assert.equal(toolEndpoint(photo, nb), 'fal-ai/nano-banana-pro/edit')
+  assert.deepEqual({ ...toolInput(photo, nb), prompt: '' }, { prompt: '', image_urls: [img], aspect_ratio: '1:1', resolution: '2K', num_images: 1, output_format: 'png' })
+  assert.equal(toolInputIssue(photo, { image: img, model: 'inconnu' }), 'invalid_model')
+  // Variations : seulement des modèles à plusieurs images par appel
+  const vari = findTool('variations').inputs.find((f) => f.key === 'model').options.map((o) => o.id)
+  assert.ok(!vari.includes('krea-3') && vari.length > 1)
+  // Un modèle sans 4K est ramené à sa plus grande taille, et chaque modèle donne un prix positif
+  const ed = findTool('editor')
+  assert.equal(toolInput(ed, { images: [img], prompt: 'x', model: 'seedream-5-pro', resolution: '4K' }).image_size, 'auto_2K')
+  for (const m of EDIT_MODELS) assert.ok(toolCost(ed, { images: [img], prompt: 'x', model: m.id }) >= 0.1, m.id)
+  // Qwen Image 3 : 3 images de référence au plus ; les autres modèles en gardent 4 dans l'éditeur
+  const { toolCheck } = await import('../src/tools.js')
+  const four = { images: [img, img, img, img], prompt: 'x' }
+  assert.equal(toolCheck(ed, { ...four, model: 'qwen-image-3' }), 'too_many_images')
+  assert.equal(toolCheck(ed, { ...four, images: four.images.slice(0, 3), model: 'qwen-image-3' }), null)
+  assert.equal(toolCheck(ed, four), null)
 })

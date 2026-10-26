@@ -62,7 +62,17 @@ test('outils ajoutés : prolonger, fluidifier, recadrer, restaurer, photo produi
   assert.deepEqual(buildInput('tool', findTool('video-fps'), { inputs: { video: v, fps: '120' } }), { video_url: v, target_fps: 120, model: 'Apollo', H264_output: true })
   assert.deepEqual(buildInput('tool', findTool('video-reframe'), { inputs: { video: v } }), { video_url: v, aspect_ratio: '9:16', resolution: '720p' })
   assert.deepEqual(buildInput('tool', findTool('photo-restore'), { inputs: { image: f, colors: 'keep' } }), { image_url: f, remove_scratches: true, enhance_resolution: true, fix_colors: false })
-  const product = buildInput('tool', findTool('product-photo'), { inputs: { image: f, scene: 'market', ratio: '4:5' } })
-  assert.equal(product.aspect_ratio, '4:5')
+  const product = buildInput('tool', findTool('product-photo'), { inputs: { image: f, scene: 'market', ratio: '4:5' } }) // Krea 3 par défaut
+  assert.deepEqual(product.image_size, { width: 1296, height: 1616 }) // 4:5, environ 2,1 Mpx, multiples de 16
   assert.match(product.prompt, /market stall/)
+})
+
+test('Krea 3 (générateur d’images) : taille exacte au format choisi, au plus la surface facturée', async () => {
+  const { IMAGE_MODELS, imageCost } = await import('@studio/catalog')
+  const krea = IMAGE_MODELS.find((m) => m.id === 'krea-3')
+  const input = buildInput('image', krea, { prompt: 'un marché à Bobo-Dioulasso', ratio: '16:9', resolution: '2K' })
+  assert.equal(input.prompt, 'un marché à Bobo-Dioulasso')
+  assert.ok(input.image_size.width / input.image_size.height > 1.7 && input.image_size.width * input.image_size.height <= 2.1e6)
+  assert.equal(buildInput('image', krea, { prompt: 'x', ratio: 'Auto', resolution: '1K' }).image_size.width, buildInput('image', krea, { prompt: 'x', ratio: '1:1', resolution: '1K' }).image_size.width)
+  assert.ok(imageCost(krea, '2K', 1) > imageCost(krea, '1K', 1))
 })

@@ -86,6 +86,7 @@ export default function Cinema() {
   const [iRes, setIRes] = useState('2K')
   const [iCount, setICount] = useState(1)
   const iRes2 = imodel.caps.resolutions.includes(iRes) ? iRes : imodel.caps.resolutions.includes('2K') ? '2K' : imodel.caps.resolutions[0]
+  const iRatio2 = imodel.caps.ratios.includes(iRatio) ? iRatio : imodel.caps.ratios[0] // Krea 3 n'a pas « Auto »
   const iN = Math.min(iCount, imodel.caps.maxImages)
 
   // Modèles : une photo et quelques mots donnent plusieurs plans ; chaque plan est une génération vidéo
@@ -157,8 +158,8 @@ export default function Cinema() {
   const generate = async () => {
     setError('')
     if (!video) {
-      const live = { kind: 'image', modelId: imodel.id, prompt: text.trim(), resolution: iRes2, ratio: iRatio, count: iN, brandStyle: styled ? style : undefined }
-      const r = submit({ kind: 'image', title: imodel.name, prompt: text.trim(), count: iN, cost, live, brandStyle: styled ? style : undefined, meta: `${iN} × ${iRes2}${iRatio === 'Auto' ? '' : ` · ${iRatio}`}${styled ? ' · style de la marque' : ''}` })
+      const live = { kind: 'image', modelId: imodel.id, prompt: text.trim(), resolution: iRes2, ratio: iRatio2, count: iN, brandStyle: styled ? style : undefined }
+      const r = submit({ kind: 'image', title: imodel.name, prompt: text.trim(), count: iN, cost, live, brandStyle: styled ? style : undefined, meta: `${iN} × ${iRes2}${iRatio2 === 'Auto' ? '' : ` · ${iRatio2}`}${styled ? ' · style de la marque' : ''}` })
       return setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     }
     // Vidéo : les pièces jointes deviennent références (Seedance), image de départ, image de fin, audio ou éléments selon le modèle.
@@ -298,7 +299,7 @@ export default function Cinema() {
           </>
         ) : (
           <>
-            <button type="button" className="ep-chip" onClick={() => setIRatio((r) => nextOf(imodel.caps.ratios, r))} aria-label={`Format : ${iRatio}`}><Icon name="screen" size={16} />{iRatio}</button>
+            <button type="button" className="ep-chip" onClick={() => setIRatio(nextOf(imodel.caps.ratios, iRatio2))} aria-label={`Format : ${iRatio2}`}><Icon name="screen" size={16} />{iRatio2}</button>
             <button type="button" className="ep-chip" disabled={imodel.caps.resolutions.length < 2} onClick={() => setIRes(nextOf(imodel.caps.resolutions, iRes2))} aria-label={`Résolution : ${iRes2}`}><Icon name="upscale" size={16} />{iRes2}</button>
             <span className="ep-chip ep-step" role="group" aria-label="Nombre d’images">
               <button type="button" onClick={() => setICount((c) => Math.max(1, c - 1))} aria-label="Moins" disabled={iN <= 1}>−</button>
