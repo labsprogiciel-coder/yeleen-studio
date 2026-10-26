@@ -62,6 +62,9 @@ function priceVideo(req, model) {
   const plans = Array.isArray(req.plans) ? req.plans : []
   if (!plans.length || plans.length > 4 || plans.some((p) => !(p.dur > 0))) return { ok: false, error: 'invalid_plans' }
   if (plans.length > 1 && !c.multiShot) return { ok: false, error: 'single_plan_only' }
+  // Plusieurs plans : le fournisseur reçoit la durée de chaque plan (en secondes entières) et la vidéo dure leur somme ; elle doit
+  // être la durée facturée (req.secs).
+  if (plans.length > 1 && Math.abs(plans.reduce((n, p) => n + Math.round(p.dur), 0) - req.secs) > 0.05) return { ok: false, error: 'invalid_duration' }
 
   // Références (Seedance) : images, vidéos et audio cités dans le prompt, et tâche (prolonger ou modifier une vidéo).
   const refs = Array.isArray(req.references) ? req.references : []
@@ -91,6 +94,7 @@ function priceVideo(req, model) {
 
   const files = { start: req.startImageUrl, end: req.endImageUrl, audio: req.audioUrl }
   if (c.startFrame === 'required' && !files.start) return { ok: false, error: 'missing_start_image' }
+  if (c.endFrame === 'withStart' && files.end && !files.start) return { ok: false, error: 'missing_start_image' } // sinon l'image de fin serait ignorée
   if (c.audioRef === 'required' && !files.audio) return { ok: false, error: 'missing_audio' }
   if (Object.values(files).some((u) => u && !FAL_FILE.test(u))) return { ok: false, error: 'invalid_file_url' } // seulement des fichiers déposés chez fal via /uploads
   if (req.elements?.length) {

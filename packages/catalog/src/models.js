@@ -145,7 +145,7 @@ export const VIDEO_MODELS = [
       ratios: ['16:9', '9:16', '1:1', '21:9'], // en texte seul ; avec une image de départ, le format suit l'image
       audio: 'always', // son stéréo toujours généré (dialogues, effets, ambiance)
       startFrame: 'optional',
-      endFrame: true,
+      endFrame: 'withStart', // seulement avec une image de départ (vérifié par l'API)
       audioRef: false,
       elements: false,
       multiShot: true, // multi_prompt : un prompt et une durée par plan
@@ -170,7 +170,7 @@ export const VIDEO_MODELS = [
       ratios: ['auto', '16:9', '4:3', '1:1', '3:4', '9:16'], // auto : « adaptive », le modèle choisit (ou suit l'image)
       audio: 'toggle', // audio: true|false, même prix
       startFrame: 'optional',
-      endFrame: true, // seulement avec une image de départ
+      endFrame: 'withStart', // seulement avec une image de départ (vérifié par l'API)
       audioRef: false,
       elements: false,
       multiShot: false,
@@ -197,7 +197,7 @@ export const VIDEO_MODELS = [
       ratios: ['auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
       audio: 'toggle', // generate_audio, même prix
       startFrame: 'optional',
-      endFrame: true, // seulement avec une image de départ
+      endFrame: 'withStart', // seulement avec une image de départ (vérifié par l'API)
       audioRef: false,
       elements: false,
       multiShot: false,

@@ -81,6 +81,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
   const range = caps.duration.fromAudio
   const blocker = mode === 'edit' && !files.source ? 'Joignez une vidéo à modifier.'
     : caps.startFrame === 'required' && !files.start ? 'Ce modèle exige une image de départ.'
+    : caps.endFrame === 'withStart' && files.end && !files.start ? 'Avec ce modèle, une image de fin demande aussi une image de départ.'
     : caps.audioRef === 'required' && !files.audio ? `Ce modèle exige un fichier audio${range ? ` de ${range.min} à ${range.max} s` : ''}.`
     : range && files.audio && (Number.isNaN(audioSecs) ? true : audioSecs !== null && (audioSecs < range.min || audioSecs > range.max))
       ? (Number.isNaN(audioSecs) ? 'Ce fichier audio n’a pas pu être lu.' : `Votre audio dure ${String(audioSecs).replace('.', ',')} s : il doit durer entre ${range.min} et ${range.max} s.`)

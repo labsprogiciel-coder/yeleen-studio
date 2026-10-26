@@ -238,3 +238,16 @@ test('Flux 3 Max (fal) : point d’accès texte ou image, entrée, prix au tarif
   assert.equal(priceJob({ kind: 'video', modelId: 'flux-3-max', ...base, secs: 21 }).error, 'invalid_duration')
   assert.deepEqual(f.price.byRes, { '720p': 0.17, '1080p': 0.29 }) // tarif normal, pas la remise temporaire
 })
+
+test('Image de fin sans image de départ refusée là où le modèle l’ignorerait ; plusieurs plans : leur somme est la durée facturée', () => {
+  const F = 'https://v3b.fal.media/files/a.png'
+  for (const id of ['kling-4', 'wan-3', 'flux-3-max']) {
+    const req = { kind: 'video', modelId: id, plans: [{ text: 'un marché', dur: 5 }], secs: 5, resolution: '720p', ratio: id === 'kling-4' ? '16:9' : 'auto' }
+    assert.equal(priceJob({ ...req, endImageUrl: F }).error, 'missing_start_image', id)
+    assert.ok(priceJob({ ...req, startImageUrl: F, endImageUrl: F }).ok, id)
+  }
+  const multi = { kind: 'video', modelId: 'kling-4', plans: [{ text: 'a', dur: 10 }, { text: 'b', dur: 10 }], resolution: '720p', ratio: '16:9' }
+  assert.equal(priceJob({ ...multi, secs: 3 }).error, 'invalid_duration') // 20 s demandées, 3 s facturées
+  assert.ok(priceJob({ ...multi, secs: 20 }).ok)
+  assert.equal(priceJob({ ...multi, plans: [{ text: 'a', dur: 20 }, { text: 'b', dur: 20 }], secs: 40 }).error, 'invalid_duration') // au-delà de 30 s
+})
