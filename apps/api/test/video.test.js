@@ -179,10 +179,75 @@ test('Seedance : limites et tâches', () => {
 test('Les prix du catalogue suivent les fournisseurs (fal le 17 oct. 2026, Runware le 19 oct. 2026)', async () => {
   const { findModel, IMAGE_MODELS } = await import('@studio/catalog')
   assert.equal(findModel(IMAGE_MODELS, 'flux-3').price.usd, 0.048)
-  assert.equal(m('h3-max').price.usd, 0.0325)
-  assert.equal(m('h3-max-turbo').price.usd, 0.01625)
+  assert.deepEqual(m('h3-max').price.byRes, { '480p': 0.0325, '768p': 0.052, '1080p': 0.104 })
+  assert.deepEqual(m('h3-max-turbo').price.byRes, { '480p': 0.01625, '768p': 0.026, '1080p': 0.052 })
+  // Le prix suit la résolution : le 1080p n'est plus vendu au tarif du 480p
+  assert.ok(videoCost(m('h3-max'), 5, '1080p') > 3 * videoCost(m('h3-max'), 5, '480p'))
   assert.deepEqual(seed.price.byRes, { '480p': 0.102, '720p': 0.23, '1080p': 0.614 })
   assert.deepEqual(seed.fal.price.byRes, { '480p': 0.2205, '720p': 0.473, '1080p': 1.164 }) // chaînes (workflows fal)
   assert.deepEqual([m('kling-3-pro').price.usd, m('kling-3-pro').price.silentUsd], [0.168, 0.112])
   assert.deepEqual([m('kling-3-std').price.usd, m('kling-3-std').price.silentUsd], [0.126, 0.084])
+})
+
+test('Kling 4.0 et Wan 3.0 (fal) : point d’accès texte ou image, entrée, prix par résolution', async () => {
+  const { endpointFor } = await import('../src/inputs.js')
+  const F = 'https://v3b.fal.media/files/a.png'
+  const k = m('kling-4')
+  const base = { plans: [{ text: 'une vendeuse rit au marché', dur: 10 }], secs: 10, resolution: '1080p', ratio: '21:9' }
+  // Sans image : texte vers vidéo, avec le format choisi ; avec image : image vers vidéo, le format suit l'image
+  assert.equal(endpointFor(k, base), 'kling/v4/text-to-video')
+  assert.deepEqual(buildInput('video', k, base), { prompt: 'une vendeuse rit au marché', duration: 10, resolution: '1080p', aspect_ratio: '21:9' })
+  assert.equal(endpointFor(k, { ...base, startImageUrl: F }), 'kling/v4/image-to-video')
+  const withImage = buildInput('video', k, { ...base, startImageUrl: F, endImageUrl: F })
+  assert.equal(withImage.start_image_url, F)
+  assert.equal(withImage.end_image_url, F)
+  assert.equal(withImage.aspect_ratio, undefined)
+  // Plusieurs plans : multi_prompt, sans duration (la somme des plans)
+  const multi = buildInput('video', k, { ...base, plans: [{ text: 'plan un', dur: 5 }, { text: 'plan deux', dur: 8 }], secs: 13 })
+  assert.deepEqual(multi.multi_prompt, [{ prompt: 'plan un', duration: 5 }, { prompt: 'plan deux', duration: 8 }])
+  assert.equal(multi.duration, undefined)
+  assert.ok(priceJob({ kind: 'video', modelId: 'kling-4', plans: [{ text: 'a', dur: 5 }, { text: 'b', dur: 8 }], secs: 13, resolution: '720p', ratio: '16:9' }).ok)
+  assert.ok(videoCost(k, 10, '1080p') > videoCost(k, 10, '720p'))
+
+  const w = m('wan-3')
+  const wan = { plans: [{ text: 'pluie sur Ouaga', dur: 20 }], secs: 20, resolution: '720p', ratio: 'auto', sound: false }
+  assert.equal(endpointFor(w, wan), 'alibaba/wan-3.0/text-to-video')
+  assert.deepEqual(buildInput('video', w, wan), { prompt: 'pluie sur Ouaga', duration: 20, resolution: '720p', aspect_ratio: 'adaptive', audio: false })
+  assert.equal(buildInput('video', w, { ...wan, endImageUrl: F }).end_image_url, undefined) // la fin exige un départ
+  assert.equal(endpointFor(w, { ...wan, startImageUrl: F }), 'alibaba/wan-3.0/image-to-video')
+  assert.ok(priceJob({ kind: 'video', modelId: 'wan-3', ...wan }).ok)
+  assert.equal(priceJob({ kind: 'video', modelId: 'wan-3', ...wan, secs: 31 }).error, 'invalid_duration')
+  assert.ok(videoCost(w, 10, '480p') < videoCost(m('veo-3-1-lite'), 8, '720p') * 2) // le moins cher au catalogue
+})
+
+test('Flux 3 Max (fal) : point d’accès texte ou image, entrée, prix au tarif normal', async () => {
+  const { endpointFor } = await import('../src/inputs.js')
+  const F = 'https://v3b.fal.media/files/a.png'
+  const f = m('flux-3-max')
+  const base = { plans: [{ text: 'un griot chante au crépuscule', dur: 8 }], secs: 8, resolution: '1080p', ratio: '16:9', sound: false }
+  assert.equal(endpointFor(f, base), 'blackforestlabs/flux-3-max/text-to-video')
+  assert.deepEqual(buildInput('video', f, base), { prompt: 'un griot chante au crépuscule', duration: 8, resolution: '1080p', aspect_ratio: '16:9', generate_audio: false })
+  assert.equal(buildInput('video', f, { ...base, endImageUrl: F }).end_image_url, undefined) // la fin exige un départ
+  assert.equal(endpointFor(f, { ...base, startImageUrl: F }), 'blackforestlabs/flux-3-max/image-to-video')
+  const withImage = buildInput('video', f, { ...base, startImageUrl: F, endImageUrl: F, ratio: 'auto' })
+  assert.equal(withImage.image_url, F)
+  assert.equal(withImage.end_image_url, F)
+  assert.equal(withImage.aspect_ratio, 'auto')
+  assert.ok(priceJob({ kind: 'video', modelId: 'flux-3-max', ...base }).ok)
+  assert.equal(priceJob({ kind: 'video', modelId: 'flux-3-max', ...base, secs: 4 }).error, 'invalid_duration')
+  assert.equal(priceJob({ kind: 'video', modelId: 'flux-3-max', ...base, secs: 21 }).error, 'invalid_duration')
+  assert.deepEqual(f.price.byRes, { '720p': 0.17, '1080p': 0.29 }) // tarif normal, pas la remise temporaire
+})
+
+test('Image de fin sans image de départ refusée là où le modèle l’ignorerait ; plusieurs plans : leur somme est la durée facturée', () => {
+  const F = 'https://v3b.fal.media/files/a.png'
+  for (const id of ['kling-4', 'wan-3', 'flux-3-max']) {
+    const req = { kind: 'video', modelId: id, plans: [{ text: 'un marché', dur: 5 }], secs: 5, resolution: '720p', ratio: id === 'kling-4' ? '16:9' : 'auto' }
+    assert.equal(priceJob({ ...req, endImageUrl: F }).error, 'missing_start_image', id)
+    assert.ok(priceJob({ ...req, startImageUrl: F, endImageUrl: F }).ok, id)
+  }
+  const multi = { kind: 'video', modelId: 'kling-4', plans: [{ text: 'a', dur: 10 }, { text: 'b', dur: 10 }], resolution: '720p', ratio: '16:9' }
+  assert.equal(priceJob({ ...multi, secs: 3 }).error, 'invalid_duration') // 20 s demandées, 3 s facturées
+  assert.ok(priceJob({ ...multi, secs: 20 }).ok)
+  assert.equal(priceJob({ ...multi, plans: [{ text: 'a', dur: 20 }, { text: 'b', dur: 20 }], secs: 40 }).error, 'invalid_duration') // au-delà de 30 s
 })

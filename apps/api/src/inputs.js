@@ -89,8 +89,11 @@ const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !=
  * Les images et l'audio d'entrée sont des adresses du stockage de fal (voir POST /uploads).
  */
 
-/** Le point d'accès d'un modèle : chez fal, son endpoint ; chez Runware, son identifiant (AIR). */
-export const endpointFor = (model) => (model.provider === 'runware' ? model.air : model.endpoint)
+/**
+ * Le point d'accès d'un modèle : chez fal, son endpoint ; chez Runware, son identifiant (AIR). Un modèle à deux points d'accès
+ * (Kling 4.0, Wan 3.0) passe par `textEndpoint` quand la demande n'a pas d'image de départ.
+ */
+export const endpointFor = (model, req = {}) => (model.provider === 'runware' ? model.air : model.textEndpoint && !req.startImageUrl ? model.textEndpoint : model.endpoint)
 
 function videoInput(model, req) {
   const text = [req.plans.map((p) => p.text.trim()).filter(Boolean).join(' '), req.brandStyle].filter(Boolean).join(', ')
@@ -107,6 +110,42 @@ function videoInput(model, req) {
       target_audio_url: req.audioUrl,
       resolution: res?.toUpperCase(), // « 768p » → « 768P »
       duration: secs,
+    })
+  }
+  if (model.id === 'kling-4') {
+    // Plusieurs plans : multi_prompt (la durée est la somme des plans) ; un seul : prompt et duration.
+    const shots = req.plans.filter((p) => p.text.trim())
+    const multi = shots.length > 1
+    return clean({
+      start_image_url: req.startImageUrl,
+      end_image_url: req.startImageUrl ? req.endImageUrl : undefined,
+      prompt: multi ? undefined : text,
+      multi_prompt: multi ? shots.map((p) => ({ prompt: p.text.trim().slice(0, 512), duration: Math.round(p.dur) })) : undefined,
+      duration: multi ? undefined : Math.round(secs),
+      resolution: res,
+      aspect_ratio: req.startImageUrl ? undefined : req.ratio, // avec une image, le format suit l'image
+    })
+  }
+  if (model.id === 'wan-3') {
+    return clean({
+      prompt: text,
+      start_image_url: req.startImageUrl,
+      end_image_url: req.startImageUrl ? req.endImageUrl : undefined, // la fin exige un départ
+      duration: Math.round(secs),
+      resolution: res,
+      aspect_ratio: !req.ratio || req.ratio === 'auto' ? 'adaptive' : req.ratio,
+      audio: sound,
+    })
+  }
+  if (model.id === 'flux-3-max') {
+    return clean({
+      prompt: text,
+      image_url: req.startImageUrl,
+      end_image_url: req.startImageUrl ? req.endImageUrl : undefined, // la fin exige un départ
+      duration: Math.round(secs),
+      resolution: res,
+      aspect_ratio: req.ratio || 'auto',
+      generate_audio: sound,
     })
   }
   if (model.id === 'ltx-2-3-a2v') {
