@@ -35,6 +35,8 @@ pnpm dev:api        # API en local (wrangler)
 pnpm dev:montage    # worker de montage en local
 ```
 
+Chaque PR et chaque poussée sur `main` passent par GitHub Actions (`.github/workflows/ci.yml`) : les tests de tous les paquets, la construction du site (sans clé Clerk, `VITE_ALLOW_NO_AUTH=1`) et celle de l'API (`wrangler deploy --dry-run`). Rien n'y est publié : le déploiement reste celui de Cloudflare.
+
 ## État
 
 | Partie | État |

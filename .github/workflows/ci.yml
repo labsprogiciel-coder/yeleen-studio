@@ -1,0 +1,39 @@
+# Vérifications de chaque PR et de main : les tests de tous les paquets, la construction du site et celle de l'API
+# (wrangler deploy --dry-run : regroupe le Worker sans le publier). Les constructions Cloudflare (Workers Builds) déploient ;
+# celle-ci dit seulement si le code est bon.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version lue dans « packageManager » (package.json)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tests (tous les paquets)
+        run: pnpm -r --if-present test
+      - name: Construction du site
+        run: pnpm build
+        env:
+          VITE_ALLOW_NO_AUTH: '1' # sans clé Clerk : on vérifie que le site se construit, il n'est pas publié d'ici
+      - name: Construction de l'API (sans publier)
+        run: pnpm --filter @studio/api build
