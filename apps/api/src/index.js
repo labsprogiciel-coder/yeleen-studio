@@ -6,7 +6,7 @@ import { falClient } from './fal.js'
 import { buildInput, endpointFor, runwareInput } from './inputs.js'
 import { advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
-import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, removeFavorite, SCOPES } from './library.js'
+import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES } from './library.js'
 import { mediaInfo } from './media.js'
 import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
@@ -38,8 +38,8 @@ app.use('*', async (c, next) => {
   return cors({ origin: (o) => (allowed.includes(o) ? o : null), allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['content-type', 'range', 'authorization'], exposeHeaders: ['content-range', 'accept-ranges', 'content-length'] })(c, next)
 })
 
-// Garde : tout passe par ici sauf la santé, la Bibliothèque Yeleen (publique), les fichiers (adresses non devinables, lus par <img> et <video> sans en-tête) et les webhooks.
-const OPEN = (p) => p === '/health' || p === '/catalog' || p.startsWith('/files/') || p.startsWith('/webhooks/')
+// Garde : tout passe par ici sauf la santé, la Bibliothèque Yeleen et les vidéos à refaire (publiques), les fichiers (adresses non devinables, lus par <img> et <video> sans en-tête) et les webhooks.
+const OPEN = (p) => p === '/health' || p === '/catalog' || p === '/templates' || p.startsWith('/files/') || p.startsWith('/webhooks/')
 app.use('*', async (c, next) => {
   if (c.req.method === 'OPTIONS' || OPEN(c.req.path)) return next()
   if (c.env.ENV === 'dev' && !c.env.CLERK_ISSUER) { c.set('uid', 'demo'); await provision(c); return next() } // développement local seulement
@@ -217,6 +217,12 @@ app.get('/catalog', withDb(async (c, db) => {
 }))
 
 // Mon historique de jetons (D1) : débits, remboursements, recharges, du plus récent au plus ancien ; `before` pour la page suivante.
+// Vidéos à refaire (Modèles) : publiques comme la Bibliothèque Yeleen.
+app.get('/templates', withDb(async (c, db) => {
+  c.header('cache-control', 'public, max-age=300')
+  return c.json(await listTemplates(db, new URL(c.req.url).origin))
+}))
+
 app.get('/ledger', async (c) => {
   if (!c.env.DB) return c.json({ error: 'db_unavailable' }, 503)
   const { limit, before } = c.req.query()

@@ -9,6 +9,7 @@ import useTabKeys from '../../lib/useTabKeys.js'
 import { inProject, useProjects } from '../../lib/projects.js'
 import { RECIPES, recipeById, recipeCost } from '@studio/catalog/recipes'
 import { THUMBS, TOURS, toolById } from './tools.js'
+import VideoTemplates, { TemplateVideoCard } from './VideoTemplates.jsx'
 
 const VIEWS = [{ id: 'creations', icon: 'sparkle', label: 'Créations' }, { id: 'templates', icon: 'layers', label: 'Modèles' }]
 const KINDS = ['video', 'image', 'audio'] // ordre d'affichage des créations en cours
@@ -70,9 +71,10 @@ function Tour({ tool }) {
 
 /**
  * Zone principale : Créations (les générations en cours et terminées, ou la visite guidée de l'outil tant qu'il n'y en a pas)
- * et Modèles (les workflows, en cartes). `top` : bandeau au-dessus des créations (avancement d'un modèle lancé).
+ * et Modèles (les workflows, en cartes, puis les vidéos à refaire). `top` : bandeau au-dessus des créations (avancement d'un modèle
+ * lancé). `templates` : les vidéos à refaire ; `onRecreate` en ouvre une dans le générateur.
  */
-export default function Showcase({ view, onView, tool, onPickTemplate, top = null }) {
+export default function Showcase({ view, onView, tool, onPickTemplate, templates = [], onRecreate, top = null }) {
   const { jobs } = useJobs()
   const { openLibrary } = useLibrary()
   const onTabKeys = useTabKeys()
@@ -107,12 +109,24 @@ export default function Showcase({ view, onView, tool, onPickTemplate, top = nul
               {!kinds.length && <p className="cx-sub">Des modèles prêts à l’emploi : une photo ou quelques mots, et le reste se fait seul.</p>}
               <ul className="cx-cards">{RECIPES.slice(0, 3).map((r) => <TemplateCard key={r.id} r={r} onPick={onPickTemplate} />)}</ul>
             </section>
+            {templates.length > 0 && (
+              <section className="cx-sec" aria-labelledby="cx-vt-new-h">
+                <div className="cx-sec-h">
+                  <h2 id="cx-vt-new-h">Vidéos à refaire</h2>
+                  <button type="button" className="cx-all" onClick={() => onView('templates')}>Tout voir<Icon name="chevR" size={14} /></button>
+                </div>
+                <ul className="cx-vts">{templates.slice(0, 4).map((t) => <TemplateVideoCard key={t.id} t={t} onPick={onRecreate} />)}</ul>
+              </section>
+            )}
           </>
         ) : (
-          <section className="cx-sec" aria-labelledby="cx-tpl-h">
-            <div className="cx-sec-h"><h2 id="cx-tpl-h">Modèles en vedette</h2></div>
-            <ul className="cx-cards">{RECIPES.map((r) => <TemplateCard key={r.id} r={r} onPick={onPickTemplate} />)}</ul>
-          </section>
+          <>
+            <section className="cx-sec" aria-labelledby="cx-tpl-h">
+              <div className="cx-sec-h"><h2 id="cx-tpl-h">Modèles en vedette</h2></div>
+              <ul className="cx-cards">{RECIPES.map((r) => <TemplateCard key={r.id} r={r} onPick={onPickTemplate} />)}</ul>
+            </section>
+            {templates.length > 0 && <VideoTemplates templates={templates} onPick={onRecreate} />}
+          </>
         )}
       </div>
     </main>

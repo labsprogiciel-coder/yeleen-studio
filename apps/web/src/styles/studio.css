@@ -136,9 +136,21 @@
 .cx-card-img{position:relative;aspect-ratio:5/4;border-radius:14px;overflow:hidden;background:var(--field)}
 .cx-card-img>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .3s}
 .cx-card:hover .cx-card-img>img{transform:scale(1.04)}
-.cx-by{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:rgba(0,0,0,.6);font-size:12.5px;font-weight:600;color:#fff}
+.cx-by{position:absolute;left:8px;top:8px;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:rgba(0,0,0,.6);font-size:12.5px;font-weight:600;color:#fff}
 .cx-by img{border-radius:50%}
 @media (prefers-reduced-motion:reduce){.cx-card-img>img{transition:none}}
+.cx-vts{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;margin:0;padding:0;list-style:none}
+.cx-vt{display:flex;flex-direction:column;gap:10px;width:100%;height:100%;padding:10px 10px 14px;border:1px solid transparent;border-radius:18px;background:var(--card);color:var(--ink);text-align:left;cursor:pointer}
+.cx-vt:hover,.cx-vt:focus-visible{border-color:var(--line-strong)}
+.cx-vt-media{position:relative;aspect-ratio:4/5;border-radius:12px;overflow:hidden;background:var(--field)}
+.cx-vt-media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cx-vt-t{display:flex;flex-direction:column;gap:5px;padding:0 4px;min-width:0}
+.cx-vt-t b{font-size:16px;line-height:1.25;font-weight:700}
+.cx-vt-t small{display:flex;align-items:center;flex-wrap:wrap;gap:5px;font-size:13px;font-weight:700;color:var(--lime-ink);font-variant-numeric:tabular-nums}
+.cx-cats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.cx-cats button{flex:none;min-height:36px;padding:0 14px;border:1px solid var(--line-strong);border-radius:999px;background:none;color:var(--ink-3);font-size:14px;font-weight:600;cursor:pointer}
+.cx-cats button[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+.cx-more{align-self:center;min-height:40px;padding:0 20px;border:1px solid var(--line-strong);border-radius:999px;background:none;color:var(--ink);font-size:14.5px;font-weight:600;cursor:pointer}
 
 /* L'avancement d'un modèle lancé, en tête des créations */
 .cx-view .rc-runbar{width:100%}

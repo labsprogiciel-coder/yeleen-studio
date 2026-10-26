@@ -66,3 +66,25 @@ export async function catalog(db) {
     }),
   }
 }
+
+/**
+ * Vidéos à refaire publiées, dans l'ordre choisi : { templates: [{ id, name, category, video, poster, modelId, plans, resolution,
+ * ratio, sound, photo }] }. Les adresses sont celles de l'API (/files/templates/…). Une ligne aux plans illisibles est ignorée.
+ */
+export async function listTemplates(db, origin) {
+  const { results } = await db.prepare(`SELECT id, name, category, video_key, poster_key, model_id, plans, resolution, ratio, sound, photo
+    FROM templates WHERE published = 1 ORDER BY sort, created_at`).bind().all()
+  const file = (key) => (key ? `${origin}/files/${key}` : null)
+  return {
+    templates: results.flatMap((t) => {
+      let plans
+      try { plans = JSON.parse(t.plans) } catch { return [] }
+      if (!Array.isArray(plans) || !plans.length || plans.some((p) => typeof p?.text !== 'string' || !(p.dur > 0))) return []
+      return [{
+        id: t.id, name: t.name, category: t.category, video: file(t.video_key), poster: file(t.poster_key), modelId: t.model_id,
+        plans: plans.map((p) => ({ text: p.text, dur: p.dur })), resolution: t.resolution ?? null, ratio: t.ratio ?? null,
+        sound: Boolean(t.sound), photo: t.photo ?? null,
+      }]
+    }),
+  }
+}
