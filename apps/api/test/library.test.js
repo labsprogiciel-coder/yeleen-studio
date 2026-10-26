@@ -168,7 +168,7 @@ test('seeds/templates.sql : se charge, et chaque vidéo à refaire est une deman
     t.db.exec(readFileSync(new URL('../seeds/templates.sql', import.meta.url), 'utf8'))
     t.db.exec(readFileSync(new URL('../seeds/templates.sql', import.meta.url), 'utf8')) // rejouable
     const { body } = await t.json('/templates')
-    assert.equal(body.templates.length, 5)
+    assert.equal(body.templates.length, 18)
     for (const x of body.templates) {
       assert.match(x.video, /\/files\/templates\/[\w-]+\/video\.mp4$/)
       const secs = x.plans.reduce((n, p) => n + p.dur, 0)
