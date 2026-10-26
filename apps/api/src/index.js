@@ -1,4 +1,4 @@
-import { setUser } from '@sentry/cloudflare'
+import { captureException, setUser } from '@sentry/cloudflare'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { AuthError, verifyClerkToken } from './auth.js'
@@ -99,6 +99,10 @@ const MAX_VIDEO_UPLOAD = 60 * 1024 * 1024 // une vidéo de téléphone de 30 s e
 const UPLOAD_TYPES = /^(image\/(png|jpeg|webp|gif)|audio\/(mpeg|mp3|wav|x-wav|mp4|x-m4a|aac|ogg|webm|flac)|video\/(mp4|quicktime|webm))$/
 
 app.get('/health', (c) => c.json({ ok: true }))
+
+// Essai de Sentry (temporaire) : une erreur volontaire, pour vérifier qu'elle arrive dans le projet yeleen-backend. Réservé aux
+// comptes connectés (la garde ci-dessus s'applique). À retirer une fois vérifié.
+app.get('/debug/sentry', () => { throw new Error('Essai Sentry : erreur volontaire de /debug/sentry') })
 
 // Fichiers d'entrée (image de départ, image de fin, audio) : déposés chez fal, l'adresse revient ici.
 app.post('/uploads', async (c) => {
@@ -542,6 +546,14 @@ app.post('/webhooks/payments', async (c) => {
   if (out.mismatch) console.error('paygate : montant différent de la recharge, rien n’est crédité', p.reference, p.amount)
   if (out.credited && out.topup.late) console.warn('paygate : paiement tardif crédité', p.reference)
   return c.json({ ok: true })
+})
+
+// Erreur imprévue dans une route : Hono la transforme en réponse 500 sans la relancer, donc l'enveloppe Sentry du Worker
+// (withSentry, voir worker.js) ne la voit pas. On l'envoie ici (sans effet si Sentry n'est pas actif), puis la même réponse.
+app.onError((err, c) => {
+  captureException(err)
+  console.error(err)
+  return c.text('Internal Server Error', 500)
 })
 
 export default app
