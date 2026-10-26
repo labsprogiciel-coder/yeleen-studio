@@ -5,6 +5,10 @@ import MentionTextarea from '../MentionTextarea.jsx'
 import { Section, DropTile, GenerateButton, PromptBox } from '../GenPanel.jsx'
 import { jetons, useJobs } from '../../lib/jobs.jsx'
 import { findTool, isFileField, toolCheck, toolCost } from '@studio/catalog/tools'
+import { findEditModel } from '@studio/catalog/edit-models'
+import ModelLogo from '../ModelLogo.jsx'
+import Icon from '../../lib/icons.jsx'
+import { logoFor } from '../../lib/modelLogos.js'
 
 const ICON = { image: 'img', images: 'img', video: 'vid', videos: 'vid', audio: 'mus' }
 const one = (type) => type.replace(/s$/, '') // images → image
@@ -62,6 +66,23 @@ function Choice({ field, value, onChange }) {
 }
 
 /**
+ * Choix du modèle d'un outil image (champ `model`, voir editModels.js) : le même sélecteur que celui des vidéos, avec le prix de
+ * l'outil pour chaque modèle (`costOf(id)`, d'après les entrées en cours).
+ */
+function ModelChoice({ field, value, onChange, costOf }) {
+  const current = findEditModel(value) ?? findEditModel(field.options[0].id)
+  const items = field.options.map((o) => {
+    const m = findEditModel(o.id)
+    return { id: m.id, icon: 'img', logo: logoFor(m.id), title: m.name, desc: m.tagline, specs: [], price: { n: costOf(m.id) } }
+  })
+  return (
+    <Menu items={items} value={current.id} onChange={onChange} label="Modèle" menuWidth={420}>
+      {logoFor(current.id) ? <ModelLogo logo={logoFor(current.id)} size={18} /> : <Icon name="img" size={18} />}<span className="ep-ell">{current.name}</span>
+    </Menu>
+  )
+}
+
+/**
  * Formulaire d'un outil du catalogue (packages/catalog/src/tools.js) : fichiers, textes, choix et nombres, prix du catalogue,
  * puis une génération `tool` (les fichiers sont déposés chez fal avant l'envoi, voir lib/jobs.jsx). `onDone` : après l'envoi.
  */
@@ -86,7 +107,13 @@ export default function ToolForm({ tool: uiTool, onDone }) {
 
   const fields = tool.inputs
   const inputs = useMemo(() => Object.fromEntries(fields.filter((f) => !isFileField(f)).map((f) => [f.key, values[f.key]])), [fields, values])
-  const cost = toolCost(tool, inputs)
+  // Le prix de certains modèles dépend du nombre d'images fournies : l'aperçu compte les fichiers posés (le serveur fait foi).
+  const priced = useMemo(() => ({
+    ...inputs,
+    ...Object.fromEntries(fields.filter(isFileField).map((f) => [f.key, f.type.endsWith('s') ? (files[f.key] ?? []).filter(Boolean).map(() => 'fichier') : files[f.key] ? 'fichier' : undefined])),
+  }), [fields, inputs, files])
+  const cost = toolCost(tool, priced)
+  const modelField = fields.find((f) => f.type === 'model')
 
   const blocker = (() => {
     for (const f of fields) {
@@ -106,7 +133,7 @@ export default function ToolForm({ tool: uiTool, onDone }) {
 
   const onGenerate = () => {
     const text = fields.filter((f) => f.type === 'text').map((f) => values[f.key]?.trim()).filter(Boolean).join(' / ')
-    const chosen = fields.filter((f) => f.type === 'select').map((f) => (f.options.find((o) => o.id === values[f.key]) ?? f.options[0]).label)
+    const chosen = fields.filter((f) => f.type === 'model' || f.type === 'select').map((f) => (f.options.find((o) => o.id === values[f.key]) ?? f.options[0]).label)
     const inputFiles = Object.fromEntries(fields.filter(isFileField).map((f) => [f.key, f.type.endsWith('s') ? files[f.key].filter(Boolean) : files[f.key]]))
     const count = tool.id === 'variations' ? Number(values.count ?? 2) : 1
     const r = submit({
@@ -124,6 +151,12 @@ export default function ToolForm({ tool: uiTool, onDone }) {
       {variants.length > 1 && (
         <Section id="tf-variant" title="Source">
           <Segmented items={variants} value={variant} onChange={(v) => { setVariant(v); setError('') }} label="Source" />
+        </Section>
+      )}
+
+      {modelField && (
+        <Section id="tf-model" title="Modèle">
+          <ModelChoice field={modelField} value={values.model} onChange={set('model')} costOf={(id) => toolCost(tool, { ...priced, model: id })} />
         </Section>
       )}
 

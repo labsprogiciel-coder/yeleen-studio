@@ -1,4 +1,5 @@
 import { EXTEND_MODEL, toJetons } from './models.js'
+import { EDIT_MODELS, findEditModel } from './editModels.js'
 import { VOICES } from './voices.js'
 
 /**
@@ -9,8 +10,10 @@ import { VOICES } from './voices.js'
  * - `text` : un texte (`required`, `max` caractères) ;
  * - `image`, `video`, `audio` : un fichier déposé chez fal ; `images`, `videos` : une liste, de `min` à `max` fichiers ;
  * - `select` : une valeur parmi `options` ({ id, label, value? } ; `value` est ce que reçoit fal, `id` par défaut) ;
- * - `number` : un nombre entre `min` et `max`.
- * `usd(v)` : coût fournisseur d'un lancement, d'après la page du modèle chez fal ; `build(v)` : l'entrée envoyée à fal.
+ * - `number` : un nombre entre `min` et `max` ;
+ * - `model` : le modèle d'édition d'image choisi parmi `options` (identifiants de editModels.js, le premier par défaut).
+ * `usd(v)` : coût fournisseur d'un lancement, d'après la page du modèle chez fal ; `build(v)` : l'entrée envoyée à fal ;
+ * `endpoint` : le point d'accès, ou une fonction de `v` quand il dépend du modèle choisi (voir `toolEndpoint`).
  * `v` : les entrées vérifiées, choix par défaut compris (voir `toolValues`). `maxP` : résolution maximale d'une vidéo fournie
  * (son plus petit côté : 1080 pour 1080p, en portrait comme en paysage), quand le prix dépend de la résolution de la source.
  *
@@ -23,21 +26,41 @@ const per = (table) => (key) => table[key]
 
 const VOICE_OPTIONS = VOICES.map((v) => opt(v.id, v.label))
 
+/**
+ * Outil image au modèle choisi (voir editModels.js) : un champ « Modèle » en tête, puis `inputs`. `request(v)` décrit la demande
+ * commune { prompt, images, ratio, size, count } ; le modèle choisi en tire son entrée, son coût et son point d'accès.
+ * `models` : les modèles proposés, le premier par défaut (sans `multi`, un modèle n'est pas proposé si `count` peut dépasser 1).
+ */
+function editTool({ models, request, ...tool }) {
+  const pick = (v) => findEditModel(v.model)
+  const req = (v) => { const r = request(v); return { ...r, images: (r.images ?? []).filter(Boolean) } } // sans fichiers (aperçu) : aucune image
+  return {
+    ...tool,
+    output: 'image',
+    inputs: [{ key: 'model', type: 'model', label: 'Modèle', options: models.map((id) => opt(id, findEditModel(id).name)) }, ...tool.inputs],
+    endpoint: (v) => pick(v).endpoint,
+    usd: (v) => pick(v).usd(req(v)),
+    build: (v) => pick(v).build(req(v)),
+  }
+}
+// Modèles proposés : tous ceux d'editModels.js, dans l'ordre voulu par l'outil (le premier est le choix par défaut).
+const ALL_EDIT = EDIT_MODELS.map((m) => m.id)
+const MULTI_EDIT = EDIT_MODELS.filter((m) => m.multi).map((m) => m.id)
+const first = (id, list) => [id, ...list.filter((x) => x !== id)]
+
 export const TOOLS = [
   // ── Image ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  {
+  editTool({
     id: 'editor',
     name: 'Éditeur d’images',
-    output: 'image',
-    endpoint: 'fal-ai/nano-banana-pro/edit', // 0,15 $ l'image ; 4K au double
+    models: first('nano-banana-pro', ALL_EDIT),
     inputs: [
       { key: 'images', type: 'images', min: 1, max: 4, label: 'Vos images' },
       { key: 'prompt', type: 'text', required: true, max: 1000, label: 'La modification', placeholder: 'Ex. : remplace le fond par une plage au coucher du soleil' },
       { key: 'resolution', type: 'select', label: 'Résolution', options: [opt('1K', '1K'), opt('2K', '2K'), opt('4K', '4K')] },
     ],
-    usd: (v) => (v.resolution === '4K' ? 0.3 : 0.15),
-    build: (v) => ({ prompt: v.prompt, image_urls: v.images, resolution: v.resolution, aspect_ratio: 'auto', num_images: 1, output_format: 'png' }),
-  },
+    request: (v) => ({ prompt: v.prompt, images: v.images, ratio: 'auto', size: v.resolution, count: 1 }),
+  }),
   {
     id: 'upscaler',
     name: 'Améliorateur d’images',
@@ -66,22 +89,20 @@ export const TOOLS = [
       aspect_ratio: v.ratio, resolution: '2K', num_images: 1, output_format: 'png',
     }),
   },
-  {
+  editTool({
     id: 'variations',
     name: 'Variations',
-    output: 'image',
-    endpoint: 'fal-ai/nano-banana-pro/edit', // 0,15 $ l'image
+    models: first('nano-banana-pro', MULTI_EDIT), // plusieurs images par appel
     inputs: [
       { key: 'image', type: 'image', label: 'Image de départ' },
       { key: 'prompt', type: 'text', required: false, max: 500, label: 'Ce qui peut changer (facultatif)', placeholder: 'Ex. : la pose et le décor' },
       { key: 'count', type: 'select', label: 'Nombre', options: [opt('2', '2 variations', 2), opt('4', '4 variations', 4)] },
     ],
-    usd: (v) => 0.15 * v.count,
-    build: (v) => ({
+    request: (v) => ({
       prompt: `Create a variation of this image: same subject and style, different composition.${v.prompt ? ` Change: ${v.prompt}.` : ''}`,
-      image_urls: [v.image], num_images: v.count, aspect_ratio: 'auto', resolution: '1K', output_format: 'png',
+      images: [v.image], ratio: 'auto', size: '1K', count: v.count,
     }),
-  },
+  }),
   {
     id: 'skin-enhancer',
     name: 'Améliorateur de peau',
@@ -115,11 +136,10 @@ export const TOOLS = [
     usd: () => 0.07, // 2 mégapixels au plus : à rapprocher de la facture fal
     build: (v) => ({ image_urls: [v.image], ...v.angle, num_images: 1, output_format: 'png' }),
   },
-  {
+  editTool({
     id: 'mockup-generator',
     name: 'Générateur de maquettes',
-    output: 'image',
-    endpoint: 'fal-ai/nano-banana-pro/edit', // 0,15 $ l'image
+    models: first('nano-banana-pro', ALL_EDIT),
     inputs: [
       { key: 'design', type: 'image', label: 'Votre visuel ou logo' },
       {
@@ -128,12 +148,11 @@ export const TOOLS = [
       },
       { key: 'prompt', type: 'text', required: false, max: 500, label: 'Le décor (facultatif)', placeholder: 'Ex. : en boutique, lumière naturelle' },
     ],
-    usd: () => 0.15,
-    build: (v) => ({
+    request: (v) => ({
       prompt: `Product mockup: place this design on ${v.support}, realistic photo${v.prompt ? `, ${v.prompt}` : ''}. Keep the design exactly as provided.`,
-      image_urls: [v.design], num_images: 1, aspect_ratio: '1:1', resolution: '1K', output_format: 'png',
+      images: [v.design], ratio: '1:1', size: '1K', count: 1,
     }),
-  },
+  }),
   {
     id: 'remove-background',
     name: 'Supprimer l’arrière-plan',
@@ -159,24 +178,22 @@ export const TOOLS = [
     build: (v) => ({ image_url: v.image, lighting_style: v.light }),
   },
 
-  {
+  editTool({
     id: 'image-extend',
     name: 'Étendre l’image',
-    output: 'image',
-    // Nano Banana Pro au format visé : prix fixe. L'outpainting de fal (image-apps-v2/outpaint) est facturé au mégapixel produit,
-    // que le serveur ne connaît pas avant l'envoi.
-    endpoint: 'fal-ai/nano-banana-pro/edit', // 0,15 $ l'image
+    // Un modèle d'édition au format visé : prix connu d'avance. L'outpainting de fal (image-apps-v2/outpaint) est facturé au
+    // mégapixel produit, que le serveur ne connaît pas avant l'envoi.
+    models: first('nano-banana-pro', ALL_EDIT),
     inputs: [
       { key: 'image', type: 'image', label: 'Image à étendre' },
       { key: 'ratio', type: 'select', label: 'Nouveau format', options: [opt('9:16', 'Story 9:16'), opt('4:5', 'Post 4:5'), opt('1:1', 'Carré 1:1'), opt('16:9', 'Paysage 16:9')] },
       { key: 'prompt', type: 'text', required: false, max: 500, label: 'Ce qu’il faut ajouter (facultatif)', placeholder: 'Ex. : prolonger la plage et le ciel' },
     ],
-    usd: () => 0.15,
-    build: (v) => ({
+    request: (v) => ({
       prompt: `Outpaint: extend this image to fill the new frame, keeping the original content unchanged and seamless.${v.prompt ? ` ${v.prompt}.` : ''}`,
-      image_urls: [v.image], aspect_ratio: v.ratio, resolution: '2K', num_images: 1, output_format: 'png',
+      images: [v.image], ratio: v.ratio, size: '2K', count: 1,
     }),
-  },
+  }),
   {
     id: 'photo-restore',
     name: 'Restaurer une photo',
@@ -189,11 +206,11 @@ export const TOOLS = [
     usd: () => 0.04,
     build: (v) => ({ image_url: v.image, remove_scratches: true, enhance_resolution: true, fix_colors: v.colors }),
   },
-  {
+  editTool({
     id: 'product-photo',
     name: 'Photo produit pro',
-    output: 'image',
-    endpoint: 'fal-ai/nano-banana-pro/edit', // 0,15 $ l'image : détourage, nouveau décor et netteté en un seul passage
+    // Krea 3 par défaut : il garde le produit tel quel (texte, matières) en changeant le décor. Détourage, décor et netteté en un passage.
+    models: first('krea-3', ALL_EDIT),
     inputs: [
       { key: 'image', type: 'image', label: 'Photo du produit' },
       {
@@ -209,12 +226,11 @@ export const TOOLS = [
       { key: 'prompt', type: 'text', required: false, max: 500, label: 'Détails (facultatif)', placeholder: 'Ex. : avec des feuilles de bananier' },
       { key: 'ratio', type: 'select', label: 'Format', options: [opt('1:1', 'Carré 1:1'), opt('4:5', 'Post 4:5'), opt('9:16', 'Story 9:16')] },
     ],
-    usd: () => 0.15,
-    build: (v) => ({
-      prompt: `Professional product photo: cut out the product exactly as it is and place it on ${v.scene}${v.prompt ? `, ${v.prompt}` : ''}. Sharp focus, realistic lighting and shadows, e-commerce quality. Do not change the product.`,
-      image_urls: [v.image], aspect_ratio: v.ratio, resolution: '2K', num_images: 1, output_format: 'png',
+    request: (v) => ({
+      prompt: `Professional product photo: keep the product exactly as in the reference image (same shape, colours, materials, labels and text) and place it on ${v.scene}${v.prompt ? `, ${v.prompt}` : ''}. Sharp focus, realistic lighting and shadows, e-commerce quality. Do not change the product.`,
+      images: [v.image], ratio: v.ratio, size: '2K', count: 1,
     }),
-  },
+  }),
 
   // ── Vidéo ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
   {
@@ -456,7 +472,7 @@ export function toolInputIssue(tool, inputs = {}, isFile = (v) => typeof v === '
       if (!isFile(v)) return `missing_${f.key}`
     } else if (LIST_TYPES.includes(f.type)) {
       if (!Array.isArray(v) || v.length < f.min || v.length > f.max || !v.every(isFile)) return `missing_${f.key}`
-    } else if (f.type === 'select') {
+    } else if (f.type === 'select' || f.type === 'model') {
       if (v != null && !f.options.some((o) => o.id === v)) return `invalid_${f.key}`
     } else if (f.type === 'number') {
       if (typeof v !== 'number' || !Number.isFinite(v) || v < f.min || v > f.max) return `invalid_${f.key}`
@@ -471,7 +487,7 @@ export function toolValues(tool, inputs = {}) {
   for (const f of tool.inputs) {
     const x = inputs[f.key]
     if (f.type === 'text') v[f.key] = (x ?? '').trim()
-    else if (f.type === 'select') {
+    else if (f.type === 'select' || f.type === 'model') {
       const o = f.options.find((o) => o.id === x) ?? f.options[0]
       v[f.key] = o.value === undefined ? o.id : o.value
     } else v[f.key] = x
@@ -483,3 +499,7 @@ export function toolValues(tool, inputs = {}) {
 export const toolCheck = (tool, inputs) => tool.check?.(toolValues(tool, inputs)) ?? null
 export const toolCost = (tool, inputs = {}) => toJetons(tool.usd(toolValues(tool, inputs)))
 export const toolInput = (tool, inputs = {}) => tool.build(toolValues(tool, inputs))
+/** Point d'accès fal d'un lancement : celui de l'outil, ou celui du modèle choisi (outils image au modèle choisi). */
+export const toolEndpoint = (tool, inputs = {}) => (typeof tool.endpoint === 'function' ? tool.endpoint(toolValues(tool, inputs)) : tool.endpoint)
+/** Modèle d'édition choisi pour un lancement (ou null pour un outil à point d'accès fixe). */
+export const toolModel = (tool, inputs = {}) => (tool.inputs.some((f) => f.type === 'model') ? findEditModel(toolValues(tool, inputs).model) : null)

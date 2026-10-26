@@ -381,6 +381,26 @@ test('outil du studio : un fichier hors du stockage fal est refusé sans débit 
   } finally { t.restore() }
 })
 
+test('outil image au modèle choisi : envoyé au point d’accès du modèle (Krea 3 par défaut), débité à son prix', async () => {
+  const sent = []
+  const t = setup((url, init) => { sent.push({ url, body: init?.body ? JSON.parse(init.body) : null }); return { body: queued } })
+  const image = 'https://v3b.fal.media/files/produit.png'
+  try {
+    const start = (await (await t.req('/wallet')).json()).balance
+    const res = await t.req('/jobs', post({ kind: 'tool', modelId: 'product-photo', inputs: { image, ratio: '1:1' } }))
+    assert.equal(res.status, 202)
+    assert.equal(sent[0].url, 'https://queue.fal.run/krea/v3/edit')
+    assert.deepEqual(sent[0].body.image_urls, [image])
+    assert.deepEqual(sent[0].body.image_size, { width: 1440, height: 1440 })
+    const kreaCost = start - (await res.json()).balance
+    const nb = await t.req('/jobs', post({ kind: 'tool', modelId: 'product-photo', inputs: { image, ratio: '1:1', model: 'nano-banana-pro' } }))
+    assert.equal(sent[1].url, 'https://queue.fal.run/fal-ai/nano-banana-pro/edit')
+    assert.equal(sent[1].body.resolution, '2K')
+    assert.ok(start - kreaCost - (await nb.json()).balance > kreaCost) // Nano Banana Pro coûte plus que Krea 3 ici
+    assert.equal((await (await t.req('/jobs', post({ kind: 'tool', modelId: 'product-photo', inputs: { image, model: 'inconnu' } }))).json()).error, 'invalid_option')
+  } finally { t.restore() }
+})
+
 test('outil limité en durée : un fichier non téléversé ici, ou trop long, est refusé avant le débit ; mesuré et court, il passe', async () => {
   const { mp4 } = await import('./media.test.js')
   let n = 0

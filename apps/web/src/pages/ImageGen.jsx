@@ -38,11 +38,12 @@ export default function ImageGen() {
   const hasJobs = jobs.some((j) => j.kind === 'image')
   const [modelId, setModelId] = useState(IMAGE_MODELS[0].id)
   const [styleId, setStyleId] = useState('none')
-  const [ratio, setRatio] = useState('Auto')
+  const [pickedRatio, setRatio] = useState('Auto')
   const [res, setRes] = useState('2K')
   const model = findModel(IMAGE_MODELS, modelId)
   const { caps } = model
   // Les valeurs choisies sont ramenées dans ce que le modèle courant accepte.
+  const ratio = caps.ratios.includes(pickedRatio) ? pickedRatio : caps.ratios[0] // Krea 3 n'a pas « Auto »
   const resolution = caps.resolutions.includes(res) ? res : caps.resolutions.includes('2K') ? '2K' : caps.resolutions[0]
   const n = Math.min(count, caps.maxImages)
   const cost = imageCost(model, resolution, n)

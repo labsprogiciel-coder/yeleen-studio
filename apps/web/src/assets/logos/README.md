@@ -1,7 +1,7 @@
 # Logos des modèles
 
 Fichiers tirés de [Lobe Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.95.1, licence MIT pour la collection).
-Les marques (Google, Google DeepMind, Black Forest Labs, ElevenLabs, Kuaishou, MiniMax, Lightricks, ByteDance) appartiennent à leurs propriétaires ;
+Les marques (Google, Google DeepMind, Krea, Qwen (Alibaba), Black Forest Labs, ElevenLabs, Kuaishou, MiniMax, Lightricks, ByteDance) appartiennent à leurs propriétaires ;
 elles servent ici à désigner le modèle utilisé, rien d'autre.
 
 | Fichier | Marque | Utilisé pour |
@@ -12,5 +12,7 @@ elles servent ici à désigner le modèle utilisé, rien d'autre.
 | `kling-color.svg` | Kling | Kling 3.0 Pro |
 | `minimax-color.svg` | MiniMax | H3 Max, H3 Max Turbo |
 | `lightricks.svg` | Lightricks (LTX) | LTX 2.3, 2.5 |
-| `bytedance-color.svg` | ByteDance | Seedance 2.5 (pas de logo propre au modèle dans la collection) |
+| `bytedance-color.svg` | ByteDance | Seedance 2.5 et Seedream 5 Pro (pas de logo propre aux modèles dans la collection) |
 | `deepmind-color.svg` | Google DeepMind | Veo 3.1 Lite (pas de logo propre au modèle dans la collection) |
+| `krea.svg` | Krea | Krea 3 |
+| `qwen-color.svg` | Qwen (Alibaba) | Qwen Image 3 |

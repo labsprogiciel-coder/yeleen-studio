@@ -11,6 +11,7 @@
     "./recipes": "./src/recipes.js",
     "./workflows": "./src/workflows.js",
     "./tools": "./src/tools.js",
+    "./edit-models": "./src/editModels.js",
     "./packs": "./src/packs.js"
   },
   "scripts": {

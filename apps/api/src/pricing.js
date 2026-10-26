@@ -1,7 +1,7 @@
 import { AUDIO_MODELS, IMAGE_MODELS, TRYON_MODEL, VIDEO_MODELS, findModel, imageCost, tryonCost, videoCost, voiceCost } from '@studio/catalog'
 import { findWorkflow, workflowCost, workflowInputIssue } from '@studio/catalog/workflows'
 import { VOICES } from '@studio/catalog/voices'
-import { findTool, isFileField, toolCheck, toolCost, toolInputIssue } from '@studio/catalog/tools'
+import { findTool, isFileField, toolCheck, toolCost, toolEndpoint, toolInputIssue } from '@studio/catalog/tools'
 
 const LANGS = ['auto', 'fr', 'en', 'es', 'pt', 'de', 'ar']
 
@@ -27,7 +27,8 @@ export function priceJob(req) {
       return { ok: false, error: isFileField(f) ? 'invalid_file_url' : f.type === 'text' ? 'invalid_text' : 'invalid_option' }
     }
     if (toolCheck(t, inputs)) return { ok: false, error: 'invalid_option' }
-    return { ok: true, model: t, count: 1, cost: toolCost(t, inputs) }
+    // Point d'accès résolu ici : celui du modèle d'édition choisi pour les outils image qui en proposent plusieurs.
+    return { ok: true, model: { ...t, endpoint: toolEndpoint(t, inputs) }, count: 1, cost: toolCost(t, inputs) }
   }
   if (req.kind === 'tryon') { // essayage : deux photos déposées chez fal
     if (req.modelId !== TRYON_MODEL.id) return { ok: false, error: 'unknown_model' }
