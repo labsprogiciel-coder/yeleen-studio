@@ -133,7 +133,9 @@ export const VIDEO_MODELS = [
     name: 'MiniMax H3 Max',
     tagline: 'Fidèle au prompt, texte seul ou image de départ',
     tags: ['Texte seul possible', 'Image de fin', 'Piste audio importable', '1080p'],
-    price: { usd: 0.0325, per: 's' }, // fal : 0,0325 $/s (le catalogue disait 0,05)
+    // fal : 0,0325 / 0,052 / 0,104 $ la seconde en 480p / 768p / 1080p (le catalogue comptait 0,0325 partout, donc vendait le 1080p
+    // sous son coût). Chaque image fournie (départ, fin) ajoute environ 0,02 $ de jetons de référence, couverts par la marge.
+    price: { per: 's', byRes: { '480p': 0.0325, '768p': 0.052, '1080p': 0.104 } },
     verified: true,
     caps: {
       duration: { min: 2, max: 10 }, // durée libre ; plafond non documenté : borne prudente
@@ -154,7 +156,7 @@ export const VIDEO_MODELS = [
     name: 'MiniMax H3 Max Turbo',
     tagline: 'La version rapide et économique pour itérer',
     tags: ['Rapide', 'Économique', 'Texte seul possible'],
-    price: { usd: 0.01625, per: 's' }, // fal : 0,01625 $/s (le catalogue disait 0,025)
+    price: { per: 's', byRes: { '480p': 0.01625, '768p': 0.026, '1080p': 0.052 } }, // fal, par résolution (comme H3 Max)
     verified: false, // prix lu ; capacités supposées identiques à H3 Max
     caps: {
       duration: { min: 2, max: 10 },

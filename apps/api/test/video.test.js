@@ -179,8 +179,10 @@ test('Seedance : limites et tâches', () => {
 test('Les prix du catalogue suivent les fournisseurs (fal le 17 oct. 2026, Runware le 19 oct. 2026)', async () => {
   const { findModel, IMAGE_MODELS } = await import('@studio/catalog')
   assert.equal(findModel(IMAGE_MODELS, 'flux-3').price.usd, 0.048)
-  assert.equal(m('h3-max').price.usd, 0.0325)
-  assert.equal(m('h3-max-turbo').price.usd, 0.01625)
+  assert.deepEqual(m('h3-max').price.byRes, { '480p': 0.0325, '768p': 0.052, '1080p': 0.104 })
+  assert.deepEqual(m('h3-max-turbo').price.byRes, { '480p': 0.01625, '768p': 0.026, '1080p': 0.052 })
+  // Le prix suit la résolution : le 1080p n'est plus vendu au tarif du 480p
+  assert.ok(videoCost(m('h3-max'), 5, '1080p') > 3 * videoCost(m('h3-max'), 5, '480p'))
   assert.deepEqual(seed.price.byRes, { '480p': 0.102, '720p': 0.23, '1080p': 0.614 })
   assert.deepEqual(seed.fal.price.byRes, { '480p': 0.2205, '720p': 0.473, '1080p': 1.164 }) // chaînes (workflows fal)
   assert.deepEqual([m('kling-3-pro').price.usd, m('kling-3-pro').price.silentUsd], [0.168, 0.112])
