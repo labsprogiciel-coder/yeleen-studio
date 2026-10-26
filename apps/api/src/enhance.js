@@ -1,8 +1,9 @@
 import { IMAGE_MODELS, VIDEO_MODELS, findModel } from '@studio/catalog'
+import { findWorkflow } from '@studio/catalog/workflows'
 
 /**
  * « Améliorer » : réécrit l'instruction d'une génération (vidéo ou image) pour le modèle choisi, ou écrit le script d'une voix off
- * à partir d'une idée (`kind: 'voice'`), par un modèle de texte chez fal
+ * à partir d'une idée (`kind: 'voice'`), ou précise un texte d'un modèle de la page Modèles (`kind: 'template'`), par un modèle de texte chez fal
  * (point d'accès `openrouter/router`, modèle réglable par ENHANCE_MODEL). Gratuit, avec un quota par jour et par compte.
  * Les références « @mot » de l'utilisateur doivent survivre telles quelles : sans elles, la génération perdrait ses images.
  */
@@ -46,8 +47,37 @@ Règles :
 - Écris uniquement ce que la voix doit dire.`
 const LANG_NAMES = { fr: 'français', en: 'anglais', es: 'espagnol', pt: 'portugais', de: 'allemand', ar: 'arabe' }
 
-/** Entrée du point d'accès fal : réécrire `text` (vidéo, image) ou en tirer un script de voix off (voice). */
-export function enhanceInput({ text, kind, modelId, language }, model = ENHANCE_MODEL) {
+// Modèles (workflows) : chaque texte a son rôle (une météo, un sujet, une idée de logo) ; la réponse garde la forme de son exemple.
+const SYSTEM_TEMPLATE = `Tu précises le texte qu'un utilisateur a saisi dans un champ d'un modèle de génération (image ou vidéo).
+Règles :
+- Garde la langue de l'utilisateur (français par défaut), son idée et le rôle du champ : ne réponds qu'à ce que le champ demande.
+- Ajoute des détails visuels utiles (matières, couleurs, lumière, ambiance), sans changer le sujet.
+- Respecte la longueur demandée : une expression courte reste une expression courte.
+- Recopie à l'identique chaque mot commençant par @.
+- Texte continu : pas de titre, pas de liste, pas de guillemets, pas de commentaire.`
+
+/** Le champ texte d'un workflow que « Améliorer » peut préciser, ou null (inconnu, pas un texte, ou `enhance: false`). */
+export function templateField(workflowId, key) {
+  const f = findWorkflow(workflowId)?.inputs.find((x) => x.key === key)
+  return f && f.type === 'text' && f.enhance !== false ? f : null
+}
+
+/** Entrée du point d'accès fal : réécrire `text` (vidéo, image), en tirer un script de voix off (voice) ou préciser le texte d'un modèle (template). */
+export function enhanceInput({ text, kind, modelId, language, workflowId, field }, model = ENHANCE_MODEL) {
+  if (kind === 'template') {
+    const w = findWorkflow(workflowId)
+    const f = templateField(workflowId, field)
+    if (!f) return null
+    const short = (f.example ?? '').split(/\s+/).filter(Boolean).length <= 8
+    const size = short ? 'une expression courte de 3 à 15 mots' : '1 à 3 phrases, 20 à 60 mots'
+    return {
+      model,
+      system_prompt: SYSTEM_TEMPLATE,
+      prompt: `Modèle « ${w.name} » : ${w.blurb}.\nChamp « ${f.label} »${f.example ? `, exemple : ${f.example}` : ''}.\nLongueur : ${size}.\nTexte à préciser :\n${text}`,
+      temperature: 0.7,
+      max_tokens: 300,
+    }
+  }
   if (kind === 'voice') {
     const lang = LANG_NAMES[language]
     return {

@@ -13,7 +13,7 @@ export const RECIPES = WORKFLOWS.map((w) => {
     icon: 'vid',
     workflow: w,
     photos: w.inputs.filter((f) => !isText(f)).map((f) => ({ key: f.key, label: f.label, list: f.type === 'images' })),
-    texts: w.inputs.filter(isText).map((f) => ({ key: f.key, label: f.label, placeholder: f.placeholder, min: f.type === 'lines' ? f.min : f.required ? 1 : 0, max: f.max, lines: f.type === 'lines', example: f.example })),
+    texts: w.inputs.filter(isText).map((f) => ({ key: f.key, label: f.label, placeholder: f.placeholder, min: f.type === 'lines' ? f.min : f.required ? 1 : 0, max: f.max, lines: f.type === 'lines', example: f.example, enhance: f.type === 'text' && f.enhance !== false })),
   }
 })
 export const recipeById = (id) => RECIPES.find((r) => r.id === id)

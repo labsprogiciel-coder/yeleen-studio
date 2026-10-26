@@ -129,11 +129,12 @@ const ENHANCE_ERRORS = {
 }
 
 /**
- * Bouton étincelle « Améliorer » : réécrit le texte pour le modèle choisi (voir apps/api/src/enhance.js), ou, pour une voix off
- * (`kind: 'voice'`), écrit le script à partir de l'idée tapée, dans `language`. Annuler dans le message de confirmation.
- * `enhance` : { value, onChange, kind: 'video' | 'image' | 'voice', modelId?, language? }. Absent sans l'API (moteur simulé).
+ * Bouton étincelle « Améliorer » : réécrit le texte pour le modèle choisi (voir apps/api/src/enhance.js), écrit le script d'une
+ * voix off à partir de l'idée tapée (`kind: 'voice'`, dans `language`), ou précise le texte d'un champ de la page Modèles
+ * (`kind: 'template'`, `workflowId` et `field`). Annuler dans le message de confirmation.
+ * `enhance` : { value, onChange, kind, …ce que l'API attend pour ce kind }. Absent sans l'API (moteur simulé).
  */
-function EnhanceButton({ value, onChange, kind, modelId, language }) {
+function EnhanceButton({ value, onChange, kind, ...spec }) {
   const [busy, setBusy] = useState(false)
   const toast = useToast()
   if (!apiEnabled) return null
@@ -144,7 +145,7 @@ function EnhanceButton({ value, onChange, kind, modelId, language }) {
     const before = value
     setBusy(true)
     try {
-      const { text } = await api.enhance({ text: before, kind, modelId, language })
+      const { text } = await api.enhance({ text: before, kind, ...spec })
       onChange(text)
       toast(voice ? 'Script écrit.' : 'Texte amélioré.', { label: 'Annuler', onClick: () => onChange(before) })
     } catch (e) {

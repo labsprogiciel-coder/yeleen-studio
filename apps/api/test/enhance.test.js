@@ -99,3 +99,26 @@ test('voix off : sans langue choisie (détection auto), aucune langue imposée',
   assert.doesNotMatch(i.prompt, /, en /)
   assert.match(i.system_prompt, /n'invente ni prix/)
 })
+
+test('modèles : le texte d’un champ est précisé selon son rôle et la longueur de son exemple', async () => {
+  const t = setup(() => ({ body: { output: 'pluie battante, éclairs au loin, ciel gris ardoise' } }))
+  try {
+    const res = await t.req({ text: 'orage', kind: 'template', workflowId: 'weather', field: 'weather' })
+    assert.equal(res.status, 200)
+    assert.equal((await res.json()).text, 'pluie battante, éclairs au loin, ciel gris ardoise')
+    assert.match(t.calls[0].body.prompt, /Modèle « Météo à la carte »/)
+    assert.match(t.calls[0].body.prompt, /Champ « Météo »/)
+    assert.match(t.calls[0].body.prompt, /expression courte/)
+  } finally { t.restore() }
+})
+
+test('modèles : un champ à garder tel quel ou inconnu est refusé sans appel ni quota', async () => {
+  const t = setup(() => ({ body: { output: 'x' } }), { MAX_ENHANCE_PER_DAY: '1' })
+  try {
+    assert.deepEqual(await (await t.req({ text: 'le sac sur la table', kind: 'template', workflowId: 'replace-anything', field: 'text_prompt' })).json(), { error: 'not_enhanceable' })
+    assert.equal((await t.req({ text: 'Dakar', kind: 'template', workflowId: 'city-journey', field: 'cities' })).status, 400)
+    assert.equal((await t.req({ text: 'un logo', kind: 'template', workflowId: 'inconnu', field: 'prompt' })).status, 400)
+    assert.equal(t.calls.length, 0)
+    assert.equal((await t.req({ text: 'un logo de maquis', kind: 'template', workflowId: 'logo_maker', field: 'prompt' })).status, 200) // le quota est intact
+  } finally { t.restore() }
+})
