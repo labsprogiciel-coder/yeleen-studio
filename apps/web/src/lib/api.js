@@ -51,6 +51,8 @@ export const api = {
   assets: (q = {}) => request(`/assets?${new URLSearchParams(q)}`),
   deleteAsset: (id) => request(`/assets/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   favorites: () => request('/favorites'),
+  /** Vidéos à refaire (Modèles), publiques. */
+  templates: () => request('/templates'),
   setFavorite: (scope, id, on) => request(`/favorites/${scope}/${encodeURIComponent(id)}`, { method: on ? 'PUT' : 'DELETE' }),
   ledger: (q = {}) => request(`/ledger?${new URLSearchParams(q)}`),
   /** « Améliorer » : réécrit l'instruction pour le modèle choisi ({ text, kind: 'video' | 'image', modelId }) ; gratuit, quota par jour. */

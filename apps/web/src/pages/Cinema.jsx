@@ -35,6 +35,7 @@ import { modelItem } from '../lib/modelItem.js'
 import { useToast } from '../lib/toasts.jsx'
 import useDocumentTitle from '../lib/useDocumentTitle.js'
 import useGenSettings from '../lib/useGenSettings.js'
+import { useTemplates } from '../lib/templates.js'
 import '../styles/shell.css'
 import '../styles/library.css'
 import '../styles/cinema.css'
@@ -79,6 +80,19 @@ export default function Cinema() {
   const [task, setTask] = useState('refs') // modèle à références : 'refs' (références), 'next' (prolonger la vidéo jointe), 'edit' (la modifier)
   const vmodel = findModel(VIDEO_LIST, videoId)
   const s = useGenSettings(vmodel)
+  // Vidéos à refaire : un clic ouvre « Références et montage » avec le modèle et les réglages de l'exemple. Ils sont appliqués une
+  // fois le modèle en place (`tpl`), après que useGenSettings a ramené ses valeurs à celles du modèle (son effet passe avant).
+  const templates = useTemplates(VIDEO_LIST)
+  const [tpl, setTpl] = useState(null)
+  useEffect(() => {
+    if (!tpl || vmodel.id !== tpl.modelId) return
+    s.replacePlans((vmodel.caps.multiShot ? tpl.plans : tpl.plans.slice(0, 1)).map((p) => ({ text: p.text, dur: p.dur })))
+    if (tpl.resolution && s.resolutions?.includes(tpl.resolution)) s.setRes(tpl.resolution)
+    if (tpl.ratio && s.ratios?.includes(tpl.ratio)) s.setRatio(tpl.ratio)
+    if (vmodel.caps.audio !== 'always') s.setSound(tpl.sound)
+    toast(tpl.photo ? `« ${tpl.name} » est prêt : ajoutez ${tpl.photo.charAt(0).toLowerCase()}${tpl.photo.slice(1)} dans Références, puis générez.` : `« ${tpl.name} » est prêt : changez le texte si vous voulez, puis générez.`)
+    setTpl(null)
+  }, [tpl, vmodel.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // Image
   const [imageId, setImageId] = useState(IMAGE_MODELS[0].id)
   const imodel = findModel(IMAGE_MODELS, imageId)
@@ -105,6 +119,9 @@ export default function Cinema() {
     const t = tabOf(id)
     setTab(t); setTool(id)
     if (t === 'recipe') pickRecipe(id)
+  }
+  const recreate = (t) => {
+    openTool('video-refs'); setTask('refs'); setAtt([]); setVideoId(t.modelId); setTpl(t); setView('creations')
   }
   // Changer d'onglet montre la liste de ses outils.
   const openTab = (t) => { setError(''); setTab(t); setTool(null) }
@@ -335,7 +352,7 @@ export default function Cinema() {
       </header>
 
       <div className="cx-body">
-      <ToolPanel tab={tab} onTab={openTab} tool={tool} onTool={openTool} onTemplates={() => setView('templates')}>
+      <ToolPanel tab={tab} onTab={openTab} tool={tool} onTool={openTool} onTemplates={() => setView('templates')} videoTemplates={templates.length}>
       {tool === 'video-gen'   && <CreateLeft key="generate" mode="generate" banner={false} addLabel="Ajouter un média" />}
       {tool === 'modify-video' && <CreateLeft key="edit"    mode="edit"     banner={false} />}
       {tool === 'voice-generator' && <AudioPanel key={tool} tool={tool} onTool={openTool} />}
@@ -351,6 +368,8 @@ export default function Cinema() {
         onView={setView}
         tool={tool}
         onPickTemplate={(id) => { openTool(id); setView('creations') }}
+        templates={templates}
+        onRecreate={recreate}
         top={runBusy ? <RunStrip jobs={runJobs} onDone={() => setRun(null)} /> : null}
       />
       </div>

@@ -4,9 +4,10 @@ import { TAB_LABEL, TOOLS, toolById } from './tools.js'
 
 /**
  * Panneau gauche : les onglets (Image, Vidéo, Modèles), puis la liste des outils de l'onglet, ou l'outil ouvert avec son
- * en-tête (retour aux outils) et son formulaire (`children`).
+ * en-tête (retour aux outils) et son formulaire (`children`). Les vidéos à refaire (`videoTemplates` : leur nombre) n'y ont qu'une
+ * ligne, en tête de l'onglet Modèles : leur liste s'allonge, elle s'affiche dans la zone principale.
  */
-export default function ToolPanel({ tab, onTab, tool, onTool, onTemplates, children }) {
+export default function ToolPanel({ tab, onTab, tool, onTool, onTemplates, videoTemplates = 0, children }) {
   const onTabKeys = useTabKeys()
   const tabs = Object.keys(TOOLS)
   const open = tool ? toolById(tool) : null
@@ -34,6 +35,14 @@ export default function ToolPanel({ tab, onTab, tool, onTool, onTemplates, child
           </>
         ) : (
           <ul className="cx-list" aria-label={`Outils ${TAB_LABEL[tab]}`}>
+            {tab === 'recipe' && videoTemplates > 0 && (
+              <li>
+                <button type="button" onClick={onTemplates}>
+                  <span className="cx-li-ic video"><Icon name="film" size={20} /></span>
+                  <span><b>Vidéos à refaire</b><small>{videoTemplates} vidéo{videoTemplates > 1 ? 's' : ''} d’exemple, à refaire avec vos images ou vos mots · Tout voir</small></span>
+                </button>
+              </li>
+            )}
             {TOOLS[tab].map((t) => (
               <li key={t.id}>
                 <button type="button" onClick={() => onTool(t.id)}>

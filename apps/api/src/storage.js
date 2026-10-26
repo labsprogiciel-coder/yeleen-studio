@@ -11,6 +11,7 @@ const EXT = {
 }
 const PREFIX = 'outputs/'
 const UPLOADS = 'uploads/'
+const TEMPLATES = 'templates/' // vidéos à refaire (Modèles) : déposées à la main, lues par tous
 
 export const keyFor = (accountId, jobId, index, contentType) => `${PREFIX}${accountId}/${jobId}/${index}.${EXT[contentType] ?? 'bin'}`
 /** Clé d'un fichier importé : l'identifiant de l'asset est aléatoire, l'adresse n'est donc pas devinable. */
@@ -45,7 +46,7 @@ export async function storeOutputs({ bucket, origin, accountId, jobId, outputs, 
 
 /** Réponse HTTP pour un fichier du bucket, avec prise en charge de l'en-tête Range. */
 export async function serveFile(bucket, key, headers) {
-  if (!bucket || !(key.startsWith(PREFIX) || key.startsWith(UPLOADS)) || key.includes('..')) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+  if (!bucket || ![PREFIX, UPLOADS, TEMPLATES].some((p) => key.startsWith(p)) || key.includes('..')) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
   const ranged = headers.get('range')
   const obj = await bucket.get(key, ranged ? { range: headers } : undefined)
   if (!obj) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
