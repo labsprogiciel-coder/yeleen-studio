@@ -5,8 +5,16 @@
 import { splitLines } from '@studio/catalog/workflows'
 import { toolInput } from '@studio/catalog/tools'
 import { dims } from '@studio/catalog/edit-models'
+import { styleText } from '@studio/catalog/styles'
 
-const joinPrompt = (req) => [req.prompt?.trim(), req.styleHint, req.brandStyle].filter(Boolean).join(', ')
+// `style` : identifiant d'un style du catalogue (voir packages/catalog/src/styles.js), traduit ici en consigne.
+const joinPrompt = (req) => [req.prompt?.trim(), req.styleHint, styleText(req.style), req.brandStyle].filter(Boolean).join(', ')
+/** Texte d'un plan (prompts par plan) suivi du style ; `max` coupe le texte du plan, jamais le style. */
+const shotText = (req, t, max = Infinity) => {
+  const style = styleText(req.style)
+  return style ? `${t.trim().slice(0, Math.max(0, max - style.length - 2))}, ${style}` : t.trim().slice(0, max)
+}
+const videoText = (req) => [req.plans.map((p) => p.text.trim()).filter(Boolean).join(' '), styleText(req.style), req.brandStyle].filter(Boolean).join(', ')
 const ratio = (r) => (!r || r === 'Auto' ? 'auto' : r)
 
 /** Les champs d'un workflow : textes nettoyés, et chaque champ `lines` réparti sur les entrées que fal attend. */
@@ -96,7 +104,7 @@ const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !=
 export const endpointFor = (model, req = {}) => (model.provider === 'runware' ? model.air : model.textEndpoint && !req.startImageUrl ? model.textEndpoint : model.endpoint)
 
 function videoInput(model, req) {
-  const text = [req.plans.map((p) => p.text.trim()).filter(Boolean).join(' '), req.brandStyle].filter(Boolean).join(', ')
+  const text = videoText(req)
   const secs = req.secs
   const res = req.resolution
   const sound = req.sound !== false
@@ -120,7 +128,7 @@ function videoInput(model, req) {
       start_image_url: req.startImageUrl,
       end_image_url: req.startImageUrl ? req.endImageUrl : undefined,
       prompt: multi ? undefined : text,
-      multi_prompt: multi ? shots.map((p) => ({ prompt: p.text.trim().slice(0, 512), duration: Math.round(p.dur) })) : undefined,
+      multi_prompt: multi ? shots.map((p) => ({ prompt: shotText(req, p.text, 512), duration: Math.round(p.dur) })) : undefined,
       duration: multi ? undefined : Math.round(secs),
       resolution: res,
       aspect_ratio: req.startImageUrl ? undefined : req.ratio, // avec une image, le format suit l'image
@@ -226,7 +234,7 @@ function klingRunware(req, text) {
     positivePrompt: multi ? undefined : cite(text),
     duration: Math.round(req.secs),
     inputs: clean({ frameImages: frames(req.startImageUrl, req.endImageUrl), elements: listOrNone(elements) }),
-    providerSettings: { klingai: clean({ sound: req.sound !== false, multiPrompt: multi ? req.plans.map((p) => ({ prompt: cite(p.text.trim()), duration: Math.round(p.dur) })) : undefined }) },
+    providerSettings: { klingai: clean({ sound: req.sound !== false, multiPrompt: multi ? req.plans.map((p) => ({ prompt: cite(shotText(req, p.text)), duration: Math.round(p.dur) })) : undefined }) },
   })
 }
 
@@ -244,7 +252,7 @@ function veoRunware(req, text) {
 
 /** Tâche `videoInference` envoyée à Runware pour un modèle du catalogue servi par Runware (sans `taskType` ni `taskUUID`). */
 export function runwareInput(model, req) {
-  const text = [req.plans.map((p) => p.text.trim()).filter(Boolean).join(' '), req.brandStyle].filter(Boolean).join(', ')
+  const text = videoText(req)
   const build = model.id === 'seedance-2-5' ? seedanceRunware : model.id.startsWith('kling-3') ? klingRunware : model.id === 'veo-3-1-lite' ? veoRunware : null
   if (!build) throw new Error(`modèle Runware sans entrée : ${model.id}`)
   return { model: model.air, ...build(req, text) }

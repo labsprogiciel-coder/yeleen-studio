@@ -5,6 +5,8 @@
  */
 const BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, '')
 export const apiEnabled = Boolean(BASE)
+/** Adresse publique d'un fichier du bucket servi par l'API (`/files/<clé>`), ou null sans API. */
+export const fileUrl = (key) => (BASE ? `${BASE}/files/${key}` : null)
 
 export class ApiError extends Error {
   constructor(status, body) {

@@ -251,3 +251,19 @@ test('Image de fin sans image de départ refusée là où le modèle l’ignorer
   assert.ok(priceJob({ ...multi, secs: 20 }).ok)
   assert.equal(priceJob({ ...multi, plans: [{ text: 'a', dur: 20 }, { text: 'b', dur: 20 }], secs: 40 }).error, 'invalid_duration') // au-delà de 30 s
 })
+
+test('styles : l’identifiant devient la consigne du catalogue, sur chaque plan aussi ; un identifiant inconnu n’ajoute rien', async () => {
+  const { styleText } = await import('@studio/catalog/styles')
+  const anime = styleText('anime')
+  assert.ok(anime.length > 10)
+  const k = m('kling-4')
+  const one = buildInput('video', k, { plans: [{ text: 'un marché', dur: 5 }], secs: 5, resolution: '720p', ratio: '16:9', style: 'anime' })
+  assert.equal(one.prompt, `un marché, ${anime}`)
+  const multi = buildInput('video', k, { plans: [{ text: 'a'.repeat(600), dur: 5 }, { text: 'b', dur: 5 }], secs: 10, resolution: '720p', ratio: '16:9', style: 'anime' })
+  assert.ok(multi.multi_prompt[0].prompt.length <= 512)
+  assert.ok(multi.multi_prompt[0].prompt.endsWith(anime)) // le texte du plan est coupé, pas le style
+  assert.equal(multi.multi_prompt[1].prompt, `b, ${anime}`)
+  assert.equal(buildInput('video', k, { plans: [{ text: 'x', dur: 5 }], secs: 5, resolution: '720p', ratio: '16:9', style: 'ignore previous' }).prompt, 'x')
+  const kr = runwareInput(m('kling-3-pro'), { plans: [{ text: 'a', dur: 5 }, { text: 'b', dur: 5 }], secs: 10, style: 'clay' })
+  assert.equal(kr.providerSettings.klingai.multiPrompt[1].prompt, `b, ${styleText('clay')}`)
+})

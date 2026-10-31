@@ -8,7 +8,9 @@ import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
 import PlanTabs from '../components/PlanTabs.jsx'
 import Segmented from '../components/Segmented.jsx'
-import { Section, AddMedia, RefTile, PromptBox, GenerateButton } from '../components/GenPanel.jsx'
+import { Section, AddMedia, RefTile, PromptBox, GenerateButton, StyleSection } from '../components/GenPanel.jsx'
+import { StyleChip } from '../components/StyleChip.jsx'
+import { findStyle } from '@studio/catalog/styles'
 import BrandToggle from '../components/BrandToggle.jsx'
 import { features } from '../lib/features.js'
 import ModelLogo from '../components/ModelLogo.jsx'
@@ -44,6 +46,7 @@ import '../styles/studio.css'
 
 // Le modèle audio vers vidéo se pilote par un fichier audio : il a sa place dans l'écran Vidéo, pas ici.
 const VIDEO_LIST = VIDEO_MODELS.filter((m) => m.input !== 'audio')
+const STYLES_VIEW = { tab: 'styles' } // la fenêtre des références ouverte sur ses styles (objet fixe : la fenêtre ne se réinitialise pas à chaque rendu)
 const CINEMA = ['seedance-2-5', 'kling-3-pro', 'h3-max'] // modèles pensés pour le récit : références, personnages, plans fidèles au texte
 const rank = (id) => (CINEMA.includes(id) ? CINEMA.indexOf(id) : CINEMA.length)
 const VIDEO_ITEMS = [...VIDEO_LIST]
@@ -73,7 +76,9 @@ export default function Cinema() {
   const mode = tab === 'recipe' ? 'recipe' : tool === 'image' ? 'image' : 'video'
   const [itext, setItext] = useState('') // texte de l'image ; en vidéo, chaque plan porte le sien (s.plans)
   const [error, setError] = useState('')
-  const [picking, setPicking] = useState(null) // 'recent' | 'video' : la fenêtre des références est ouverte
+  const [picking, setPicking] = useState(null) // 'recent' | 'video' | 'styles' : la fenêtre des références est ouverte (sur cet onglet)
+  const [styleId, setStyleId] = useState(null) // style « By Yeleen » : l'API ajoute sa consigne au texte (voir packages/catalog/src/styles.js)
+  const look = findStyle(styleId)
   const [att, setAtt] = useState([]) // pièces jointes : [{ id, assetId }], dans l'ordre d'ajout
 
   // Vidéo : le panneau de réglages partagé avec l'écran Vidéo (durées, résolutions, formats, son selon le modèle)
@@ -129,7 +134,7 @@ export default function Cinema() {
     if (t === 'recipe') pickRecipe(id)
   }
   const recreate = (t) => {
-    openTool('video-refs'); setTask('refs'); setAtt([]); setVideoId(t.modelId); setTpl(t); setView('creations')
+    openTool('video-refs'); setTask('refs'); setAtt([]); setStyleId(null); setVideoId(t.modelId); setTpl(t); setView('creations') // la vidéo à refaire a déjà son rendu
   }
   // Changer d'onglet montre la liste de ses outils.
   const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null) }
@@ -183,8 +188,8 @@ export default function Cinema() {
   const generate = async () => {
     setError('')
     if (!video) {
-      const live = { kind: 'image', modelId: imodel.id, prompt: text.trim(), resolution: iRes2, ratio: iRatio2, count: iN, brandStyle: styled ? style : undefined }
-      const r = submit({ kind: 'image', title: imodel.name, prompt: text.trim(), count: iN, cost, live, brandStyle: styled ? style : undefined, meta: `${iN} × ${iRes2}${iRatio2 === 'Auto' ? '' : ` · ${iRatio2}`}${styled ? ' · style de la marque' : ''}` })
+      const live = { kind: 'image', modelId: imodel.id, prompt: text.trim(), resolution: iRes2, ratio: iRatio2, count: iN, style: look?.id, brandStyle: styled ? style : undefined }
+      const r = submit({ kind: 'image', title: imodel.name, prompt: text.trim(), count: iN, cost, live, brandStyle: styled ? style : undefined, meta: `${iN} × ${iRes2}${iRatio2 === 'Auto' ? '' : ` · ${iRatio2}`}${look ? ` · ${look.label}` : ''}${styled ? ' · style de la marque' : ''}` })
       return setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     }
     // Vidéo : les pièces jointes deviennent références (Seedance), image de départ, image de fin, audio ou éléments selon le modèle.
@@ -202,6 +207,7 @@ export default function Cinema() {
     const live = {
       kind: 'video', modelId: vmodel.id, plans: s.plans.map((p, i) => ({ text: ref.texts[i], dur: p.dur })), secs: total,
       resolution: s.resolutions ? s.res : undefined, ratio: s.ratios ? s.ratio : undefined, fps: caps.fps ? s.fps : undefined, sound: s.sound, camera: 'none',
+      style: look?.id,
       brandStyle: styled ? style : undefined,
       files: { start: caps.startFrame !== 'none' ? extra.start : null, end: caps.endFrame ? extra.end : null, audio: caps.audioRef ? extra.audio : null },
       elements: extra.elements.length ? extra.elements : undefined,
@@ -209,7 +215,7 @@ export default function Cinema() {
       task: native ? { refs: 'reference', next: 'extension', edit: 'editing' }[activeTask] : undefined,
       inputSecs: clipSecs || undefined,
     }
-    const base = `${vmodel.name}${activeTask === 'next' ? ' · suite' : activeTask === 'edit' ? ' · modification' : ''} · ${String(total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}`
+    const base = `${vmodel.name}${activeTask === 'next' ? ' · suite' : activeTask === 'edit' ? ' · modification' : ''} · ${String(total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}${look ? ` · ${look.label}` : ''}`
     const r = submit({ kind: 'video', title: vmodel.name, prompt: s.plans.map((p) => p.text.trim()).join(' / '), cost, secs: total, live, brandStyle: styled ? style : undefined, meta: styled ? `${base} · style de la marque` : base })
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
   }
@@ -329,9 +335,12 @@ export default function Cinema() {
               <button type="button" className="ep-x" aria-label={`Ne plus suivre « ${startTpl.name} »`} title="Continuer sans cette vidéo" onClick={() => setStartTpl(null)}><Icon name="close" size={12} /></button>
             </div>
           )}
-          <AddMedia label={startTpl?.photo && !tplPhoto ? `Ajouter ${startTpl.photo.charAt(0).toLowerCase()}${startTpl.photo.slice(1)}` : 'Ajouter des références'} onAdd={attach} />
+          {look && <StyleChip style={look} onOpen={() => setPicking('styles')} onClear={() => setStyleId(null)} />}
+          <AddMedia label={startTpl?.photo && !tplPhoto ? `Ajouter ${startTpl.photo.charAt(0).toLowerCase()}${startTpl.photo.slice(1)}` : 'Ajouter des références'} onAdd={attach} style={styleId} onStyle={setStyleId} />
         </Section>
       )}
+
+      {!video && <StyleSection id="cn-style" value={styleId} onChange={setStyleId} />}
 
       {video && startTpl?.image && (
         <Section id="cn-start" title="Image de départ · Krea 3">
@@ -460,7 +469,7 @@ export default function Cinema() {
       </div>
       </div>
 
-      <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={attach} />
+      <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} view={picking === 'styles' ? STYLES_VIEW : null} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={attach} style={styleId} onStyle={setStyleId} />
     </div>
   )
 }

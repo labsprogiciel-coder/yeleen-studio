@@ -16,6 +16,8 @@ import { useBrand } from '../lib/brand.jsx'
 import { DURATIONS, QUALITY, MODES, next } from '../lib/useGenSettings.js'
 import '../styles/edit-panel.css'
 import Cauri from './Cauri.jsx'
+import { StyleChip } from './StyleChip.jsx'
+import { findStyle } from '@studio/catalog/styles'
 
 /** Section à intitulé en petites capitales. */
 export function Section({ id, title, children }) {
@@ -87,11 +89,32 @@ export function DropTile({ icon, label, accept, file, asset = null, onFile, disa
   )
 }
 
+const STYLES_VIEW = { tab: 'styles' } // objet fixe : la fenêtre ne se réinitialise pas à chaque rendu
+
+/**
+ * Section « Style » d'un formulaire sans fenêtre de références (Générateur d'images, Générateur de vidéos, Modifier la vidéo) :
+ * « Choisir un style » ouvre la fenêtre sur l'onglet Styles seul ; le style choisi s'affiche ensuite, × le retire.
+ * `value` : identifiant du style ou null ; `onChange(id | null)`. L'API ajoute la consigne du style au texte.
+ */
+export function StyleSection({ id = 'ep-style', value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const look = findStyle(value)
+  return (
+    <Section id={id} title="Style">
+      {look
+        ? <StyleChip style={look} onOpen={() => setOpen(true)} onClear={() => onChange(null)} />
+        : <button type="button" className="ep-add" aria-haspopup="dialog" onClick={() => setOpen(true)}><span className="ep-chips" aria-hidden="true"><i><Icon name="palette" size={14} /></i></span><span>Choisir un style</span></button>}
+      <AssetModal open={open} view={STYLES_VIEW} onClose={() => setOpen(false)} style={value} onStyle={onChange} />
+    </Section>
+  )
+}
+
 /**
  * Ligne « Ajouter un média » : ouvre la bibliothèque pour choisir plusieurs fichiers d'un coup. `onAdd(assets)` les reçoit
- * (Cinéma les cite dans le plan, voir pages/video/CreateTab.jsx) ; `accept` limite les types proposés.
+ * (Cinéma les cite dans le plan, voir pages/video/CreateTab.jsx) ; `accept` limite les types proposés. `style` / `onStyle` ajoutent
+ * l'onglet Styles à la fenêtre (voir AssetModal).
  */
-export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*,video/*,audio/*' }) {
+export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*,video/*,audio/*', style, onStyle }) {
   const [picking, setPicking] = useState(false)
   return (
     <>
@@ -101,7 +124,7 @@ export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*
         </span>
         <span>{label}</span>
       </button>
-      <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={(assets) => onAdd?.(assets)} accept={accept} />
+      <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={(assets) => onAdd?.(assets)} accept={accept} style={style} onStyle={onStyle} />
     </>
   )
 }
@@ -373,6 +396,7 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
     const liveSpec = live && {
       kind: 'video', modelId: live.model?.id, plans: s.plans.map(({ dur }, i) => ({ text: ref ? ref.texts[i] : s.plans[i].text, dur })), secs: Math.round(secs * 10) / 10,
       resolution: s.resolutions ? s.res : undefined, ratio: s.ratios ? s.ratio : undefined, fps: c?.fps ? s.fps : undefined, sound: s.sound, camera: s.camera,
+      style: live?.style,
       brandStyle: styled ? style : undefined,
       files: c ? { start: c.startFrame !== 'none' ? (live.files?.start ?? extra.start) : null, end: c.endFrame ? (live.files?.end ?? extra.end) : null, audio: c.audioRef ? (live.files?.audio ?? extra.audio) : null } : (live.files ?? {}),
       elements: extra.elements?.length ? extra.elements : undefined,
