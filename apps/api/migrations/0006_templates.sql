@@ -1,11 +1,13 @@
 -- Vidéos à refaire (Modèles) : une vidéo d'exemple et les réglages du générateur de vidéos qui la reproduisent. Les fichiers sont dans
 -- R2 (bucket des fichiers) sous templates/<id>/ ; l'API les sert par /files/templates/…
+-- Une base où la table existait sans les colonnes blurb ou image : ALTER TABLE templates ADD COLUMN … (fait à la main en production).
 CREATE TABLE IF NOT EXISTS templates (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
   blurb       TEXT,                         -- une phrase : ce que la vidéo montre, affichée au survol
   category    TEXT NOT NULL,                -- regroupement à l'écran (pub, produit, fête…)
   video_key   TEXT NOT NULL,                -- clé R2 de la vidéo d'exemple (aperçu léger en H.264, sans le son)
+  image       TEXT,                         -- consigne de l'image de départ (Krea 3), que le modèle vidéo anime ; NULL : aucune
   model_id    TEXT NOT NULL,                -- modèle du générateur de vidéos (catalogue)
   plans       TEXT NOT NULL,                -- JSON : [{ text, dur }], un plan ou plusieurs
   resolution  TEXT,

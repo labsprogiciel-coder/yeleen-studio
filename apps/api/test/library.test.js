@@ -149,7 +149,7 @@ test('Vidéos à refaire : publiques, publiées seulement, dans l’ordre, fichi
     assert.match(res.headers.get('cache-control'), /max-age=300/)
     assert.deepEqual(res.body.templates.map((x) => x.id), ['fete', 'maquis'])
     assert.deepEqual(res.body.templates[1], {
-      id: 'maquis', name: 'Pub de maquis', blurb: 'Le soir au maquis, puis le plat en gros plan', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4',
+      id: 'maquis', name: 'Pub de maquis', blurb: 'Le soir au maquis, puis le plat en gros plan', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4', image: null,
       modelId: 'kling-4', plans: [{ text: 'Un maquis le soir', dur: 5 }, { text: 'Gros plan sur le plat', dur: 5 }], resolution: '1080p', ratio: '9:16', sound: true, photo: 'Une photo de votre plat',
     })
 
@@ -174,6 +174,12 @@ test('seeds/templates.sql : se charge, et chaque vidéo à refaire est une deman
       const secs = x.plans.reduce((n, p) => n + p.dur, 0)
       const r = priceJob({ kind: 'video', modelId: x.modelId, plans: x.plans, secs, resolution: x.resolution, ratio: x.ratio, sound: x.sound, ...(x.photo ? { startImageUrl: 'https://v3b.fal.media/files/a.png' } : {}) })
       assert.ok(r.ok, `${x.id} : ${r.error}`)
+      // L'image de départ (Krea 3) : retouche de la photo, ou image créée du texte seul, au format de la vidéo
+      assert.ok(x.image, `${x.id} : image`)
+      const img = x.photo
+        ? priceJob({ kind: 'tool', modelId: 'template-image', inputs: { model: 'krea-3', images: ['https://v3b.fal.media/files/a.png'], prompt: x.image, ratio: x.ratio } })
+        : priceJob({ kind: 'image', modelId: 'krea-3', prompt: x.image, resolution: '2K', ratio: x.ratio, count: 1 })
+      assert.ok(img.ok, `${x.id} (image) : ${img.error}`)
     }
   } finally { t.restore() }
 })

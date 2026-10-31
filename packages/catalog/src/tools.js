@@ -234,6 +234,20 @@ export const TOOLS = [
     }),
   }),
 
+  // Vidéos à refaire : l'image de départ, faite par Krea 3 à partir de la photo de l'utilisateur et de la consigne image du modèle
+  // de vidéo, au format de la vidéo. Pas dans la liste des outils : ouvert par une vidéo à refaire (voir Cinema.jsx).
+  editTool({
+    id: 'template-image',
+    name: 'Image de départ',
+    models: ['krea-3'],
+    inputs: [
+      { key: 'images', type: 'images', min: 1, max: 3, label: 'Vos photos' },
+      { key: 'prompt', type: 'text', required: true, max: 2000, label: 'Image' },
+      { key: 'ratio', type: 'select', label: 'Format', options: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map((r) => opt(r, r)) },
+    ],
+    request: (v) => ({ prompt: v.prompt, images: v.images, ratio: v.ratio, size: '2K', count: 1 }),
+  }),
+
   // ── Vidéo ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
   {
     id: 'clip-editor',

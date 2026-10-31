@@ -107,3 +107,5 @@
 .ep-step button{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border:0;border-radius:8px;background:none;color:var(--ink);font:inherit;font-size:16px;cursor:pointer}
 .ep-step button:hover:not(:disabled){background:var(--fill)}
 .ep-step button:disabled{color:var(--ink-4);cursor:not-allowed}
+.ep-start{width:100%;margin-top:8px;min-height:44px}
+.ep-start .ep-price{margin-left:auto}

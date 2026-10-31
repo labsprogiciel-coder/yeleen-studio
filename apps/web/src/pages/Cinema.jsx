@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../lib/icons.jsx'
 import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, priceLabel, videoCost } from '@studio/catalog'
 import { recipeById, recipeCost } from '@studio/catalog/recipes'
+import { findTool, toolCost } from '@studio/catalog/tools'
 import { SkipLink } from '../components/Headers.jsx'
 import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
@@ -84,13 +85,19 @@ export default function Cinema() {
   // fois le modèle en place (`tpl`), après que useGenSettings a ramené ses valeurs à celles du modèle (son effet passe avant).
   const templates = useTemplates(VIDEO_LIST)
   const [tpl, setTpl] = useState(null)
+  // Image de départ d'une vidéo à refaire (en deux temps, comme chez Krea) : Krea 3 la crée à partir de la photo jointe (ou du texte
+  // seul), puis elle remplace la photo dans Références et devient l'image de départ de la vidéo. `start` : { jobId, key, photoId }.
+  const [startTpl, setStartTpl] = useState(null) // la vidéo à refaire ouverte, tant que l'outil l'est
+  const [imgText, setImgText] = useState('')
+  const [start, setStart] = useState(null)
   useEffect(() => {
     if (!tpl || vmodel.id !== tpl.modelId) return
     s.replacePlans((vmodel.caps.multiShot ? tpl.plans : tpl.plans.slice(0, 1)).map((p) => ({ text: p.text, dur: p.dur })))
     if (tpl.resolution && s.resolutions?.includes(tpl.resolution)) s.setRes(tpl.resolution)
     if (tpl.ratio && s.ratios?.includes(tpl.ratio)) s.setRatio(tpl.ratio)
     if (vmodel.caps.audio !== 'always') s.setSound(tpl.sound)
-    toast(tpl.photo ? `« ${tpl.name} » est prêt : ajoutez ${tpl.photo.charAt(0).toLowerCase()}${tpl.photo.slice(1)} dans Références, puis générez.` : `« ${tpl.name} » est prêt : changez le texte si vous voulez, puis générez.`)
+    setStartTpl(tpl); setImgText(tpl.image ?? ''); setStart(null)
+    toast(tpl.image ? (tpl.photo ? `« ${tpl.name} » est prêt : ajoutez ${tpl.photo.charAt(0).toLowerCase()}${tpl.photo.slice(1)} dans Références, créez l’image de départ, puis générez.` : `« ${tpl.name} » est prêt : créez l’image de départ, puis générez.`) : tpl.photo ? `« ${tpl.name} » est prêt : ajoutez ${tpl.photo.charAt(0).toLowerCase()}${tpl.photo.slice(1)} dans Références, puis générez.` : `« ${tpl.name} » est prêt : changez le texte si vous voulez, puis générez.`)
     setTpl(null)
   }, [tpl, vmodel.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // Image
@@ -115,6 +122,7 @@ export default function Cinema() {
   // Un outil s'ouvre dans son onglet ; un modèle (workflow) prépare aussi son formulaire.
   const openTool = (id) => {
     setError('')
+    if (id !== 'video-refs') setStartTpl(null) // l'image de départ d'une vidéo à refaire ne vaut que pour elle
     if (!id) return setTool(null)
     const t = tabOf(id)
     setTab(t); setTool(id)
@@ -124,7 +132,7 @@ export default function Cinema() {
     openTool('video-refs'); setTask('refs'); setAtt([]); setVideoId(t.modelId); setTpl(t); setView('creations')
   }
   // Changer d'onglet montre la liste de ses outils.
-  const openTab = (t) => { setError(''); setTab(t); setTool(null) }
+  const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null) }
   useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ, même si Cinéma est déjà ouvert
     if (pending?.target !== 'cinema.recipe') return
     const h = take('cinema.recipe')
@@ -206,6 +214,56 @@ export default function Cinema() {
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
   }
 
+  // Image de départ (vidéo à refaire) : Krea 3 retouche la photo jointe au format de la vidéo, ou crée l'image du texte seul.
+  const TPL_TOOL = findTool('template-image')
+  const KREA = findModel(IMAGE_MODELS, 'krea-3')
+  const tplPhoto = attached.find((x) => x.asset.kind === 'image')
+  const tplRatio = startTpl?.ratio && startTpl.ratio !== 'auto' ? startTpl.ratio : '16:9'
+  const startCost = startTpl?.photo
+    ? toolCost(TPL_TOOL, { model: 'krea-3', images: ['fichier'], prompt: imgText, ratio: tplRatio })
+    : imageCost(KREA, '2K', 1)
+  const startJob = start && jobs.find((j) => j.id === start.jobId)
+  const startBusy = useRef(false) // envoi en cours (lecture de la photo comprise) : un second clic ne lance pas une seconde image payante
+  const makeStart = async () => {
+    if (startBusy.current) return
+    startBusy.current = true
+    try { await sendStart() } finally { startBusy.current = false }
+  }
+  const sendStart = async () => {
+    setError('')
+    const prompt = imgText.trim()
+    if (!prompt) return setError('Décrivez l’image de départ.')
+    let r
+    if (startTpl.photo) {
+      if (!tplPhoto) return setError(`Ajoutez d’abord ${startTpl.photo.charAt(0).toLowerCase()}${startTpl.photo.slice(1)} dans Références.`)
+      let file
+      try { file = await getFile(tplPhoto.asset) } catch { return setError('La photo est introuvable : choisissez-la de nouveau.') }
+      r = submit({ kind: 'image', title: `${startTpl.name} · image de départ`, prompt, cost: startCost, meta: `Krea 3 · ${tplRatio}`,
+        live: { kind: 'tool', modelId: 'template-image', inputs: { model: 'krea-3', prompt, ratio: tplRatio }, inputFiles: { images: [file] } } })
+    } else {
+      r = submit({ kind: 'image', title: `${startTpl.name} · image de départ`, prompt, cost: startCost, count: 1, meta: `Krea 3 · ${tplRatio}`,
+        live: { kind: 'image', modelId: 'krea-3', prompt, resolution: '2K', ratio: tplRatio, count: 1 } })
+    }
+    if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    setStart({ jobId: r.job.id, key: r.job.key, photoId: tplPhoto?.id ?? null })
+  }
+  // Image prête : elle prend la place de la photo dans Références (la première image jointe devient l'image de départ).
+  const startAsset = start && pool.find((a) => a.id === `${start.key}-0`)
+  useEffect(() => {
+    if (!startAsset) return
+    setAtt((x) => [{ id: crypto.randomUUID(), assetId: startAsset.id }, ...x.filter((y) => y.id !== start.photoId)])
+    setStart(null)
+    toast('Image de départ prête : elle est dans Références. Générez la vidéo.')
+  }, [startAsset]) // eslint-disable-line react-hooks/exhaustive-deps
+  const startFailed = startJob && (startJob.status === 'FAILED' || startJob.status === 'CANCELED')
+  useEffect(() => { // échec (remboursé par le serveur) ou annulation : on peut relancer
+    if (!startFailed) return
+    setStart(null)
+    setError(startJob.status === 'FAILED'
+      ? 'L’image de départ n’a pas pu être créée (vous avez été remboursé) : réessayez ou changez la consigne.'
+      : 'L’image de départ a été annulée : relancez-la quand vous voulez.')
+  }, [startFailed]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Suite, Avant, Modifier : ces gestes partent d'une vidéo, ils reprennent l'outil de l'écran Vidéo avec celle que vous avez jointe.
   const fromClip = (id) => {
     if (id === 'refs') return
@@ -264,6 +322,25 @@ export default function Cinema() {
             </div>
           )}
           <AddMedia label="Ajouter des références" onAdd={attach} />
+        </Section>
+      )}
+
+      {video && startTpl?.image && (
+        <Section id="cn-start" title="Image de départ · Krea 3">
+          <p className="tf-hint">
+            {startTpl.photo
+              ? `Krea 3 crée l’image de départ de « ${startTpl.name} » à partir de ${tplPhoto ? 'votre photo' : startTpl.photo.charAt(0).toLowerCase() + startTpl.photo.slice(1) + ' (à ajouter dans Références)'} ; la vidéo l’anime ensuite.`
+              : `Krea 3 crée l’image de départ de « ${startTpl.name} » ; la vidéo l’anime ensuite.`}
+          </p>
+          <PromptBox canClear={Boolean(imgText)} onClear={() => setImgText('')} clearLabel="Effacer l’image de départ"
+            enhance={{ value: imgText, onChange: setImgText, ...(startTpl.photo ? { kind: 'edit', modelId: 'krea-3' } : { kind: 'image', modelId: 'krea-3' }) }}>
+            <MentionTextarea mentions={false} value={imgText} onChange={(t) => { setImgText(t); setError('') }} aria-label="Image de départ" rows={3} />
+          </PromptBox>
+          <button type="button" className="ep-chip ep-start" disabled={Boolean(start) || (startTpl.photo && !tplPhoto)} onClick={makeStart}>
+            <Icon name="sparkle" size={16} />
+            {start ? 'Création de l’image…' : 'Créer l’image de départ'}
+            <span className="ep-price">{jetons(startCost)} cauris</span>
+          </button>
         </Section>
       )}
 
