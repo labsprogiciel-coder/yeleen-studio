@@ -1,6 +1,7 @@
 import Icon from '../../lib/icons.jsx'
 import Menu from '../../components/Menu.jsx'
-import { Section, DropTile, AddMedia, citeAssets, PlanSection, OptionChips, GenerateBar } from '../../components/GenPanel.jsx'
+import { Section, DropTile, AddMedia, citeAssets, PlanSection, OptionChips, GenerateBar, StyleSection } from '../../components/GenPanel.jsx'
+import { findStyle } from '@studio/catalog/styles'
 import useGenSettings from '../../lib/useGenSettings.js'
 import useMediaSecs from '../../lib/useMediaSecs.js'
 import { VIDEO_MODELS, findModel, priceLabel } from '@studio/catalog'
@@ -52,6 +53,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
   const model = findModel(models, modelId)
   const { caps } = model
   const [files, setFiles] = useState({})
+  const [styleId, setStyleId] = useState(null) // style « By Yeleen » : l'API ajoute sa consigne au texte
   const setFile = (key) => (f) => setFiles((o) => ({ ...o, [key]: f }))
 
   // Un asset envoyé depuis la bibliothèque : on l'installe dans la bonne entrée et, si besoin, on change de modèle.
@@ -87,7 +89,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
       ? (Number.isNaN(audioSecs) ? 'Ce fichier audio n’a pas pu être lu.' : `Votre audio dure ${String(audioSecs).replace('.', ',')} s : il doit durer entre ${range.min} et ${range.max} s.`)
       : null
   const needsText = !(caps.startFrame === 'optional' && caps.audioRef === 'required' && files.start) // avec une image, le prompt devient facultatif
-  const meta = `${model.name} · ${String(s.total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}${s.ratios && s.ratio !== 'auto' ? ` · ${s.ratio}` : ''}${caps.fps ? ` · ${s.fps} i/s` : ''}`
+  const meta = `${model.name} · ${String(s.total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}${s.ratios && s.ratio !== 'auto' ? ` · ${s.ratio}` : ''}${caps.fps ? ` · ${s.fps} i/s` : ''}${styleId ? ` · ${findStyle(styleId).label}` : ''}`
 
   return (
     <div className="ep" {...panel}>
@@ -124,6 +126,8 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
         )}
       </Section>
 
+      <StyleSection value={styleId} onChange={setStyleId} />
+
       <PlanSection
         s={s}
         mentions={{ files }}
@@ -140,7 +144,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
         needsText={needsText}
         brand
         secs={mode === 'edit' ? Math.max(4, Math.ceil(sourceSecs || 0)) : s.total}
-        live={{ model, files, source: files.source, sourceSecs: sourceSecs || 0, task: mode === 'edit' ? 'editing' : undefined }}
+        live={{ model, files, source: files.source, sourceSecs: sourceSecs || 0, task: mode === 'edit' ? 'editing' : undefined, style: styleId ?? undefined }}
       />
     </div>
   )

@@ -27,3 +27,4 @@ export function StyleChip({ style, onOpen, onClear }) {
     </div>
   )
 }
+

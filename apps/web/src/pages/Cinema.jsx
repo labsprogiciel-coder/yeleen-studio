@@ -8,7 +8,7 @@ import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
 import PlanTabs from '../components/PlanTabs.jsx'
 import Segmented from '../components/Segmented.jsx'
-import { Section, AddMedia, RefTile, PromptBox, GenerateButton } from '../components/GenPanel.jsx'
+import { Section, AddMedia, RefTile, PromptBox, GenerateButton, StyleSection } from '../components/GenPanel.jsx'
 import { StyleChip } from '../components/StyleChip.jsx'
 import { findStyle } from '@studio/catalog/styles'
 import BrandToggle from '../components/BrandToggle.jsx'
@@ -340,13 +340,7 @@ export default function Cinema() {
         </Section>
       )}
 
-      {!video && (
-        <Section id="cn-style" title="Style">
-          {look
-            ? <StyleChip style={look} onOpen={() => setPicking('styles')} onClear={() => setStyleId(null)} />
-            : <button type="button" className="ep-add" aria-haspopup="dialog" onClick={() => setPicking('styles')}><span className="ep-chips" aria-hidden="true"><i><Icon name="palette" size={14} /></i></span><span>Choisir un style</span></button>}
-        </Section>
-      )}
+      {!video && <StyleSection id="cn-style" value={styleId} onChange={setStyleId} />}
 
       {video && startTpl?.image && (
         <Section id="cn-start" title="Image de départ · Krea 3">
@@ -475,7 +469,7 @@ export default function Cinema() {
       </div>
       </div>
 
-      <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} view={picking === 'styles' ? STYLES_VIEW : null} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={video ? attach : undefined} style={styleId} onStyle={setStyleId} />
+      <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} view={picking === 'styles' ? STYLES_VIEW : null} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={attach} style={styleId} onStyle={setStyleId} />
     </div>
   )
 }
