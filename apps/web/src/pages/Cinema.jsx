@@ -223,7 +223,13 @@ export default function Cinema() {
     ? toolCost(TPL_TOOL, { model: 'krea-3', images: ['fichier'], prompt: imgText, ratio: tplRatio })
     : imageCost(KREA, '2K', 1)
   const startJob = start && jobs.find((j) => j.id === start.jobId)
+  const startBusy = useRef(false) // envoi en cours (lecture de la photo comprise) : un second clic ne lance pas une seconde image payante
   const makeStart = async () => {
+    if (startBusy.current) return
+    startBusy.current = true
+    try { await sendStart() } finally { startBusy.current = false }
+  }
+  const sendStart = async () => {
     setError('')
     const prompt = imgText.trim()
     if (!prompt) return setError('Décrivez l’image de départ.')
@@ -250,11 +256,13 @@ export default function Cinema() {
     toast('Image de départ prête : elle est dans Références. Générez la vidéo.')
   }, [startAsset]) // eslint-disable-line react-hooks/exhaustive-deps
   const startFailed = startJob && (startJob.status === 'FAILED' || startJob.status === 'CANCELED')
-  useEffect(() => { // échec (remboursé par le serveur) : on peut relancer
+  useEffect(() => { // échec (remboursé par le serveur) ou annulation : on peut relancer
     if (!startFailed) return
     setStart(null)
-    setError('L’image de départ n’a pas pu être créée (vous avez été remboursé) : réessayez ou changez la consigne.')
-  }, [startFailed])
+    setError(startJob.status === 'FAILED'
+      ? 'L’image de départ n’a pas pu être créée (vous avez été remboursé) : réessayez ou changez la consigne.'
+      : 'L’image de départ a été annulée : relancez-la quand vous voulez.')
+  }, [startFailed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Suite, Avant, Modifier : ces gestes partent d'une vidéo, ils reprennent l'outil de l'écran Vidéo avec celle que vous avez jointe.
   const fromClip = (id) => {
