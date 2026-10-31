@@ -63,7 +63,8 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   const onTabKeys = useTabKeys()
   // Sans `onAdd` mais avec `onStyle` (générateur d'images, qui ne prend pas de références) : l'onglet Styles seul.
   const tabs = onStyle && browse ? TABS.filter((t) => t.id === 'styles') : TABS.filter((t) => (t.id !== 'yeleen' || features.catalog) && (t.id !== 'styles' || onStyle))
-  const [tab, setTab] = useState('library')
+  const [tabChoice, setTab] = useState('library')
+  const tab = tabs.some((t) => t.id === tabChoice) ? tabChoice : tabs[0].id // un onglet absent ici (Styles seul, image) : le premier
   const [subs, setSubs] = useState({ library: initialSub, yeleen: 'all', favs: 'all', styles: 'all' })
   const [origin, setOrigin] = useState('all')
   const [sort, setSort] = useState('recent')
