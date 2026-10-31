@@ -251,6 +251,7 @@ export default function Cinema() {
   const startAsset = start && pool.find((a) => a.id === `${start.key}-0`)
   useEffect(() => {
     if (!startAsset) return
+    if (!startTpl) return setStart(null) // vidéo à refaire quittée entre-temps : l'image reste dans Créations, pas dans Références
     setAtt((x) => [{ id: crypto.randomUUID(), assetId: startAsset.id }, ...x.filter((y) => y.id !== start.photoId)])
     setStart(null)
     toast('Image de départ prête : elle est dans Références. Générez la vidéo.')
@@ -321,7 +322,14 @@ export default function Cinema() {
               ))}
             </div>
           )}
-          <AddMedia label="Ajouter des références" onAdd={attach} />
+          {startTpl && (
+            <div className="ep-from">
+              <video src={`${startTpl.video}#t=0.1`} muted loop playsInline preload="metadata" aria-hidden="true" onMouseEnter={(e) => e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => e.currentTarget.pause()} />
+              <span><small>D’après la vidéo</small><b>{startTpl.name}</b></span>
+              <button type="button" className="ep-x" aria-label={`Ne plus suivre « ${startTpl.name} »`} title="Continuer sans cette vidéo" onClick={() => setStartTpl(null)}><Icon name="close" size={12} /></button>
+            </div>
+          )}
+          <AddMedia label={startTpl?.photo && !tplPhoto ? `Ajouter ${startTpl.photo.charAt(0).toLowerCase()}${startTpl.photo.slice(1)}` : 'Ajouter des références'} onAdd={attach} />
         </Section>
       )}
 
