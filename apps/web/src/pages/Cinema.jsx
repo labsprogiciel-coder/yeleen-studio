@@ -251,6 +251,7 @@ export default function Cinema() {
   const startAsset = start && pool.find((a) => a.id === `${start.key}-0`)
   useEffect(() => {
     if (!startAsset) return
+    if (!startTpl) return setStart(null) // vidéo à refaire quittée entre-temps : l'image reste dans Créations, pas dans Références
     setAtt((x) => [{ id: crypto.randomUUID(), assetId: startAsset.id }, ...x.filter((y) => y.id !== start.photoId)])
     setStart(null)
     toast('Image de départ prête : elle est dans Références. Générez la vidéo.')
