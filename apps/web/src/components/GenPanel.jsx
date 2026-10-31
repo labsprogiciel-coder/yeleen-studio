@@ -89,9 +89,10 @@ export function DropTile({ icon, label, accept, file, asset = null, onFile, disa
 
 /**
  * Ligne « Ajouter un média » : ouvre la bibliothèque pour choisir plusieurs fichiers d'un coup. `onAdd(assets)` les reçoit
- * (Cinéma les cite dans le plan, voir pages/video/CreateTab.jsx) ; `accept` limite les types proposés.
+ * (Cinéma les cite dans le plan, voir pages/video/CreateTab.jsx) ; `accept` limite les types proposés. `style` / `onStyle` ajoutent
+ * l'onglet Styles à la fenêtre (voir AssetModal).
  */
-export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*,video/*,audio/*' }) {
+export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*,video/*,audio/*', style, onStyle }) {
   const [picking, setPicking] = useState(false)
   return (
     <>
@@ -101,7 +102,7 @@ export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*
         </span>
         <span>{label}</span>
       </button>
-      <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={(assets) => onAdd?.(assets)} accept={accept} />
+      <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={(assets) => onAdd?.(assets)} accept={accept} style={style} onStyle={onStyle} />
     </>
   )
 }

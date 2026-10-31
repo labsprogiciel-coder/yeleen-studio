@@ -115,3 +115,8 @@
 .ep-from small{font-size:12px;color:var(--ink-3)}
 .ep-from b{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ep-from .ep-x{top:50%;right:8px;transform:translateY(-50%)}
+/* Style choisi (StyleChip) : même ligne que « D'après la vidéo », vignette carrée ; toute la ligne rouvre le choix. */
+.st-thumb{position:relative;display:block;overflow:hidden}
+.st-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ep-style .st-thumb{flex:none;width:40px;height:40px;border-radius:8px}
+.ep-style .ep-x{z-index:1}

@@ -8,6 +8,8 @@ import { CATEGORIES, useCatalog } from '../../lib/catalog.jsx'
 import { features } from '../../lib/features.js'
 import { useToast } from '../../lib/toasts.jsx'
 import useTabKeys from '../../lib/useTabKeys.js'
+import { STYLES, STYLE_CATEGORIES } from '@studio/catalog/styles'
+import { StyleThumb } from '../StyleChip.jsx'
 import '../../styles/assetModal.css'
 
 const EMPTY = []
@@ -22,6 +24,8 @@ const TABS = [
   { id: 'library', label: 'Ma bibliothèque', icon: 'folder', subs: [{ id: 'recent', label: 'Récents' }, ...BY_KIND] },
   { id: 'yeleen', label: 'Bibliothèque Yeleen', icon: 'sparkle', subs: [{ id: 'all', label: 'Tout' }, ...CATEGORIES.map((c) => ({ id: c.id, label: c.label }))] },
   { id: 'favs', label: 'Favoris', icon: 'star', subs: BY_KIND },
+  // Seulement avec `onStyle` (Cinéma) : un rendu à appliquer au texte, pas un fichier (voir packages/catalog/src/styles.js).
+  { id: 'styles', label: 'Styles', icon: 'palette', subs: [{ id: 'all', label: 'Tout' }, ...STYLE_CATEGORIES] },
 ]
 
 /**
@@ -45,7 +49,11 @@ function acceptRule(accept) {
   return { kinds, ok: (a) => kinds.has(a.kind) && (!exact.length || !(a.type ?? a.contentType) || exact.includes(a.type ?? a.contentType)) }
 }
 
-export default function AssetModal({ open, onClose, onAdd, taken = [], initialSub = 'recent', view = null, accept = null, single = false }) {
+/**
+ * `style` / `onStyle(id | null)` (Cinéma) ajoutent l'onglet Styles : un toucher choisit le style (ou le retire s'il était choisi)
+ * et ferme la fenêtre.
+ */
+export default function AssetModal({ open, onClose, onAdd, taken = [], initialSub = 'recent', view = null, accept = null, single = false, style = null, onStyle = null }) {
   const ref = useRef(null)
   const assetsCtx = useAssets()
   const { assets, addUpload, update, remove, restore, purge } = assetsCtx
@@ -53,9 +61,10 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   const catalog = useCatalog()
   const toast = useToast()
   const onTabKeys = useTabKeys()
-  const tabs = TABS.filter((t) => t.id !== 'yeleen' || features.catalog)
+  // Sans `onAdd` mais avec `onStyle` (générateur d'images, qui ne prend pas de références) : l'onglet Styles seul.
+  const tabs = onStyle && browse ? TABS.filter((t) => t.id === 'styles') : TABS.filter((t) => (t.id !== 'yeleen' || features.catalog) && (t.id !== 'styles' || onStyle))
   const [tab, setTab] = useState('library')
-  const [subs, setSubs] = useState({ library: initialSub, yeleen: 'all', favs: 'all' })
+  const [subs, setSubs] = useState({ library: initialSub, yeleen: 'all', favs: 'all', styles: 'all' })
   const [origin, setOrigin] = useState('all')
   const [sort, setSort] = useState('recent')
   const [picked, setPicked] = useState(() => new Set())
@@ -69,8 +78,8 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   useEffect(() => {
     const d = ref.current
     if (open && !d.open) {
-      const t = view?.tab ?? 'library'
-      const base = { library: view?.focus ? 'all' : onlyKind ?? initialSub, yeleen: 'all', favs: onlyKind ?? 'all' }
+      const t = view?.tab ?? (onStyle && browse ? 'styles' : 'library')
+      const base = { library: view?.focus ? 'all' : onlyKind ?? initialSub, yeleen: 'all', favs: onlyKind ?? 'all', styles: 'all' }
       setTab(t)
       setSubs(view?.sub ? { ...base, [t]: view.sub } : base)
       setOrigin(view?.origin ?? 'all')
@@ -80,7 +89,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
       d.showModal()
     }
     if (!open && d.open) d.close()
-  }, [open, initialSub, view, onlyKind])
+  }, [open, initialSub, view, onlyKind]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fichier à montrer (« Voir dans la bibliothèque ») : amené au centre et encadré.
   useEffect(() => {
@@ -94,10 +103,13 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   const favorite = (a) => (a.source === 'yeleen' ? catalog.favs.has(a.id) : a.starred)
   const toggleFav = (a) => (a.source === 'yeleen' ? catalog.toggleFav(a.id) : update(a.id, { starred: !a.starred }))
 
-  const counts = { library: assets.length, yeleen: yeleen.length, favs: [...assets, ...yeleen].filter(favorite).length }
+  const counts = { library: assets.length, yeleen: yeleen.length, favs: [...assets, ...yeleen].filter(favorite).length, styles: STYLES.length }
+  const styles = tab === 'styles' ? STYLES.filter((x) => sub === 'all' || x.category === sub) : EMPTY
+  const chooseStyle = (id) => { onStyle(id === style ? null : id); onClose() }
 
   const list = useMemo(() => {
     let out
+    if (tab === 'styles') return EMPTY
     if (tab === 'library') out = assets.filter((a) => origin === 'all' || a.source === origin)
     else if (tab === 'yeleen') out = yeleen
     else out = [...assets, ...yeleen].filter(favorite)
@@ -144,7 +156,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
     : tab === 'favs' ? 'Touchez l’étoile d’un élément pour le retrouver ici.' : 'Rien ici pour l’instant. Importez un fichier ou générez-en un.'
 
   return (
-    <dialog ref={ref} className="am-dlg" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()} aria-label={browse ? 'Bibliothèque' : 'Ajouter des références'}>
+    <dialog ref={ref} className="am-dlg" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()} aria-label={tab === 'styles' ? 'Choisir un style' : browse ? 'Bibliothèque' : 'Ajouter des références'}>
       <nav className="am-side" aria-label="Bibliothèques">
         <div role="tablist" aria-orientation="vertical" aria-label="Bibliothèque" onKeyDown={onTabKeys}>
           {tabs.map((t) => (
@@ -170,9 +182,11 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
                 <Icon name="filter" size={16} /><span>{origin === 'all' ? 'Origine' : ORIGINS.find((o) => o.id === origin).title}</span>
               </Menu>
             )}
-            <Menu items={SORTS} value={sort} onChange={setSort} label="Trier par" menuWidth={200} className="am-sort">
-              <Icon name="sort" size={16} /><span>Trier par</span>
-            </Menu>
+            {tab !== 'styles' && (
+              <Menu items={SORTS} value={sort} onChange={setSort} label="Trier par" menuWidth={200} className="am-sort">
+                <Icon name="sort" size={16} /><span>Trier par</span>
+              </Menu>
+            )}
             <button type="button" className="am-x" onClick={onClose} aria-label="Fermer"><Icon name="close" size={16} /></button>
           </div>
         </div>
@@ -185,6 +199,19 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
               <span>Importer un fichier</span>
             </label>
           )}
+          {styles.map((x) => {
+            const on = x.id === style
+            return (
+              <div key={x.id} className="am-cell">
+                <button type="button" className={`am-it am-st${on ? ' on' : ''}`} aria-pressed={on} onClick={() => chooseStyle(x.id)} aria-label={`Style ${x.label}${on ? ', choisi : toucher pour le retirer' : ''}`}>
+                  <StyleThumb style={x} />
+                  <span className="am-nm">{x.label}</span>
+                  {on && <span className="am-ck" aria-hidden="true"><Icon name="check" size={14} /></span>}
+                </button>
+                <span className="am-tag">Yeleen</span>
+              </div>
+            )
+          })}
           {list.map((a) => {
             const on = picked.has(a.id)
             const had = taken.includes(a.id)
@@ -217,7 +244,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
             )
           })}
         </div>
-        {list.length === 0 && empty && <p className="am-empty">{empty}</p>}
+        {tab !== 'styles' && list.length === 0 && empty && <p className="am-empty">{empty}</p>}
         {tab === 'yeleen' && catalog.status === 'error' && (
           <p className="am-empty">La bibliothèque Yeleen est indisponible pour l’instant. <button type="button" className="am-retry" onClick={catalog.reload}>Réessayer</button></p>
         )}
