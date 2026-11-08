@@ -10,12 +10,12 @@ import pubs from '../../assets/hero/pubs.jpg'
 export const THUMBS = Object.fromEntries(Object.entries(PREVIEW).map(([id, p]) => [id, p.poster]))
 
 /**
- * Les outils proposés tant que le drapeau `tools` est éteint : cinq par onglet (six en Image), pour tester avant d'ouvrir les autres.
+ * Les outils proposés tant que le drapeau `tools` est éteint : cinq par onglet (six en Image, sept en Vidéo), pour tester avant d'ouvrir les autres.
  * Pour en ajouter un, ajoutez son id ici ; `VITE_FEATURES=tools` les montre tous.
  */
 export const SHOWN = new Set([
   'image', 'editor', 'product-photo', 'remove-background', 'upscaler', 'photo-restore',
-  'video-gen', 'video-refs', 'speak', 'video-extend', 'video-reframe',
+  'video-gen', 'video-refs', 'speak', 'video-extend', 'video-reframe', 'motion-transfer', 'object-swap',
   'voice-generator', 'music-generator', 'sound-effect-generator', 'audio-isolation', 'voice-changer',
 ])
 
@@ -50,6 +50,8 @@ export const ALL_TOOLS = {
     { id: 'video-relight', icon: 'sun', title: 'Rééclairage vidéo', desc: 'Modifiez l’éclairage et l’atmosphère' },
     { id: 'video-extend', icon: 'extend', title: 'Prolonger la vidéo', desc: 'Ajoutez quelques secondes avant ou après le clip' },
     { id: 'video-reframe', icon: 'crop', title: 'Recadrer la vidéo', desc: 'Passez une vidéo en story, en carré ou en paysage' },
+    { id: 'motion-transfer', icon: 'user', title: 'Transfert de mouvement', desc: 'Votre personnage refait exactement les gestes d’une vidéo' },
+    { id: 'object-swap', icon: 'shapes', title: 'Remplacer un objet', desc: 'Remplacez un objet de la vidéo par votre produit' },
     { id: 'video-remove-bg', icon: 'cutout', title: 'Supprimer l’arrière-plan vidéo', desc: 'Isolez la personne ou l’objet de la vidéo' },
     { id: 'video-fps', icon: 'gauge', title: 'Fluidifier la vidéo', desc: 'Passez à 60 ou 120 images par seconde' },
     { id: 'video-hdr', icon: 'hdr', title: 'SDR vers HDR', desc: 'Plus de contraste et de couleurs, en HDR' },
@@ -73,6 +75,14 @@ export const tabOf = (id) => Object.keys(TOOLS).find((k) => TOOLS[k].some((t) =>
 
 /** Visite guidée de l'outil (zone principale, quand il n'y a encore rien à montrer). */
 export const TOURS = {
+  'motion-transfer': [
+    { img: montage, title: 'Joignez la vidéo du mouvement', text: 'Une danse, une démarche, un geste : de 4 à 20 s. Le prix suit sa durée.' },
+    { img: portrait, title: 'Ajoutez votre personnage', text: 'Une photo par personne de la vidéo (jusqu’à huit) : chacune refait exactement ses gestes.' },
+  ],
+  'object-swap': [
+    { img: pubs, title: 'Joignez la vidéo source', text: 'De 4 à 20 s, en 720p au moins de préférence : le cadre et le mouvement restent les mêmes.' },
+    { img: scene, title: 'Ajoutez votre objet', text: 'Jusqu’à huit photos du produit ; précisez au besoin quel objet remplacer.' },
+  ],
   'video-gen': [
     { img: scene, title: 'Partez d’une image', text: 'Ajoutez une image de départ (et de fin, si le modèle l’accepte), ou partez du texte seul.' },
     { img: montage, title: 'Décrivez le plan', text: 'Le mouvement, la lumière, ce qui se passe. Ajoutez des plans avec + pour une scène en plusieurs temps.' },

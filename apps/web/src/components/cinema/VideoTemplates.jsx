@@ -14,7 +14,7 @@ const GAP = 12
  * Grille des cartes, chacune au format de sa vidéo : les cartes vont, dans l'ordre, dans la colonne la moins haute (autant de
  * colonnes que la largeur en permet), pour que les verticales et les horizontales se mêlent sans trous.
  */
-export function VideoGrid({ templates, onPick }) {
+export function VideoGrid({ templates, onPick, selectedId = null }) {
   const box = useRef(null)
   const [cols, setCols] = useState(2)
   useEffect(() => {
@@ -35,7 +35,7 @@ export function VideoGrid({ templates, onPick }) {
   }, [templates, cols])
   return (
     <div className="cx-vts" ref={box} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-      {columns.map((c, i) => <ul key={i} className="cx-vcol">{c.items.map((t) => <TemplateVideoCard key={t.id} t={t} onPick={onPick} />)}</ul>)}
+      {columns.map((c, i) => <ul key={i} className="cx-vcol">{c.items.map((t) => <TemplateVideoCard key={t.id} t={t} onPick={onPick} selected={t.id === selectedId} />)}</ul>)}
     </div>
   )
 }
@@ -44,20 +44,21 @@ export function VideoGrid({ templates, onPick }) {
  * image au repos). Au survol ou au focus, elle se lit
  * sans le son et laisse paraître le titre, la description et « Refaire » (avec le prix). Sur écran tactile, ces textes restent visibles.
  */
-export function TemplateVideoCard({ t, onPick }) {
+export function TemplateVideoCard({ t, onPick, selected = false }) {
   const v = useRef(null)
   const play = () => { const el = v.current; if (el && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) el.play().catch(() => {}) }
   const stop = (e) => { if (e?.currentTarget.contains(e.relatedTarget)) return; const el = v.current; if (el) { el.pause(); el.currentTime = 0.1 } } // revient à la première image
   const id = `cx-vt-${t.id}`
   return (
-    <li className="cx-vt" style={{ aspectRatio: aspect(t.ratio) }} onMouseEnter={play} onMouseLeave={stop} onFocus={play} onBlur={stop} aria-labelledby={id}>
+    <li className={`cx-vt${selected ? ' on' : ''}`} style={{ aspectRatio: aspect(t.ratio) }} onMouseEnter={play} onMouseLeave={stop} onFocus={play} onBlur={stop} aria-labelledby={id}>
       <video ref={v} src={`${t.video}#t=0.1`} muted loop playsInline preload="metadata" aria-hidden="true" tabIndex={-1} />
       <span className="cx-by"><img src={icon} alt="" width="18" height="18" />Par Yeelen</span>
+      {selected && <span className="cx-vt-sel">Sélectionnée</span>}
       <div className="cx-vt-over">
         <h3 id={id}>{t.name}</h3>
         {t.blurb && <p>{t.blurb}</p>}
-        <button type="button" onClick={() => onPick(t)} aria-describedby={id}>
-          Refaire<span className="cx-vt-price"><Amount n={templateCost(t)} word /></span>
+        <button type="button" onClick={() => onPick(t)} aria-describedby={id} aria-pressed={selected}>
+          {selected ? 'Sélectionnée' : 'Refaire'}<span className="cx-vt-price"><Amount n={templateCost(t)} word /></span>
         </button>
       </div>
     </li>
@@ -65,7 +66,7 @@ export function TemplateVideoCard({ t, onPick }) {
 }
 
 /** Toutes les vidéos à refaire, filtrées par catégorie, par pages. */
-export default function VideoTemplates({ templates, onPick }) {
+export default function VideoTemplates({ templates, onPick, selectedId = null }) {
   const cats = useMemo(() => [...new Set(templates.map((t) => t.category))], [templates])
   const [cat, setCat] = useState('all')
   const [shown, setShown] = useState(PAGE)
@@ -82,8 +83,34 @@ export default function VideoTemplates({ templates, onPick }) {
           ))}
         </div>
       )}
-      <VideoGrid templates={list.slice(0, shown)} onPick={onPick} />
+      <VideoGrid templates={list.slice(0, shown)} onPick={onPick} selectedId={selectedId} />
       {list.length > shown && <button type="button" className="cx-more" onClick={() => setShown((n) => n + PAGE)}>Voir plus</button>}
+    </section>
+  )
+}
+
+/**
+ * La vidéo à refaire choisie, en tête de Créations : lisible (commandes, en boucle, sans le son au départ), au format de la vidéo,
+ * avec son nom, sa description et ce qu'il reste à faire dans le panneau. `onClear` : ne plus la suivre.
+ */
+export function PickedTemplate({ t, onClear }) {
+  const genjutsu = Boolean(t.genjutsu)
+  const vertical = dims(t.ratio)[1] > dims(t.ratio)[0]
+  const todo = genjutsu
+    ? `Ajoutez ${t.genjutsu.roles.length > 1 ? `une photo par personne (${t.genjutsu.roles.length})` : t.genjutsu.tool === 'object-swap' ? 'la photo du produit' : 'votre photo'} dans le panneau, puis générez.`
+    : t.photo ? `Ajoutez ${t.photo.charAt(0).toLowerCase()}${t.photo.slice(1)} dans le panneau, puis générez.` : 'Ajustez le texte si vous voulez, puis générez.'
+  return (
+    <section className={`cx-picked${vertical ? ' tall' : ''}`} aria-labelledby="cx-picked-h">
+      <div className="cx-picked-v" style={{ aspectRatio: aspect(t.ratio) }}>
+        <video key={t.id} src={t.video} controls autoPlay muted loop playsInline preload="auto" aria-label={`Vidéo d’exemple : ${t.name}`} />
+      </div>
+      <div className="cx-picked-t">
+        <small>Vidéo à refaire{genjutsu ? (t.genjutsu.tool === 'object-swap' ? ' · votre produit dans la vidéo' : ' · vous dans la vidéo') : ''}</small>
+        <h2 id="cx-picked-h">{t.name}</h2>
+        {t.blurb && <p>{t.blurb}</p>}
+        <p className="cx-picked-todo">{todo}</p>
+        {onClear && <button type="button" className="cx-picked-x" onClick={onClear}>Choisir une autre vidéo</button>}
+      </div>
     </section>
   )
 }

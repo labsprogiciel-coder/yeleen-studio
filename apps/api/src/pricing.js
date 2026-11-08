@@ -8,8 +8,10 @@ const LANGS = ['auto', 'fr', 'en', 'es', 'pt', 'de', 'ar']
 /**
  * Le prix d'une génération, calculé ici à partir du catalogue : le prix envoyé par l'application n'est qu'un aperçu.
  * Valide aussi les options. Retourne { ok, cost, model, count } ou { ok: false, error }.
+ * `secs` : durée mesurée du fichier d'un outil facturé à la seconde de sa source (`bySecs`, voir le catalogue des outils).
+ * `trusted` : adresse d'un fichier fourni par le serveur lui-même (source d'une vidéo à refaire), acceptée comme un fichier déposé.
  */
-export function priceJob(req) {
+export function priceJob(req, { secs, trusted } = {}) {
   if (req.kind === 'workflow') { // workflow fal : seulement ceux de la liste, entrées contrôlées, prix du catalogue
     const w = findWorkflow(req.modelId)
     if (!w) return { ok: false, error: 'unknown_model' }
@@ -21,14 +23,14 @@ export function priceJob(req) {
     const t = findTool(req.modelId)
     if (!t) return { ok: false, error: 'unknown_model' }
     const inputs = req.inputs ?? {}
-    const issue = toolInputIssue(t, inputs, (v) => typeof v === 'string' && FAL_FILE.test(v))
+    const issue = toolInputIssue(t, inputs, (v) => typeof v === 'string' && (FAL_FILE.test(v) || (trusted != null && v === trusted)))
     if (issue) {
       const f = t.inputs.find((x) => issue.endsWith(`_${x.key}`))
       return { ok: false, error: isFileField(f) ? 'invalid_file_url' : f.type === 'text' ? 'invalid_text' : 'invalid_option' }
     }
     if (toolCheck(t, inputs)) return { ok: false, error: 'invalid_option' }
     // Point d'accès résolu ici : celui du modèle d'édition choisi pour les outils image qui en proposent plusieurs.
-    return { ok: true, model: { ...t, endpoint: toolEndpoint(t, inputs) }, count: 1, cost: toolCost(t, inputs) }
+    return { ok: true, model: { ...t, endpoint: toolEndpoint(t, inputs) }, count: 1, cost: toolCost(t, inputs, secs) }
   }
   if (req.kind === 'tryon') { // essayage : deux photos déposées chez fal
     if (req.modelId !== TRYON_MODEL.id) return { ok: false, error: 'unknown_model' }

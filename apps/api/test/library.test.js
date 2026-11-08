@@ -268,3 +268,62 @@ test('import rejoué avec la même clé (réponse perdue) : le même asset, pas 
     assert.equal((await send(t, png, 'image/png', '?key=x')).status, 400) // clé trop courte
   } finally { t.restore() }
 })
+
+test('Vidéos à refaire par Genjutsu : listées avec outil, durée et rôles ; lancées avec la source et la consigne du serveur', async () => {
+  const { findTool, toolCost } = await import('@studio/catalog/tools')
+  const t = setup({ vars: { HIGGSFIELD_KEY: 'id:secret' } })
+  const sent = []
+  const fal = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith('https://api.higgsfield.ai/')) { sent.push({ url: String(url), body: JSON.parse(init.body) }); return Response.json({ status: 'queued', request_id: 'h1' }) }
+    return fal(url, init)
+  }
+  try {
+    t.db.raw.prepare(`INSERT INTO templates (id, name, blurb, category, video_key, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
+      VALUES ('duo', 'Duo', 'Deux danseurs', 'danse', 'templates/duo/video.mp4', 'motion-transfer', '[]', NULL, '9:16', 1, NULL, 0, 1, 1)`).run()
+    t.db.raw.prepare(`INSERT INTO template_genjutsu (template_id, tool, source_key, secs, prompt, roles) VALUES ('duo', 'motion-transfer', 'templates/duo/source.mp4', 8.4, 'WHO IS WHO: left = PERSON A, right = PERSON B.', '["Personne A, à gauche","Personne B, à droite"]')`).run()
+    const list = (await t.json('/templates')).body.templates
+    assert.deepEqual(list[0].genjutsu, { tool: 'motion-transfer', secs: 8.4, roles: ['Personne A, à gauche', 'Personne B, à droite'] })
+    assert.deepEqual(list[0].plans, [])
+    assert.equal('prompt' in list[0].genjutsu || 'sourceKey' in list[0].genjutsu, false) // la source et la consigne restent sur le serveur
+
+    const photo = (n) => `https://v3b.fal.media/files/b/x/p${n}.jpg`
+    const send = (body) => t.json('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'tool', modelId: 'motion-transfer', ...body }) })
+    assert.equal((await send({ template: 'duo', inputs: { images: [photo(1)], resolution: '480p' } })).body.error, 'invalid_file_url') // une photo par rôle
+    assert.equal((await send({ template: 'inconnu', inputs: { images: [photo(1), photo(2)] } })).body.error, 'unknown_template')
+    assert.equal((await send({ modelId: 'object-swap', template: 'duo', inputs: { images: [photo(1), photo(2)] } })).body.error, 'unknown_template')
+    // La vidéo et la consigne envoyées par l'application sont ignorées : celles du modèle font foi.
+    const ok = await send({ template: 'duo', inputs: { images: [photo(1), photo(2)], resolution: '480p', video: 'https://v3b.fal.media/files/b/x/autre.mp4', prompt: 'autre chose' }, requestId: 'genjutsu-0001' })
+    assert.equal(ok.status, 202)
+    assert.equal(ok.body.cost, toolCost(findTool('motion-transfer'), { resolution: '480p' }, 8.4)) // 9 s facturées
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0].url, 'https://api.higgsfield.ai/higgsfield/genjutsu/motion-transfer/v1.0')
+    assert.deepEqual(sent[0].body, { video_url: 'http://api/files/templates/duo/source.mp4', image_urls: [photo(1), photo(2)], resolution: '480p', prompt: 'WHO IS WHO: left = PERSON A, right = PERSON B.' })
+  } finally { globalThis.fetch = fal; t.restore() }
+})
+
+test('seeds/genjutsu.sql : se charge après templates.sql, et chaque vidéo Genjutsu est une demande valide sous le plafond', async () => {
+  const { priceJob } = await import('../src/pricing.js')
+  const { templateSource } = await import('../src/library.js')
+  const t = setup()
+  try {
+    for (const f of ['templates.sql', 'genjutsu.sql', 'genjutsu.sql']) t.db.exec(readFileSync(new URL(`../seeds/${f}`, import.meta.url), 'utf8')) // rejouable
+    const { body } = await t.json('/templates')
+    const g = body.templates.filter((x) => x.genjutsu)
+    assert.equal(g.length, 16)
+    assert.equal(body.templates.length, 34)
+    for (const x of g) {
+      assert.equal(x.modelId, x.genjutsu.tool)
+      const src = await templateSource(t.db, x.id)
+      assert.match(src.sourceKey, /^templates\/[\w-]+\/source\.mp4$/)
+      assert.ok(src.secs >= 4 && src.secs <= 20, `${x.id} : ${src.secs} s`)
+      assert.ok(src.prompt.length <= 2000, `${x.id} : consigne trop longue`)
+      for (const resolution of ['480p', '720p']) {
+        const url = `http://api/files/${src.sourceKey}`
+        const r = priceJob({ kind: 'tool', modelId: src.tool, inputs: { video: url, images: x.genjutsu.roles.map((_, i) => `https://v3b.fal.media/files/p${i}.jpg`), prompt: src.prompt, resolution } }, { secs: src.secs, trusted: url })
+        assert.ok(r.ok, `${x.id} : ${r.error}`)
+        assert.ok(r.cost <= 600, `${x.id} ${resolution} : ${r.cost}`)
+      }
+    }
+  } finally { t.restore() }
+})

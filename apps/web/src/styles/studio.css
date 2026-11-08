@@ -156,6 +156,23 @@
 @container (max-height:210px){.cx-vt-over p{display:none}.cx-vt-over{padding:12px;gap:4px}.cx-vt-over h3{font-size:15px}.cx-vt-over button{min-height:38px;margin-top:4px}}
 @media (hover:none){.cx-vt-over{opacity:1}.cx-vt .cx-by{display:none}}
 @media (prefers-reduced-motion:reduce){.cx-vt-over,.cx-vt .cx-by{transition:none}}
+/* Vidéo à refaire choisie : la carte est encadrée et marquée ; en tête de Créations, la vidéo se lit avec ses commandes. */
+.cx-vt.on{outline:3px solid var(--lime);outline-offset:-3px}
+.cx-vt-sel{position:absolute;right:8px;top:8px;z-index:2;padding:4px 10px;border-radius:999px;background:var(--lime);color:var(--on-lime);font-size:12.5px;font-weight:700}
+.cx-picked{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px;align-items:center;margin-bottom:24px;padding:16px;border:1px solid var(--line);border-radius:22px;background:var(--field)}
+.cx-picked.tall{grid-template-columns:minmax(0,320px) minmax(0,1fr)}
+.cx-picked-v{width:100%;max-height:70vh;border-radius:14px;overflow:hidden;background:#000;justify-self:center}
+.cx-picked.tall .cx-picked-v{max-width:320px}
+.cx-picked-v video{display:block;width:100%;height:100%;object-fit:contain;background:#000}
+.cx-picked-t{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cx-picked-t small{font-size:12.5px;font-weight:600;color:var(--ink-3)}
+.cx-picked-t h2{margin:0;font-size:24px;line-height:1.2}
+.cx-picked-t p{margin:0;color:var(--ink-2,inherit)}
+.cx-picked-todo{font-weight:600}
+.cx-picked-x{align-self:flex-start;margin-top:6px;padding:8px 14px;border:1px solid var(--line);border-radius:999px;background:none;font:inherit;font-size:14px;cursor:pointer;color:inherit}
+.cx-picked-x:hover{background:var(--surface)}
+@media (max-width:760px){.cx-picked,.cx-picked.tall{grid-template-columns:1fr}.cx-picked.tall .cx-picked-v{max-width:260px}}
+
 .cx-cats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
 .cx-cats button{flex:none;min-height:36px;padding:0 14px;border:1px solid var(--line-strong);border-radius:999px;background:none;color:var(--ink-3);font-size:14px;font-weight:600;cursor:pointer}
 .cx-cats button[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--bg)}

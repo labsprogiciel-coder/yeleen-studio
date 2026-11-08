@@ -39,6 +39,10 @@ export function buildInput(kind, model, req) {
     if (model.id === 'flux-3') {
       return { prompt, aspect_ratio: ratio(req.ratio), resolution: res.toLowerCase(), output_format: 'png' }
     }
+    if (model.id === 'soul-2') { // Higgsfield : une image par demande, format et résolution parmi ceux du catalogue
+      const r = model.caps.ratios.includes(req.ratio) ? req.ratio : model.caps.ratios[0]
+      return { prompt, aspect_ratio: r, resolution: model.caps.resolutions.includes(res) ? res : model.caps.resolutions[0] }
+    }
     if (model.id === 'krea-3') { // taille exacte au format choisi : le prix (au mégapixel) est celui calculé à l'envoi
       const r = model.caps.ratios.includes(req.ratio) ? req.ratio : model.caps.ratios[0]
       return { prompt, image_size: dims(r, model.caps.resUnits[res]), output_format: 'png' }

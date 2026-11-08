@@ -6,7 +6,8 @@ import { falClient } from './fal.js'
 import { buildInput, endpointFor, runwareInput } from './inputs.js'
 import { advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
-import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES } from './library.js'
+import { findTool } from '@studio/catalog/tools'
+import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource } from './library.js'
 import { mediaInfo } from './media.js'
 import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
@@ -14,6 +15,7 @@ import { isBlocked } from './moderation.js'
 import { PaygateError, paygateClient, verifySignature } from './paygate.js'
 import { priceJob } from './pricing.js'
 import { runwareClient } from './runware.js'
+import { higgsfieldClient } from './higgsfield.js'
 import { serveFile, uploadKey } from './storage.js'
 import { newReference, topupView } from './topups.js'
 import { ensureUser, getUser, markWelcomed } from './users.js'
@@ -93,6 +95,8 @@ const call = async (c, path, body) => {
 const fal = (c) => falClient({ key: c.env.FAL_KEY })
 const runware = (c) => runwareClient({ key: c.env.RUNWARE_KEY })
 const onRunware = (model) => model.provider === 'runware' // voir le catalogue : Seedance 2.5, Kling 3.0, Veo 3.1 Lite
+const higgsfield = (c) => higgsfieldClient({ key: c.env.HIGGSFIELD_KEY })
+const onHiggsfield = (model) => model.provider === 'higgsfield' // Soul 2, Genjutsu (outils)
 
 const MAX_UPLOAD = 25 * 1024 * 1024
 const MAX_VIDEO_UPLOAD = 60 * 1024 * 1024 // une vidéo de téléphone de 30 s en 1080p ; le fichier est gardé en mémoire le temps de l'envoi
@@ -248,12 +252,14 @@ function requestOf(req, texts) {
  * Outil facturé pour une durée ou une résolution maximale (`maxSecs`, `maxP`) : chaque vidéo ou audio fourni doit avoir été
  * téléversé et mesuré par ce compte (POST /uploads) et rester dans ces limites. Sinon le prix débité ne couvrirait pas le coût.
  */
+const measured = (c, url) => account(c).fetch(`https://account/media/get?url=${encodeURIComponent(url)}`).then((r) => r.json())
 async function mediaIssue(c, tool, inputs) {
   if (!tool.maxSecs && !tool.maxP) return null
   for (const f of tool.inputs.filter((x) => x.type === 'video' || x.type === 'audio')) {
-    const m = await account(c).fetch(`https://account/media/get?url=${encodeURIComponent(inputs[f.key])}`).then((r) => r.json())
+    const m = await measured(c, inputs[f.key])
     if (!m) return 'unmeasured_media'
     if (tool.maxSecs && m.secs > tool.maxSecs + 0.5) return 'media_too_long'
+    if (tool.minSecs && !(m.secs >= tool.minSecs)) return 'media_too_short'
     if (tool.maxP && !(m.short > 0)) return 'unmeasured_media' // taille de l'image inconnue : rien ne garantit la résolution
     if (tool.maxP && m.short > tool.maxP) return 'media_too_large'
   }
@@ -295,18 +301,33 @@ app.post('/enhance', async (c) => {
 
 app.post('/jobs', async (c) => {
   const req = await c.req.json()
-  const price = priceJob(req)
+  // Vidéo à refaire par Genjutsu : la source (la vidéo du modèle), sa durée et la consigne viennent de D1 ; l'application ne fournit
+  // que les photos (une par rôle, dans l'ordre) et la résolution.
+  let tpl = null
+  if (req.kind === 'tool' && req.template != null) {
+    if (!c.env.DB) return c.json({ error: 'db_unavailable' }, 503)
+    tpl = await templateSource(c.env.DB, req.template)
+    if (!tpl || tpl.tool !== req.modelId) return c.json({ error: 'unknown_template' }, 400)
+    const images = req.inputs?.images
+    if (!Array.isArray(images) || images.length !== tpl.roles.length) return c.json({ error: 'invalid_file_url' }, 400)
+    req.inputs = { images, resolution: req.inputs?.resolution, video: `${new URL(c.req.url).origin}/files/${tpl.sourceKey}`, prompt: tpl.prompt }
+  }
+  // Outil facturé à la seconde de sa source (Genjutsu) : la durée mesurée au téléversement fixe le prix (sans mesure : la durée maximale).
+  const bySecs = req.kind === 'tool' && !tpl ? findTool(req.modelId)?.bySecs : null
+  const src = bySecs && typeof req.inputs?.[bySecs] === 'string' ? await measured(c, req.inputs[bySecs]) : null
+  const price = priceJob(req, { secs: tpl ? tpl.secs : src?.secs, trusted: tpl ? req.inputs.video : undefined })
   if (!price.ok) return c.json({ error: price.error }, 400)
   const texts = req.kind === 'video' ? req.plans.map((p) => p.text)
     : req.kind === 'tool' ? price.model.inputs.filter((f) => f.type === 'text').map((f) => req.inputs?.[f.key] ?? '')
       : req.kind === 'workflow' ? Object.values(req.inputs ?? {}).filter((v) => typeof v === 'string') : [req.prompt ?? '']
   if (isBlocked(texts.join(' '))) return c.json({ error: 'moderation' }, 422)
   // Garde-fou tant qu'il n'y a ni connexion ni plafond par compte : on refuse une seule demande très coûteuse.
-  const cap = Number(c.env.MAX_JOB_COST ?? 250)
+  const cap = Number(c.env.MAX_JOB_COST ?? 600) // 600 : une vidéo Genjutsu de 20 s en 720p (environ 490 cauris) passe
   if (price.cost > cap) return c.json({ error: 'too_expensive', max: cap }, 400)
   // Sans clé Runware, ses modèles sont refusés avant tout débit : les servir chez fal coûterait plus que leur prix au catalogue.
   if (onRunware(price.model) && !c.env.RUNWARE_KEY) return c.json({ error: 'provider_unavailable' }, 503)
-  if (req.kind === 'tool') {
+  if (onHiggsfield(price.model) && !c.env.HIGGSFIELD_KEY) return c.json({ error: 'provider_unavailable' }, 503)
+  if (req.kind === 'tool' && !tpl) { // la source d'un modèle est mesurée d'avance (template_genjutsu.secs)
     const issue = await mediaIssue(c, price.model, req.inputs ?? {})
     if (issue) return c.json({ error: issue }, 400)
   }
@@ -324,18 +345,19 @@ app.post('/jobs', async (c) => {
   if (!debit.ok) { await call(c, '/job/release', { jobId: id }); return c.json(debit, 402) } // { error: 'insufficient', missing } : le message que l'interface affiche déjà
 
   let sub
-  const provider = onRunware(price.model) ? 'runware' : 'fal'
+  const provider = onRunware(price.model) ? 'runware' : onHiggsfield(price.model) ? 'higgsfield' : 'fal'
   const endpoint = endpointFor(price.model, req)
   const origin = new URL(c.req.url).origin
   try {
     const withUser = { ...req, count: price.count, endUserId: accountId(c) }
     sub = provider === 'runware' ? await runware(c).submit(runwareInput(price.model, withUser))
+      : provider === 'higgsfield' ? await higgsfield(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { idempotencyKey: id })
       : await fal(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { webhookUrl: await falWebhook(c, origin, id) })
   } catch (e) {
     const back = await call(c, '/refund', { jobId: id })
     await call(c, '/job/release', { jobId: id })
     console.error(`submit ${provider}`, e.message)
-    const policy = e?.isContentPolicy === true // FalError ou RunwareError
+    const policy = e?.isContentPolicy === true // FalError, RunwareError ou HiggsfieldError
     return c.json({ error: policy ? 'moderation' : 'provider', refunded: back.refunded ?? price.cost, balance: back.balance }, policy ? 422 : 502)
   }
 
@@ -372,7 +394,8 @@ app.post('/jobs/:id/cancel', async (c) => {
   const job = await account(c).fetch(`https://account/job/get?id=${c.req.param('id')}`).then((r) => r.json())
   if (!job) return c.json({ error: 'not_found' }, 404)
   if (job.status !== 'IN_QUEUE' && job.status !== 'IN_PROGRESS') return c.json(view(job))
-  if (job.provider !== 'runware') try { await fal(c).cancel(job.cancelUrl) } catch (e) { console.error('annulation fal', e.message) }
+  if (job.provider === 'higgsfield') try { await higgsfield(c).cancel(job.cancelUrl) } catch (e) { console.error('annulation higgsfield', e.message) }
+  else if (job.provider !== 'runware') try { await fal(c).cancel(job.cancelUrl) } catch (e) { console.error('annulation fal', e.message) }
   const back = job.status === 'IN_QUEUE' ? await call(c, '/refund', { jobId: job.id }) : { refunded: 0, balance: (await call(c, '/balance')).balance }
   const next = { ...job, status: 'CANCELED', refund: back.refunded ?? 0, finishedAt: Date.now() }
   await call(c, '/job/put', next)

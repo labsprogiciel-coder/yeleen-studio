@@ -72,18 +72,37 @@ export async function catalog(db) {
  * ratio, sound, photo }] }. Les adresses sont celles de l'API (/files/templates/…). Une ligne aux plans illisibles est ignorée.
  */
 export async function listTemplates(db, origin) {
-  const { results } = await db.prepare(`SELECT id, name, blurb, category, video_key, image, model_id, plans, resolution, ratio, sound, photo
-    FROM templates WHERE published = 1 ORDER BY sort, created_at`).bind().all()
+  const { results } = await db.prepare(`SELECT t.id, t.name, t.blurb, t.category, t.video_key, t.image, t.model_id, t.plans, t.resolution, t.ratio, t.sound, t.photo,
+      g.tool AS g_tool, g.secs AS g_secs, g.roles AS g_roles
+    FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id WHERE t.published = 1 ORDER BY t.sort, t.created_at`).bind().all()
   return {
     templates: results.flatMap((t) => {
       let plans
-      try { plans = JSON.parse(t.plans) } catch { return [] }
-      if (!Array.isArray(plans) || !plans.length || plans.some((p) => typeof p?.text !== 'string' || !(p.dur > 0))) return []
+      let roles = null
+      try { plans = JSON.parse(t.plans); if (t.g_tool) roles = JSON.parse(t.g_roles) } catch { return [] }
+      // Genjutsu : la vidéo est la source, pas de plans ; il faut au moins un rôle (une photo) et une durée.
+      const genjutsu = t.g_tool ? { tool: t.g_tool, secs: t.g_secs, roles } : null
+      if (genjutsu && (!Array.isArray(roles) || !roles.length || roles.some((r) => typeof r !== 'string') || !(genjutsu.secs > 0))) return []
+      if (!genjutsu && (!Array.isArray(plans) || !plans.length || plans.some((p) => typeof p?.text !== 'string' || !(p.dur > 0)))) return []
       return [{
         id: t.id, name: t.name, blurb: t.blurb ?? null, category: t.category, video: `${origin}/files/${t.video_key}`, image: t.image ?? null, modelId: t.model_id,
-        plans: plans.map((p) => ({ text: p.text, dur: p.dur })), resolution: t.resolution ?? null, ratio: t.ratio ?? null,
-        sound: Boolean(t.sound), photo: t.photo ?? null,
+        plans: genjutsu ? [] : plans.map((p) => ({ text: p.text, dur: p.dur })), resolution: t.resolution ?? null, ratio: t.ratio ?? null,
+        sound: Boolean(t.sound), photo: t.photo ?? null, ...(genjutsu ? { genjutsu } : {}),
       }]
     }),
   }
+}
+
+/**
+ * Source Genjutsu d'une vidéo à refaire publiée : { tool, sourceKey, secs, prompt, roles }, ou null. Lue au lancement : la vidéo
+ * source, sa durée (le prix) et la consigne viennent d'ici, jamais de l'application.
+ */
+export async function templateSource(db, id) {
+  if (typeof id !== 'string' || !/^[\w-]{1,80}$/.test(id)) return null
+  const g = await db.prepare(`SELECT g.tool, g.source_key, g.secs, g.prompt, g.roles FROM template_genjutsu g JOIN templates t ON t.id = g.template_id
+    WHERE g.template_id = ? AND t.published = 1`).bind(id).first()
+  if (!g) return null
+  let roles
+  try { roles = JSON.parse(g.roles) } catch { return null }
+  return Array.isArray(roles) && roles.length ? { tool: g.tool, sourceKey: g.source_key, secs: g.secs, prompt: g.prompt, roles } : null
 }

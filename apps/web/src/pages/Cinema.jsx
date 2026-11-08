@@ -24,6 +24,7 @@ import ThemeToggle from '../components/ThemeToggle.jsx'
 import { CreateLeft } from './video/CreateTab.jsx'
 import AudioPanel from './audio/AudioPanel.jsx'
 import ToolForm, { toolJobs } from '../components/cinema/ToolForm.jsx'
+import GenjutsuForm from '../components/cinema/GenjutsuForm.jsx'
 import { AccountMenu } from '../lib/auth.jsx'
 import { RechargeButton } from '../lib/rechargeDialog.jsx'
 import AssetModal from '../components/cinema/AssetModal.jsx'
@@ -92,7 +93,8 @@ export default function Cinema() {
   const [tpl, setTpl] = useState(null)
   // Image de départ d'une vidéo à refaire (en deux temps, comme chez Krea) : Krea 3 la crée à partir de la photo jointe (ou du texte
   // seul), puis elle remplace la photo dans Références et devient l'image de départ de la vidéo. `start` : { jobId, key, photoId }.
-  const [startTpl, setStartTpl] = useState(null) // la vidéo à refaire ouverte, tant que l'outil l'est
+  const [startTpl, setStartTpl] = useState(null)
+  const [genTpl, setGenTpl] = useState(null) // vidéo à refaire par Genjutsu (Transfert de mouvement, Remplacer un objet) // la vidéo à refaire ouverte, tant que l'outil l'est
   const [imgText, setImgText] = useState('')
   const [start, setStart] = useState(null)
   useEffect(() => {
@@ -128,16 +130,18 @@ export default function Cinema() {
   const openTool = (id) => {
     setError('')
     if (id !== 'video-refs') setStartTpl(null) // l'image de départ d'une vidéo à refaire ne vaut que pour elle
+    setGenTpl(null) // une vidéo à refaire par Genjutsu ne vaut que tant que son outil est ouvert (recreate la remet)
     if (!id) return setTool(null)
     const t = tabOf(id)
     setTab(t); setTool(id)
     if (t === 'recipe') pickRecipe(id)
   }
   const recreate = (t) => {
+    if (t.genjutsu) { openTool(t.genjutsu.tool); setGenTpl(t); setView('creations'); return } // la vidéo est la source : seulement des photos
     openTool('video-refs'); setTask('refs'); setAtt([]); setStyleId(null); setVideoId(t.modelId); setTpl(t); setView('creations') // la vidéo à refaire a déjà son rendu
   }
   // Changer d'onglet montre la liste de ses outils.
-  const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null) }
+  const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null); setGenTpl(null) }
   useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ, même si Cinéma est déjà ouvert
     if (pending?.target !== 'cinema.recipe') return
     const h = take('cinema.recipe')
@@ -450,7 +454,9 @@ export default function Cinema() {
       {tool === 'video-gen'   && <CreateLeft key="generate" mode="generate" banner={false} addLabel="Ajouter un média" />}
       {tool === 'modify-video' && <CreateLeft key="edit"    mode="edit"     banner={false} />}
       {tool === 'voice-generator' && <AudioPanel key={tool} tool={tool} onTool={openTool} />}
-      {tool && toolJobs(tool) && <ToolForm key={tool} tool={tool} onDone={() => setView('creations')} />}
+      {tool && genTpl?.genjutsu.tool === tool
+        ? <GenjutsuForm key={genTpl.id} template={genTpl} onClose={() => setGenTpl(null)} onDone={() => setView('creations')} />
+        : tool && toolJobs(tool) && <ToolForm key={tool} tool={tool} onDone={() => setView('creations')} />}
       {(tool === 'image' || tool === 'video-refs') && composer}
         {recipe && recipeId && (runBusy
           ? <p className="cx-note">Le modèle « {recipeById(recipeId).name} » est en cours : suivez-le dans Créations.</p>
@@ -464,6 +470,8 @@ export default function Cinema() {
         onPickTemplate={(id) => { openTool(id); setView('creations') }}
         templates={templates}
         onRecreate={recreate}
+        picked={genTpl ?? startTpl}
+        onUnpick={() => { setGenTpl(null); setStartTpl(null); setView('templates') }}
         top={runBusy ? <RunStrip jobs={runJobs} onDone={() => setRun(null)} /> : null}
       />
       </div>

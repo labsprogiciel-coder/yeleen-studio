@@ -69,7 +69,7 @@ export const FAILURES = {
   },
   media: {
     message: 'Fichier refusé',
-    hint: 'Ce fichier est trop long, de trop haute résolution, ou dans un format que le service ne sait pas mesurer (préférez MP4, MP3 ou WAV). Aucun cauri n’a été débité.',
+    hint: 'Ce fichier est trop long ou trop court pour cet outil, de trop haute résolution, ou dans un format que le service ne sait pas mesurer (préférez MP4, MP3 ou WAV). Aucun cauri n’a été débité.',
     retry: false,
   },
   provider: {
@@ -228,7 +228,7 @@ export function JobsProvider({ children }) {
   // Échec d'un appel à l'API (avant ou pendant l'envoi à fal) : la génération échoue, avec le remboursement que le serveur confirme.
   const failLive = useCallback((id, err) => {
     const code = err.body?.error
-    const failure = ['unmeasured_media', 'media_too_long', 'media_too_large'].includes(code) ? 'media' : code === 'moderation' ? 'moderation' : code === 'insufficient' ? 'insufficient' : code === 'too_expensive' ? 'too_expensive' : code === 'too_many_active' ? 'busy' : err.status === 401 || code === 'unauthorized' ? 'auth' : err.status === 0 ? 'unreachable' : err.status === 400 ? 'rejected' : 'provider'
+    const failure = ['unmeasured_media', 'media_too_long', 'media_too_short', 'media_too_large'].includes(code) ? 'media' : code === 'moderation' ? 'moderation' : code === 'insufficient' ? 'insufficient' : code === 'too_expensive' ? 'too_expensive' : code === 'too_many_active' ? 'busy' : err.status === 401 || code === 'unauthorized' ? 'auth' : err.status === 0 ? 'unreachable' : err.status === 400 ? 'rejected' : 'provider'
     const job = ref.current.jobs.find((j) => j.id === id)
     dispatch({
       type: 'REMOTE', id, balance: err.body?.balance,

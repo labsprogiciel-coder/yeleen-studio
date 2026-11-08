@@ -419,6 +419,17 @@ export const IMAGE_MODELS = [
     caps: { ratios: RATIOS_IMG, resolutions: ['1K', '2K'], resUnits: { '1K': 1, '2K': 4 }, maxImages: 1 },
   },
   {
+    id: 'soul-2',
+    provider: 'higgsfield', // API Higgsfield (apps/api/src/higgsfield.js) ; `endpoint` est son chemin
+    endpoint: 'higgsfield-ai/soul/v2/standard',
+    name: 'Soul 2',
+    tagline: 'Portraits, mode et éditorial au rendu photo, très bon marché',
+    tags: ['Portraits', 'Mode', 'Économique'],
+    price: { usd: 0.004, per: 'image' }, // estimation de l'API Higgsfield : 0,004 $ en 720p, 0,006 $ en 1080p
+    verified: false,
+    caps: { ratios: ['9:16', '16:9', '4:3', '3:4', '1:1', '2:3', '3:2'], resolutions: ['720p', '1080p'], resUnits: { '720p': 1, '1080p': 1.5 }, maxImages: 1 },
+  },
+  {
     id: 'krea-3',
     endpoint: 'krea/v3/text-to-image', // une image par appel ; taille exacte envoyée (voir editModels.js, `dims`)
     name: 'Krea 3',
