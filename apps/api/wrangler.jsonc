@@ -19,7 +19,9 @@
   // (google/gemini-2.5-flash par défaut), à régler dans le tableau de bord si besoin ; la clé est FAL_KEY.
   // Sentry : secret SENTRY_DSN (sans lui, rien n'est envoyé), variable SENTRY_RELEASE facultative (version affichée dans Sentry).
   // Recharges (paygate) : PAYGATE_URL (variable), PAYGATE_KEY et PAYGATE_WEBHOOK_SECRET (secrets), TOPUP_COUNTRIES (« BF » par défaut).
-  "vars": { "ENV": "production", "ALLOWED_ORIGINS": "https://yeleen-studio.labsprogiciel.workers.dev" },
+  "vars": { "ENV": "production", "ALLOWED_ORIGINS": "https://qreativ.app,https://www.qreativ.app,https://yeleen-studio.labsprogiciel.workers.dev",
+
+},
   "keep_vars": true,
 
   // Compte : portefeuille de jetons et générations, un Durable Object par compte (un seul écrivain, pas de double débit).
