@@ -22,7 +22,7 @@ const UNDO_MS = 9000 // la suppression devient définitive (y compris côté ser
 // Les trois entrées de la barre latérale, chacune avec ses propres filtres.
 const TABS = [
   { id: 'library', label: 'Ma bibliothèque', icon: 'folder', subs: [{ id: 'recent', label: 'Récents' }, ...BY_KIND] },
-  { id: 'yeleen', label: 'Bibliothèque Yeleen', icon: 'sparkle', subs: [{ id: 'all', label: 'Tout' }, ...CATEGORIES.map((c) => ({ id: c.id, label: c.label }))] },
+  { id: 'yeleen', label: 'Bibliothèque Qreativ', icon: 'sparkle', subs: [{ id: 'all', label: 'Tout' }, ...CATEGORIES.map((c) => ({ id: c.id, label: c.label }))] },
   { id: 'favs', label: 'Favoris', icon: 'star', subs: BY_KIND },
   // Seulement avec `onStyle` (Cinéma) : un rendu à appliquer au texte, pas un fichier (voir packages/catalog/src/styles.js).
   { id: 'styles', label: 'Styles', icon: 'palette', subs: [{ id: 'all', label: 'Tout' }, ...STYLE_CATEGORIES] },
@@ -31,7 +31,7 @@ const TABS = [
 /**
  * Fenêtre de la bibliothèque, la seule interface de galerie de l'application, avec trois entrées dans la barre latérale :
  *  - Ma bibliothèque : tout ce qui est à moi, importé ou généré (filtre par origine et par type) ;
- *  - Bibliothèque Yeleen : personnages, objets (images) et vidéos proposés à tous ;
+ *  - Bibliothèque Qreativ : personnages, objets (images) et vidéos proposés à tous ;
  *  - Favoris : les éléments marqués d'une étoile, de l'une ou l'autre bibliothèque.
  * Avec `onAdd` (choix des références dans Cinéma), plusieurs fichiers peuvent être cochés puis ajoutés d'un coup.
  * Sans `onAdd` (consultation, ouverte depuis la navigation : voir lib/libraryDialog.jsx), on parcourt, on importe, on met en favori.
@@ -153,7 +153,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   const actions = (a) => [{ id: 'dl', title: 'Télécharger', icon: 'download' }, ...(a.source === 'yeleen' ? [] : [{ id: 'rm', title: 'Supprimer', icon: 'trash' }])]
 
   const empty = tab === 'yeleen'
-    ? (catalog.status === 'loading' ? 'Chargement de la bibliothèque Yeleen…' : catalog.status === 'error' ? null : 'Rien dans cette catégorie pour l’instant.')
+    ? (catalog.status === 'loading' ? 'Chargement de la bibliothèque Qreativ…' : catalog.status === 'error' ? null : 'Rien dans cette catégorie pour l’instant.')
     : tab === 'favs' ? 'Touchez l’étoile d’un élément pour le retrouver ici.' : 'Rien ici pour l’instant. Importez un fichier ou générez-en un.'
 
   return (
@@ -209,7 +209,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
                   <span className="am-nm">{x.label}</span>
                   {on && <span className="am-ck" aria-hidden="true"><Icon name="check" size={14} /></span>}
                 </button>
-                <span className="am-tag">Yeleen</span>
+                <span className="am-tag">Qreativ</span>
               </div>
             )
           })}
@@ -217,7 +217,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
             const on = picked.has(a.id)
             const had = taken.includes(a.id)
             const fav = favorite(a)
-            const label = `${a.name} (${KINDS[a.kind]})${a.source === 'yeleen' ? ', bibliothèque Yeleen' : ''}`
+            const label = `${a.name} (${KINDS[a.kind]})${a.source === 'yeleen' ? ', bibliothèque Qreativ' : ''}`
             return (
               <div key={a.id} className={`am-cell${focus === a.id ? ' hl' : ''}`} data-asset={a.id}>
                 {browse ? (
@@ -237,7 +237,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
                     <Icon name="dots" size={15} />
                   </Menu>
                 )}
-                {a.source === 'yeleen' && <span className="am-tag">{a.placeholder ? 'Exemple' : 'Yeleen'}</span>}
+                {a.source === 'yeleen' && <span className="am-tag">{a.placeholder ? 'Exemple' : 'Qreativ'}</span>}
                 <button type="button" className={`am-fav${fav ? ' on' : ''}`} aria-pressed={fav} aria-label={`${fav ? 'Retirer des' : 'Ajouter aux'} favoris : ${a.name}`} onClick={() => toggleFav(a)}>
                   <Icon name="star" size={15} fill={fav ? 'currentColor' : 'none'} />
                 </button>
@@ -247,7 +247,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
         </div>
         {tab !== 'styles' && list.length === 0 && empty && <p className="am-empty">{empty}</p>}
         {tab === 'yeleen' && catalog.status === 'error' && (
-          <p className="am-empty">La bibliothèque Yeleen est indisponible pour l’instant. <button type="button" className="am-retry" onClick={catalog.reload}>Réessayer</button></p>
+          <p className="am-empty">La bibliothèque Qreativ est indisponible pour l’instant. <button type="button" className="am-retry" onClick={catalog.reload}>Réessayer</button></p>
         )}
 
         {(undo || picked.size > 0) && (

@@ -51,3 +51,7 @@ button.bal:hover{background:rgba(17,17,17,.16)}
 .amt{display:inline-flex;align-items:center;gap:.35em;white-space:nowrap;font-variant-numeric:tabular-nums}
 .amt .cauri{vertical-align:baseline;opacity:.9}
 .home .pb .cauri{margin-right:6px;vertical-align:-3px}
+
+/* Logo Qreativ : largeur suivant la hauteur (horizontal ; marque seule sur écran étroit). */
+.lg img{display:block;width:auto;height:24px}
+@media (max-width:560px){.lg img{height:28px}}
