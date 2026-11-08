@@ -9,7 +9,7 @@ import useTabKeys from '../../lib/useTabKeys.js'
 import { inProject, useProjects } from '../../lib/projects.js'
 import { RECIPES, recipeById, recipeCost } from '@studio/catalog/recipes'
 import { THUMBS, TOURS, toolById } from './tools.js'
-import VideoTemplates, { VideoGrid } from './VideoTemplates.jsx'
+import VideoTemplates, { PickedTemplate, VideoGrid } from './VideoTemplates.jsx'
 
 const VIEWS = [{ id: 'creations', icon: 'sparkle', label: 'Créations' }, { id: 'templates', icon: 'layers', label: 'Modèles' }]
 const KINDS = ['video', 'image', 'audio'] // ordre d'affichage des créations en cours
@@ -74,7 +74,7 @@ function Tour({ tool }) {
  * et Modèles (les vidéos à refaire, puis les workflows en cartes). `top` : bandeau au-dessus des créations (avancement d'un modèle
  * lancé). `templates` : les vidéos à refaire ; `onRecreate` en ouvre une dans le générateur.
  */
-export default function Showcase({ view, onView, tool, onPickTemplate, templates = [], onRecreate, top = null }) {
+export default function Showcase({ view, onView, tool, onPickTemplate, templates = [], onRecreate, picked = null, onUnpick, top = null }) {
   const { jobs } = useJobs()
   const { openLibrary } = useLibrary()
   const onTabKeys = useTabKeys()
@@ -100,7 +100,8 @@ export default function Showcase({ view, onView, tool, onPickTemplate, templates
         {view === 'creations' ? (
           <>
             {top}
-            {kinds.length > 0 ? kinds.map((k) => <GenerationTray key={k} kind={k} className="cx-tray" />) : <Tour tool={tool} />}
+            {picked && <PickedTemplate t={picked} onClear={onUnpick} />}
+            {kinds.length > 0 ? kinds.map((k) => <GenerationTray key={k} kind={k} className="cx-tray" />) : !picked && <Tour tool={tool} />}
             <section className="cx-sec" aria-labelledby="cx-new-h">
               <div className="cx-sec-h">
                 <h2 id="cx-new-h">{kinds.length ? 'Modèles' : 'Commencer à créer'}</h2>
@@ -115,13 +116,13 @@ export default function Showcase({ view, onView, tool, onPickTemplate, templates
                   <h2 id="cx-vt-new-h">Vidéos à refaire</h2>
                   <button type="button" className="cx-all" onClick={() => onView('templates')}>Tout voir<Icon name="chevR" size={14} /></button>
                 </div>
-                <VideoGrid templates={templates.slice(0, 4)} onPick={onRecreate} />
+                <VideoGrid templates={templates.slice(0, 4)} onPick={onRecreate} selectedId={picked?.id ?? null} />
               </section>
             )}
           </>
         ) : (
           <>
-            {templates.length > 0 && <VideoTemplates templates={templates} onPick={onRecreate} />}
+            {templates.length > 0 && <VideoTemplates templates={templates} onPick={onRecreate} selectedId={picked?.id ?? null} />}
             <section className="cx-sec" aria-labelledby="cx-tpl-h">
               <div className="cx-sec-h"><h2 id="cx-tpl-h">Modèles en vedette</h2></div>
               <ul className="cx-cards">{RECIPES.map((r) => <TemplateCard key={r.id} r={r} onPick={onPickTemplate} />)}</ul>

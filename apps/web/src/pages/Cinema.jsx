@@ -470,6 +470,8 @@ export default function Cinema() {
         onPickTemplate={(id) => { openTool(id); setView('creations') }}
         templates={templates}
         onRecreate={recreate}
+        picked={genTpl ?? startTpl}
+        onUnpick={() => { setGenTpl(null); setStartTpl(null); setView('templates') }}
         top={runBusy ? <RunStrip jobs={runJobs} onDone={() => setRun(null)} /> : null}
       />
       </div>
