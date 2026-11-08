@@ -2,13 +2,14 @@
  * Studio (Cinéma) : barre d'icônes, barre du haut, panneau d'outils et zone principale, chacun dans un panneau arrondi.
  * Le panneau d'outils reçoit le compositeur (cinema.css) ou le panneau partagé de l'écran Vidéo (edit-panel.css).
  */
-.cx{--panel:var(--panel-bg);--card:var(--card-bg);--chip:var(--fill-hover);display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;height:100vh;height:100dvh;padding:10px;box-sizing:border-box;background:var(--page)}
+/* Page : la barre Plum commune (Headers.jsx) puis l'espace de travail, qui prend toute la hauteur restante. */
+.cx-page{display:flex;flex-direction:column;height:100vh;height:100dvh;background:var(--page)}
+.pg.shell.cx-bar{flex:none;min-height:0;background:none}
+.cx{--panel:var(--panel-bg);--card:var(--card-bg);--chip:var(--fill-hover);flex:1;min-height:0;display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;padding:10px;box-sizing:border-box;background:var(--page)}
 .cx button{font-family:inherit}
 
 /* Barre d'icônes */
 .cx-rail{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0;border-radius:20px;background:var(--panel);overflow-y:auto;scrollbar-width:none}
-.cx-logo{display:grid;place-items:center;width:44px;height:44px}
-.cx-logo img{display:block;border-radius:10px}
 
 .cx-new{display:grid;place-items:center;width:44px;height:44px;margin-bottom:6px;border:0;border-radius:12px;background:var(--lime);color:var(--on-lime);cursor:pointer}
 .cx-new:hover{filter:brightness(.92)}
@@ -28,14 +29,6 @@
 .cx-proj>svg:last-child{display:none}
 .cx-proj-dot{flex:none;width:14px;height:14px;border-radius:4px}
 .cx-proj-ud{display:grid;place-items:center;width:26px;height:26px;border:1px solid var(--edge);border-radius:8px;color:var(--ink-3)}
-.cx-acc{display:flex;align-items:center;gap:10px}
-.cx-price{min-height:40px;padding:0 14px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--lime-ink);font-size:15px;font-weight:700;cursor:pointer}
-.cx-price:hover{background:var(--chip)}
-.cx-acc .bal{border-color:var(--edge);background:var(--card);color:var(--ink);min-height:40px;border-radius:12px}
-.cx-acc .bal:hover{background:var(--chip)}
-.cx-acc .bal-busy{border-color:var(--edge)}
-.cx-acc .bal-busy i{background:var(--lime)}
-.cx-acc .av{display:block;width:34px;height:34px;border-radius:50%;background:conic-gradient(from 200deg,#ff7a90,#ffd46b,#7cf0a8,#6bb7ff,#c38bff,#ff7a90)}
 
 /* Panneau d'outils */
 .cx-panel{min-height:0;display:flex;flex-direction:column;gap:14px;padding:12px 12px 0;border:1px solid var(--edge);border-radius:18px;background:var(--panel);overflow:hidden}
@@ -185,7 +178,8 @@
 @media (max-width:1100px){.cx-body{grid-template-columns:340px minmax(0,1fr)}}
 /* Téléphone et tablette : une seule colonne qui défile ; la barre d'icônes passe en haut, à l'horizontale. */
 @media (max-width:900px){
-  .cx{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;height:auto;min-height:100dvh;gap:8px;padding:8px}
+  .cx-page{height:auto;min-height:100dvh}
+  .cx{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;flex:none;gap:8px;padding:8px}
   .cx-rail{grid-row:auto;flex-direction:row;padding:8px 10px;overflow-x:auto;overflow-y:hidden}
   .cx-rl{flex-direction:row}
   .cx-sep{width:1px;height:28px;margin:0 4px}
@@ -193,7 +187,6 @@
   .cx-end{margin:0 0 0 auto}
   .cx-body{grid-template-columns:minmax(0,1fr)}
   .cx-shell{overflow:visible}
-  .cx-acc{margin-left:auto}
   .cx-panel,.cx-main{overflow:visible}
   .cx-tool,.cx-view{overflow:visible}
   .cx-card{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:14px}

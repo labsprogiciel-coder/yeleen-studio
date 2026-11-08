@@ -70,7 +70,7 @@ export default function ImageGen() {
           <div className="col">
             {COLLAGE.map((s, i) => <i key={i} style={{ background: g(i), ...s }} />)}
           </div>
-          <h1>Commencez à créer avec<span>[MARQUE] Studio cinéma</span></h1>
+          <h1>Commencez à créer<span>avec Qreativ</span></h1>
           <p>Décrivez une scène, un personnage, une ambiance ou un style.</p>
         </div>
         )}

@@ -54,7 +54,7 @@ export default function Video() {
         <section className="mp">
           <div className="pl">
             <a href="#"><Icon name="folder" size={15} />Historique</a>
-            <a href="#" style={{ background: '#222326' }}><Icon name="book" size={15} />Comment ça marche</a>
+            <a href="#"><Icon name="book" size={15} />Comment ça marche</a>
           </div>
           {stage && <GenerationTray kind="video" />}
           {!stage && tab === TABS[0] && <CreateRight />}

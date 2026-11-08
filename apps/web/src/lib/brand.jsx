@@ -17,10 +17,10 @@ export const LOOKS = [
   { id: 'natural', label: 'Naturel', prompt: 'matières naturelles, rendu authentique' },
   { id: 'luxe', label: 'Haut de gamme', prompt: 'finitions soignées, éclairage de studio' },
 ]
-export const SWATCHES = ['#d6ff3f', '#ffb21f', '#ff5a36', '#e0307a', '#7a5cff', '#2f80ff', '#18b87a', '#f2f2ee']
-export const BASES = ['#0d0e10', '#10261c', '#12203a', '#2a1230', '#3a1710', '#f4f1ea']
+export const SWATCHES = ['#ff5a1f', '#ffb21f', '#e0307a', '#7a5cff', '#2b3bff', '#18b87a', '#3a1456', '#f2f2ee']
+export const BASES = ['#3a1456', '#0d0e10', '#10261c', '#12203a', '#3a1710', '#f4f1ea']
 
-export const BLANK = { name: '', whatsapp: '', logoId: null, primary: '#d6ff3f', base: '#0d0e10', tone: 'warm', lang: 'fr', voice: 'Rachel', looks: [], notes: '', apply: true }
+export const BLANK = { name: '', whatsapp: '', logoId: null, primary: '#ff5a1f', base: '#3a1456', tone: 'warm', lang: 'fr', voice: 'Rachel', looks: [], notes: '', apply: true }
 
 const readJson = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null') } catch { return null } }
 const load = () => {

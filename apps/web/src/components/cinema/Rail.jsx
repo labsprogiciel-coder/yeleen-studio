@@ -1,6 +1,4 @@
-import { Link } from 'react-router-dom'
 import Icon from '../../lib/icons.jsx'
-import icon from '../../assets/brand/qreativ-icon-tangerine.svg'
 import { useLibrary } from '../../lib/libraryDialog.jsx'
 import { useRecharge } from '../../lib/rechargeDialog.jsx'
 
@@ -17,7 +15,7 @@ const FILES = [
   { view: { tab: 'favs' }, icon: 'star', label: 'Mes favoris' },
 ]
 
-/** Barre d'icônes de l'espace de travail : nouvelle création, type de création, fichiers, bibliothèque et recharge. */
+/** Barre d'icônes de l'espace de travail (le logo est dans la barre Plum du haut) : nouvelle création, type de création, fichiers, bibliothèque et recharge. */
 export default function Rail({ tab, onTab, onNew }) {
   const { openLibrary } = useLibrary()
   const { openRecharge } = useRecharge()
@@ -28,7 +26,6 @@ export default function Rail({ tab, onTab, onNew }) {
   )
   return (
     <nav className="cx-rail" aria-label="Espace de travail">
-      <Link to="/" className="cx-logo" aria-label="Qreativ, accueil"><img src={icon} alt="" width="34" height="34" /></Link>
       <button type="button" className="cx-new" aria-label="Nouvelle création" title="Nouvelle création" onClick={onNew}><Icon name="plus" size={20} /></button>
       <ul className="cx-rl" aria-label="Type de création">
         {TABS.map((t) => item(t.id, t.label, t.icon, { 'aria-current': tab === t.id ? 'true' : undefined, onClick: () => onTab(t.id) }))}

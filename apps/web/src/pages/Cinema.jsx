@@ -3,7 +3,7 @@ import Icon from '../lib/icons.jsx'
 import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, priceLabel, videoCost } from '@studio/catalog'
 import { recipeById, recipeCost } from '@studio/catalog/recipes'
 import { findTool, toolCost } from '@studio/catalog/tools'
-import { SkipLink } from '../components/Headers.jsx'
+import { ShellHeader, SkipLink } from '../components/Headers.jsx'
 import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
 import PlanTabs from '../components/PlanTabs.jsx'
@@ -18,15 +18,11 @@ import Rail from '../components/cinema/Rail.jsx'
 import ToolPanel from '../components/cinema/ToolPanel.jsx'
 import Showcase from '../components/cinema/Showcase.jsx'
 import { TOOLS, tabOf } from '../components/cinema/tools.js'
-import BalanceChip from '../components/BalanceChip.jsx'
 import ProjectPicker from '../components/cinema/ProjectPicker.jsx'
-import ThemeToggle from '../components/ThemeToggle.jsx'
 import { CreateLeft } from './video/CreateTab.jsx'
 import AudioPanel from './audio/AudioPanel.jsx'
 import ToolForm, { toolJobs } from '../components/cinema/ToolForm.jsx'
 import GenjutsuForm from '../components/cinema/GenjutsuForm.jsx'
-import { AccountMenu } from '../lib/auth.jsx'
-import { RechargeButton } from '../lib/rechargeDialog.jsx'
 import AssetModal from '../components/cinema/AssetModal.jsx'
 import { RecipeForm, RunStrip } from '../components/cinema/Recipes.jsx'
 import { useAssets } from '../lib/assets.jsx'
@@ -434,19 +430,16 @@ export default function Cinema() {
 
   const runBusy = recipe && Boolean(run)
   return (
-    <div className="cx cn">
+    <div className="cx-page">
       <SkipLink />
+      {/* La barre Plum commune à tous les écrans (logo, navigation, solde, compte) ; `pg shell` lui donne ses styles. */}
+      <div className="pg shell cx-bar"><ShellHeader /></div>
+    <div className="cx cn">
       <Rail tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} />
 
       <div className="cx-shell">
       <header className="cx-top">
         <ProjectPicker />
-        <div className="cx-acc">
-          <ThemeToggle className="cx-ib cx-theme" />
-          <RechargeButton className="cx-price">Tarifs</RechargeButton>
-          <BalanceChip />
-          <AccountMenu fallback={<span className="av" aria-hidden="true" />} />
-        </div>
       </header>
 
       <div className="cx-body">
@@ -476,6 +469,7 @@ export default function Cinema() {
       />
       </div>
       </div>
+    </div>
 
       <AssetModal open={Boolean(picking)} initialSub={picking === 'video' ? 'video' : 'recent'} view={picking === 'styles' ? STYLES_VIEW : null} taken={att.map((x) => x.assetId)} onClose={() => setPicking(null)} onAdd={attach} style={styleId} onStyle={setStyleId} />
     </div>

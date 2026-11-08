@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import Icon from '../lib/icons.jsx'
 import BalanceChip from './BalanceChip.jsx'
 import Cauri from './Cauri.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 import { AccountMenu, authEnabled, useAuthState } from '../lib/auth.jsx'
 import { features } from '../lib/features.js'
 import { useLibrary } from '../lib/libraryDialog.jsx'
@@ -51,7 +52,7 @@ function NavLinks() {
   )
 }
 
-/** En-tête compact des écrans d'outils (vidéo, image, audio). */
+/** En-tête compact des écrans d'outils (Cinéma, vidéo, image, audio, spot) : la même barre Plum partout. */
 export function ShellHeader() {
   return (
     <header className="nv">
@@ -60,6 +61,7 @@ export function ShellHeader() {
       <div className="rt">
         <BalanceChip />
         <Icon name="search" />
+        <ThemeToggle className="pb nv-theme" size={16} />
         <RechargeButton className="pb">Recharger</RechargeButton>
         <a href="#" className="pb">Entreprise</a>
         <a href="#" className="pb">Ressources</a>

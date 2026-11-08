@@ -1,7 +1,7 @@
 .image .mn{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;min-height:800px;background:radial-gradient(ellipse at 50% 38%,var(--surface),var(--bg) 62%)}
-.image .zm{position:absolute;right:16px;top:12px;display:flex;gap:10px;align-items:center;background:#131416;border-radius:12px;padding:8px 10px;width:220px;box-sizing:border-box;color:var(--ink-4)}
+.image .zm{position:absolute;right:16px;top:12px;display:flex;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:8px 10px;width:220px;box-sizing:border-box;color:var(--ink-4)}
 .image .zm i{flex:1;height:3px;background:var(--fill);border-radius:2px;position:relative}
-.image .zm i:after{content:"";position:absolute;right:8%;top:-5px;width:12px;height:12px;border-radius:50%;background:#fff}
+.image .zm i:after{content:"";position:absolute;right:8%;top:-5px;width:12px;height:12px;border-radius:50%;background:var(--ink)}
 .image .hero{margin-top:178px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px}
 .image .col{position:relative;width:560px;height:176px;margin-bottom:18px}
 .image .col i{position:absolute;top:0;width:150px;height:160px;border-radius:16px;border:2px solid rgba(255,255,255,.28);box-shadow:0 10px 30px rgba(0,0,0,.5)}
@@ -10,7 +10,7 @@
 .image .hero p{margin:10px 0 0;color:var(--ink-4);font-size:15px}
 .image .dock{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;width:min(1116px,92%);display:flex;flex-direction:column;gap:12px}
 .image .insp{display:flex;gap:6px;justify-content:center}
-.image .pbx{background:#141517;border:1px solid #232427;border-radius:16px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;transition:border-color .15s}
+.image .pbx{background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-pop);border-radius:16px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;transition:border-color .15s}
 .image .pbx input{padding:6px 4px;font-size:15px}
 .image .ctl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;color:#e6e6e2;font-weight:500}
 .image .ctl span{background:var(--surface);border:1px solid var(--fill);border-radius:9px;padding:0 10px;min-height:34px;display:flex;gap:6px;align-items:center;font-size:13px}
