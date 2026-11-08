@@ -317,7 +317,7 @@ test('seeds/genjutsu.sql : se charge après templates.sql, et chaque vidéo Genj
       const src = await templateSource(t.db, x.id)
       assert.match(src.sourceKey, /^templates\/[\w-]+\/source\.mp4$/)
       assert.ok(src.secs >= 4 && src.secs <= 20, `${x.id} : ${src.secs} s`)
-      assert.ok(src.prompt.length <= 1000, `${x.id} : consigne trop longue`)
+      assert.ok(src.prompt.length <= 2000, `${x.id} : consigne trop longue`)
       for (const resolution of ['480p', '720p']) {
         const url = `http://api/files/${src.sourceKey}`
         const r = priceJob({ kind: 'tool', modelId: src.tool, inputs: { video: url, images: x.genjutsu.roles.map((_, i) => `https://v3b.fal.media/files/p${i}.jpg`), prompt: src.prompt, resolution } }, { secs: src.secs, trusted: url })

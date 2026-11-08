@@ -388,7 +388,7 @@ export const TOOLS = [
     inputs: [
       { key: 'video', type: 'video', label: g.video },
       { key: 'images', type: 'images', label: g.images, min: 1, max: 8 },
-      { key: 'prompt', type: 'text', max: 1000, label: 'Consigne (facultatif)', placeholder: g.prompt },
+      { key: 'prompt', type: 'text', max: 2000, label: 'Consigne (facultatif)', placeholder: g.prompt }, // Higgsfield en accepte 10 000
       { key: 'resolution', type: 'select', label: 'Résolution', options: [opt('480p', '480p'), opt('720p', '720p')] },
     ],
     usd: (v, secs) => per({ '480p': 0.318, '720p': 0.681 })(v.resolution) * secs,
