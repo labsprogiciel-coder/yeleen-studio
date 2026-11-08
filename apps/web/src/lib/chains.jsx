@@ -56,6 +56,7 @@ export function ChainsProvider({ children }) {
     const r = submit({
       kind: e.kind,
       title: e.model.name,
+      modelId: e.model.id, // mesure d'audience seulement (lib/posthog.js)
       prompt: st.prompt,
       cost: st.cost,
       secs: stepSecs(st),

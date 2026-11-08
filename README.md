@@ -119,7 +119,7 @@ Facultatif : sans DSN, rien n'est chargé ni envoyé.
 
 Le site envoie ses pages vues, ses clics et quelques événements à PostHog (projet « Default project », région UE).
 - **Réglage** : `apps/web/.env.production` porte la clé publique du projet (`VITE_POSTHOG_KEY`, `phc_…`, faite pour être dans le navigateur) et `VITE_POSTHOG_HOST`. Sans clé, rien n'est chargé. Le SDK est chargé à part, après le premier affichage (`apps/web/src/lib/posthog.js`).
-- **Événements nommés** : `generation_submitted` (type, outil ou modèle, modèle de vidéo, style, prix, nombre), `generation_completed` (durée), `generation_failed` (raison, étape, remboursement), `recharge_opened` (pack).
+- **Événements nommés** : `generation_submitted` (type, modèle ou outil, mode, modèle de vidéo, style, style de la marque, chaîne ou modèle à étapes, prix, nombre), `generation_completed` (durée), `generation_failed` (raison, étape, remboursement), `tool_opened` (outil et onglet de Cinéma), `template_used` (vidéo à refaire, Genjutsu ou non), `recharge_opened` (pack).
 - **Rien de personnel** : jamais le texte des consignes ni des champs, pas d'enregistrement de session, adresses sans paramètres, IP anonymisées par le projet. Un compte n'est connu que par son identifiant Clerk ; les visiteurs non connectés n'ont pas de profil.
 
 ## Base de données (D1)

@@ -275,7 +275,16 @@ export function JobsProvider({ children }) {
     const job = make(spec, attempt)
     dispatch(replaces ? { type: 'RETRY', replaces, job, now: Date.now() } : { type: 'SUBMIT', job, now: Date.now() })
     // Mesure d'audience : le type, l'outil et le prix, jamais la consigne.
-    const props = { kind: spec.kind, model: spec.live?.modelId ?? null, mode: spec.live?.kind ?? null, template: spec.live?.template ?? null, style: spec.live?.inputs?.style ?? null, cost: spec.cost, count: spec.count ?? 1, live: Boolean(job.live) }
+    const props = {
+      kind: spec.kind, // image, video, audio
+      model: spec.live?.modelId ?? spec.modelId ?? null, // modèle, outil (upscale, motion-transfer…) ou modèle de vidéo (workflow)
+      mode: spec.live?.kind ?? null, // image, video, audio, tool, workflow
+      template: spec.live?.template ?? null,
+      style: spec.live?.style ?? spec.live?.inputs?.style ?? null, // style « By Qreativ »
+      brand_style: Boolean(spec.brandStyle), // style de la marque appliqué
+      chain: Boolean(spec.chain), recipe: Boolean(spec.recipe),
+      cost: spec.cost, count: spec.count ?? 1, live: Boolean(job.live),
+    }
     analytics.current.set(job.id, props)
     track('generation_submitted', { ...props, retry: Boolean(replaces) })
     if (job.live) {
