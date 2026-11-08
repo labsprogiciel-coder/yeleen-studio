@@ -1,5 +1,6 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
+import { track } from './posthog.js'
 
 /**
  * La recharge est une fenêtre, pas une page : le solde, « Recharger » (en-tête, barre latérale de Cinéma), « solde insuffisant »
@@ -15,7 +16,7 @@ export const useRecharge = () => useContext(Ctx)
 export function RechargeDialogProvider({ children }) {
   const [request, setRequest] = useState(null)
   const [open, setOpen] = useState(false)
-  const openRecharge = useCallback((r = {}) => { setRequest({ ...r, at: Date.now() }); setOpen(true) }, [])
+  const openRecharge = useCallback((r = {}) => { setRequest({ ...r, at: Date.now() }); setOpen(true); track('recharge_opened', { pack: typeof r.pack === 'string' ? r.pack : null }) }, [])
   const close = useCallback(() => setOpen(false), [])
   const value = useMemo(() => ({ openRecharge }), [openRecharge])
   return (

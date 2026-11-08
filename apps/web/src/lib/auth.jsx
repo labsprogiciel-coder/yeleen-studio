@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ClerkProvider, SignIn, SignUp, UserButton, useAuth } from '@clerk/clerk-react'
 import { setTokenGetter } from './api.js'
 import { setSentryUser } from './sentry.js'
+import { setAnalyticsUser } from './posthog.js'
 import stacked from '../assets/brand/qreativ-lockup-stacked-primary.svg'
 
 /**
@@ -50,6 +51,7 @@ function Bridge({ children }) {
     if (last.current && last.current !== userId) { wipeLocal(); location.replace('/'); return }
     last.current = userId ?? null
     setSentryUser(userId)
+    setAnalyticsUser(userId)
   }, [isLoaded, userId])
   useEffect(() => {
     setTokenGetter(isSignedIn ? () => getToken() : null)

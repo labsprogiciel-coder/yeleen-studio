@@ -115,6 +115,13 @@ Facultatif : sans DSN, rien n'est chargé ni envoyé.
 - **API** : secret `SENTRY_DSN` (et variable `SENTRY_RELEASE` facultative). Le Worker et le Durable Object sont enveloppés dans `apps/api/src/worker.js` (drapeau `nodejs_compat`).
 - Rien de personnel : ni adresse IP, ni en-têtes, ni corps de requête, ni paramètres d'adresse, ni journaux de la console ; l'utilisateur n'est connu que par l'identifiant de son compte.
 
+## Mesure d'audience (PostHog)
+
+Le site envoie ses pages vues, ses clics et quelques événements à PostHog (projet « Default project », région UE).
+- **Réglage** : `apps/web/.env.production` porte la clé publique du projet (`VITE_POSTHOG_KEY`, `phc_…`, faite pour être dans le navigateur) et `VITE_POSTHOG_HOST`. Sans clé, rien n'est chargé. Le SDK est chargé à part, après le premier affichage (`apps/web/src/lib/posthog.js`).
+- **Événements nommés** : `generation_submitted` (type, outil ou modèle, modèle de vidéo, style, prix, nombre), `generation_completed` (durée), `generation_failed` (raison, étape, remboursement), `recharge_opened` (pack).
+- **Rien de personnel** : jamais le texte des consignes ni des champs, pas d'enregistrement de session, adresses sans paramètres, IP anonymisées par le projet. Un compte n'est connu que par son identifiant Clerk ; les visiteurs non connectés n'ont pas de profil.
+
 ## Base de données (D1)
 
 D1 tient les **utilisateurs** : une ligne par compte Clerk (`users` : identifiant `sub`, date d'arrivée, dernière activité, pays d'après Cloudflare, e-mail et nom si le jeton les porte). Elle est créée à la première requête authentifiée ; la date d'activité n'est écrite qu'au plus toutes les 10 minutes. Le **portefeuille et les générations restent dans le Durable Object** du compte (un seul écrivain pour l'argent) : D1 sert au profil, à l'analyse et aux rapports. Une panne de D1 n'empêche jamais une requête.

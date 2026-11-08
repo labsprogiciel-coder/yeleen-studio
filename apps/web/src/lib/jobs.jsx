@@ -3,6 +3,7 @@ import { currentProject } from './projects.js'
 import { dueJobs } from './pollDelay.js'
 import { useAuthState } from './auth.jsx'
 import { api, apiEnabled } from './api.js'
+import { track } from './posthog.js'
 
 /**
  * Moteur de générations simulé, calqué sur la file d'un fournisseur (fal : IN_QUEUE → IN_PROGRESS → COMPLETED).
@@ -178,6 +179,7 @@ export function JobsProvider({ children }) {
   const ref = useRef(state)
   ref.current = state
   const seq = useRef(0)
+  const analytics = useRef(new Map()) // propriétés de mesure de chaque génération lancée ici (type, outil, prix), pour les événements de fin
 
   const active = state.jobs.some((j) => j.status === 'IN_QUEUE' || j.status === 'IN_PROGRESS')
   useEffect(() => {
@@ -235,6 +237,7 @@ export function JobsProvider({ children }) {
       patch: { status: 'FAILED', failure, refund: err.body?.refunded ?? 0, finishedAt: Date.now(), logs: [{ msg: `Erreur : ${FAILURES[failure].message}`, error: true }] },
       message: `Échec : ${job?.title ?? 'génération'}.`,
     })
+    track('generation_failed', { ...analytics.current.get(id), failure, stage: 'submit' })
   }, [])
 
   // Envoi réel : les fichiers d'entrée (images, audio) sont d'abord déposés chez le fournisseur, puis la demande part.
@@ -271,6 +274,10 @@ export function JobsProvider({ children }) {
     const attempt = replaces ? (ref.current.jobs.find((j) => j.id === replaces)?.attempt ?? 1) + 1 : 1
     const job = make(spec, attempt)
     dispatch(replaces ? { type: 'RETRY', replaces, job, now: Date.now() } : { type: 'SUBMIT', job, now: Date.now() })
+    // Mesure d'audience : le type, l'outil et le prix, jamais la consigne.
+    const props = { kind: spec.kind, model: spec.live?.modelId ?? null, mode: spec.live?.kind ?? null, template: spec.live?.template ?? null, style: spec.live?.inputs?.style ?? null, cost: spec.cost, count: spec.count ?? 1, live: Boolean(job.live) }
+    analytics.current.set(job.id, props)
+    track('generation_submitted', { ...props, retry: Boolean(replaces) })
     if (job.live) {
       startLive(job, spec.live)
         .then((r) => {
@@ -310,8 +317,8 @@ export function JobsProvider({ children }) {
         const logs = (r.logs ?? []).filter((m) => !j.logs.some((l) => l.msg === m)).map((msg) => ({ msg }))
         let patch
         let message
-        if (r.status === 'COMPLETED') { patch = { status: 'COMPLETED', progress: 100, finishedAt: now, outputs: r.outputs, logs: logs.concat({ msg: 'Terminé' }) }; message = `Terminée : ${j.title}.` }
-        else if (r.status === 'FAILED') { const failure = r.failure ?? 'provider'; patch = { status: 'FAILED', failure, refund: r.refund ?? 0, finishedAt: now, logs: logs.concat({ msg: `Erreur : ${FAILURES[failure].message}`, error: true }) }; message = `Échec : ${j.title}. ${jetons(r.refund ?? 0)} cauris remboursés.` }
+        if (r.status === 'COMPLETED') { patch = { status: 'COMPLETED', progress: 100, finishedAt: now, outputs: r.outputs, logs: logs.concat({ msg: 'Terminé' }) }; message = `Terminée : ${j.title}.`; track('generation_completed', { kind: j.kind, ...analytics.current.get(j.id), seconds: Math.round((now - j.createdAt) / 1000) }) }
+        else if (r.status === 'FAILED') { const failure = r.failure ?? 'provider'; track('generation_failed', { kind: j.kind, ...analytics.current.get(j.id), failure, stage: 'provider', refund: r.refund ?? 0 }); patch = { status: 'FAILED', failure, refund: r.refund ?? 0, finishedAt: now, logs: logs.concat({ msg: `Erreur : ${FAILURES[failure].message}`, error: true }) }; message = `Échec : ${j.title}. ${jetons(r.refund ?? 0)} cauris remboursés.` }
         else if (r.status === 'IN_PROGRESS') patch = { status: 'IN_PROGRESS', startedAt: j.startedAt ?? now, queuePosition: 0, logs: logs.length || j.logs.some((l) => l.msg === 'Génération en cours') ? logs : [{ msg: 'Génération en cours' }] } // fal ne détaille pas toujours ses étapes
         else patch = { status: 'IN_QUEUE', queuePosition: r.queuePosition ?? 0, logs }
         dispatch({ type: 'REMOTE', id: j.id, balance: r.balance, patch, message })
