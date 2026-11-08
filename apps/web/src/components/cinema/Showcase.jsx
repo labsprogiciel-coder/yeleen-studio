@@ -72,7 +72,8 @@ function Tour({ tool }) {
 /**
  * Zone principale : Créations (les générations en cours et terminées, ou la visite guidée de l'outil tant qu'il n'y en a pas)
  * et Modèles (les vidéos à refaire, puis les workflows en cartes). `top` : bandeau au-dessus des créations (avancement d'un modèle
- * lancé). `templates` : les vidéos à refaire ; `onRecreate` en ouvre une dans le générateur.
+ * lancé). `templates` : les vidéos à refaire ; `onRecreate` en ouvre une dans le générateur. `picked` : la vidéo à refaire choisie,
+ * lue en tête de Créations ; tant qu'il y en a une, les cartes « Commencer à créer » et « Modèles en vedette » s'effacent.
  */
 export default function Showcase({ view, onView, tool, onPickTemplate, templates = [], onRecreate, picked = null, onUnpick, top = null }) {
   const { jobs } = useJobs()
@@ -102,14 +103,14 @@ export default function Showcase({ view, onView, tool, onPickTemplate, templates
             {top}
             {picked && <PickedTemplate t={picked} onClear={onUnpick} />}
             {kinds.length > 0 ? kinds.map((k) => <GenerationTray key={k} kind={k} className="cx-tray" />) : !picked && <Tour tool={tool} />}
-            <section className="cx-sec" aria-labelledby="cx-new-h">
+            {!picked && <section className="cx-sec" aria-labelledby="cx-new-h">
               <div className="cx-sec-h">
                 <h2 id="cx-new-h">{kinds.length ? 'Modèles' : 'Commencer à créer'}</h2>
                 <button type="button" className="cx-all" onClick={() => onView('templates')}>Tout voir<Icon name="chevR" size={14} /></button>
               </div>
               {!kinds.length && <p className="cx-sub">Des modèles prêts à l’emploi : une photo ou quelques mots, et le reste se fait seul.</p>}
               <ul className="cx-cards">{RECIPES.slice(0, 3).map((r) => <TemplateCard key={r.id} r={r} onPick={onPickTemplate} />)}</ul>
-            </section>
+            </section>}
             {templates.length > 0 && (
               <section className="cx-sec" aria-labelledby="cx-vt-new-h">
                 <div className="cx-sec-h">
@@ -123,10 +124,10 @@ export default function Showcase({ view, onView, tool, onPickTemplate, templates
         ) : (
           <>
             {templates.length > 0 && <VideoTemplates templates={templates} onPick={onRecreate} selectedId={picked?.id ?? null} />}
-            <section className="cx-sec" aria-labelledby="cx-tpl-h">
+            {!picked && <section className="cx-sec" aria-labelledby="cx-tpl-h">
               <div className="cx-sec-h"><h2 id="cx-tpl-h">Modèles en vedette</h2></div>
               <ul className="cx-cards">{RECIPES.map((r) => <TemplateCard key={r.id} r={r} onPick={onPickTemplate} />)}</ul>
-            </section>
+            </section>}
           </>
         )}
       </div>
