@@ -60,7 +60,9 @@ export function higgsfieldClient({ key, fetch: f = fetch }) {
     async poll(requestId) {
       const res = await f(`${API}/requests/${encodeURIComponent(requestId)}/status`, { headers })
       const body = await parse(res)
-      if (!res.ok) throw new HiggsfieldError(res.status, body, 'status')
+      // 404 : demande inconnue de ce compte (jamais reçue, ou supprimée) ; elle ne reviendra pas : échec, donc remboursement.
+      if (res.status === 404) return { status: 'FAILED', error: new HiggsfieldError(404, body, 'status') }
+      if (!res.ok) throw new HiggsfieldError(res.status, body, 'status') // erreur passagère (réseau, 5xx, 429) : on réessaiera
       switch (body?.status) {
         case 'queued': return { status: 'IN_QUEUE' }
         case 'in_progress': return { status: 'IN_PROGRESS' }

@@ -37,6 +37,10 @@ test('Higgsfield : nsfw est un refus de contenu, failed une panne ; une requête
   const failed = await hf({ status: 'failed', error: 'Generation failed' }).poll('r')
   assert.equal(failed.error.isContentPolicy, false)
   await assert.rejects(hf({ detail: 'Invalid credentials' }, 401).poll('r'), HiggsfieldError)
+  await assert.rejects(hf({ detail: 'busy' }, 503).poll('r'), HiggsfieldError) // passagère : on réessaiera
+  const gone = await hf({ detail: 'Not Found' }, 404).poll('r') // demande inconnue : définitive
+  assert.equal(gone.status, 'FAILED')
+  assert.equal(gone.error.isContentPolicy, false)
   await assert.rejects(hf({ detail: 'bad' }, 422).submit('x', {}), HiggsfieldError)
   assert.throws(() => higgsfieldClient({ key: '' }), /HIGGSFIELD_KEY/)
 })

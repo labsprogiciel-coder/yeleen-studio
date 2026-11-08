@@ -69,7 +69,7 @@ export const FAILURES = {
   },
   media: {
     message: 'Fichier refusé',
-    hint: 'Ce fichier est trop long, de trop haute résolution, ou dans un format que le service ne sait pas mesurer (préférez MP4, MP3 ou WAV). Aucun cauri n’a été débité.',
+    hint: 'Ce fichier est trop long ou trop court pour cet outil, de trop haute résolution, ou dans un format que le service ne sait pas mesurer (préférez MP4, MP3 ou WAV). Aucun cauri n’a été débité.',
     retry: false,
   },
   provider: {
