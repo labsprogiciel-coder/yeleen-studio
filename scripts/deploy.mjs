@@ -69,7 +69,13 @@ async function confirm(question) {
 const clerkIssuer = () => (process.env.CLERK_ISSUER ?? readState().clerkIssuer ?? '').replace(/\/+$/, '') || null
 const paygateUrl = () => (process.env.PAYGATE_URL ?? readState().paygateUrl ?? '').replace(/\/+$/, '') || null
 const normalize = (url) => (url ? url.replace(/\/+$/, '') : null)
-const origins = () => [...new Set([opt('web-origin') ?? process.env.WEB_ORIGIN ?? readState().webOrigin].filter(Boolean).map(normalize))]
+// Origines autorisées par l'API (CORS) : l'adresse du site déployé (option, WEB_ORIGIN, ou celle retenue au dernier déploiement ;
+// plusieurs possibles, séparées par des virgules) d'abord, puis celles écrites dans apps/api/wrangler.jsonc (domaines personnalisés,
+// ex. https://qreativ.app), qu'un déploiement ne doit jamais retirer.
+const configOrigins = () => {
+  try { return (readFileSync(API_CONFIG, 'utf8').match(/"ALLOWED_ORIGINS":\s*"([^"]*)"/)?.[1] ?? '').split(',') } catch { return [] }
+}
+const origins = () => [...new Set([...String(opt('web-origin') ?? process.env.WEB_ORIGIN ?? readState().webOrigin ?? '').split(','), ...configOrigins()].map((s) => s.trim()).filter(Boolean).map(normalize))]
 const apiUrl = () => normalize(opt('api-url') ?? process.env.API_URL ?? readState().apiUrl)
 const urlIn = (out) => normalize(out.match(/https:\/\/[\w.-]+\.workers\.dev/)?.[0])
 
