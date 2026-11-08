@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Icon from '../../lib/icons.jsx'
-import icon from '../../assets/brand/yeelen-icon.svg'
+import icon from '../../assets/brand/qreativ-icon-tangerine.svg'
 import GenerationTray from '../GenerationTray.jsx'
 import { Amount } from '../Cauri.jsx'
 import { useJobs } from '../../lib/jobs.jsx'
@@ -22,7 +22,7 @@ function TemplateCard({ r, onPick }) {
         <span className="cx-card-t"><b>{r.name}</b><small><Amount n={recipeCost(r.id)} word /></small></span>
         <span className="cx-card-img">
           <img src={THUMBS[r.id]} alt="" loading="lazy" />
-          <span className="cx-by"><img src={icon} alt="" width="18" height="18" />Par Yeelen</span>
+          <span className="cx-by"><img src={icon} alt="" width="18" height="18" />Par Qreativ</span>
         </span>
       </button>
     </li>

@@ -8,7 +8,8 @@
 /* Barre d'icônes */
 .cx-rail{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0;border-radius:20px;background:var(--panel);overflow-y:auto;scrollbar-width:none}
 .cx-logo{display:grid;place-items:center;width:44px;height:44px}
-.cx-logo img{display:block}
+.cx-logo img{display:block;border-radius:10px}
+
 .cx-new{display:grid;place-items:center;width:44px;height:44px;margin-bottom:6px;border:0;border-radius:12px;background:var(--lime);color:var(--on-lime);cursor:pointer}
 .cx-new:hover{filter:brightness(.92)}
 .cx-rl{display:flex;flex-direction:column;align-items:center;gap:4px;margin:0;padding:0;list-style:none}
@@ -137,7 +138,7 @@
 .cx-card-img>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .3s}
 .cx-card:hover .cx-card-img>img{transform:scale(1.04)}
 .cx-by{position:absolute;left:8px;top:8px;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:rgba(0,0,0,.6);font-size:12.5px;font-weight:600;color:#fff}
-.cx-by img{border-radius:50%}
+
 @media (prefers-reduced-motion:reduce){.cx-card-img>img{transition:none}}
 /* Colonnes (voir VideoGrid) : chaque carte garde le format de sa vidéo (16:9, 9:16…). */
 .cx-vts{display:grid;gap:12px;align-items:start}

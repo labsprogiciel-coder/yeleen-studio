@@ -213,7 +213,7 @@ export default function Home() {
       <footer className="ft">
         <div className={`wrap fti${hasContact ? ' has-contact' : ''}`}>
           <div className="ftb">
-            <b>Studio Yeelen</b>
+            <b>Qreativ</b>
             <p>Des vidéos, des images et des voix par l’IA, pour les créateurs d’Afrique francophone.</p>
           </div>
           <nav aria-label="Pied de page">
@@ -248,7 +248,7 @@ export default function Home() {
               )}
             </div>
           )}
-          <small>Paiement par Orange Money ou Moov Money · © {new Date().getFullYear()} Studio Yeelen · Cauri : <a href="https://www.vecteezy.com" target="_blank" rel="noopener noreferrer">Vecteezy.com<span className="sr-only"> (nouvel onglet)</span></a></small>
+          <small>Paiement par Orange Money ou Moov Money · © {new Date().getFullYear()} Qreativ · Cauri : <a href="https://www.vecteezy.com" target="_blank" rel="noopener noreferrer">Vecteezy.com<span className="sr-only"> (nouvel onglet)</span></a></small>
         </div>
       </footer>
     </div>

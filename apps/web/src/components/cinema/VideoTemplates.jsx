@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import icon from '../../assets/brand/yeelen-icon.svg'
+import icon from '../../assets/brand/qreativ-icon-tangerine.svg'
 import { Amount } from '../Cauri.jsx'
 import { categoryLabel, templateCost } from '../../lib/templates.js'
 
@@ -52,7 +52,7 @@ export function TemplateVideoCard({ t, onPick, selected = false }) {
   return (
     <li className={`cx-vt${selected ? ' on' : ''}`} style={{ aspectRatio: aspect(t.ratio) }} onMouseEnter={play} onMouseLeave={stop} onFocus={play} onBlur={stop} aria-labelledby={id}>
       <video ref={v} src={`${t.video}#t=0.1`} muted loop playsInline preload="metadata" aria-hidden="true" tabIndex={-1} />
-      <span className="cx-by"><img src={icon} alt="" width="18" height="18" />Par Yeelen</span>
+      <span className="cx-by"><img src={icon} alt="" width="18" height="18" />Par Qreativ</span>
       {selected && <span className="cx-vt-sel">Sélectionnée</span>}
       <div className="cx-vt-over">
         <h3 id={id}>{t.name}</h3>
