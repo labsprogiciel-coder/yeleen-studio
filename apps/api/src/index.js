@@ -311,7 +311,7 @@ app.post('/jobs', async (c) => {
       : req.kind === 'workflow' ? Object.values(req.inputs ?? {}).filter((v) => typeof v === 'string') : [req.prompt ?? '']
   if (isBlocked(texts.join(' '))) return c.json({ error: 'moderation' }, 422)
   // Garde-fou tant qu'il n'y a ni connexion ni plafond par compte : on refuse une seule demande très coûteuse.
-  const cap = Number(c.env.MAX_JOB_COST ?? 250)
+  const cap = Number(c.env.MAX_JOB_COST ?? 600) // 600 : une vidéo Genjutsu de 20 s en 720p (environ 490 cauris) passe
   if (price.cost > cap) return c.json({ error: 'too_expensive', max: cap }, 400)
   // Sans clé Runware, ses modèles sont refusés avant tout débit : les servir chez fal coûterait plus que leur prix au catalogue.
   if (onRunware(price.model) && !c.env.RUNWARE_KEY) return c.json({ error: 'provider_unavailable' }, 503)

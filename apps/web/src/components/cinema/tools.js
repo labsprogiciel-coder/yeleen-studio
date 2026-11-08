@@ -76,12 +76,12 @@ export const tabOf = (id) => Object.keys(TOOLS).find((k) => TOOLS[k].some((t) =>
 /** Visite guidée de l'outil (zone principale, quand il n'y a encore rien à montrer). */
 export const TOURS = {
   'motion-transfer': [
-    { img: montage, title: 'Joignez la vidéo du mouvement', text: 'Une danse, une démarche, un geste : de 4 à 10 s. Le prix suit sa durée.' },
-    { img: portrait, title: 'Ajoutez votre personnage', text: 'Une à quatre photos de la personne : elle refait exactement les gestes de la vidéo.' },
+    { img: montage, title: 'Joignez la vidéo du mouvement', text: 'Une danse, une démarche, un geste : de 4 à 20 s. Le prix suit sa durée.' },
+    { img: portrait, title: 'Ajoutez votre personnage', text: 'Une photo par personne de la vidéo (jusqu’à huit) : chacune refait exactement ses gestes.' },
   ],
   'object-swap': [
-    { img: pubs, title: 'Joignez la vidéo source', text: 'De 4 à 10 s, en 720p au moins de préférence : le cadre et le mouvement restent les mêmes.' },
-    { img: scene, title: 'Ajoutez votre objet', text: 'Une à quatre photos du produit ; précisez au besoin quel objet remplacer.' },
+    { img: pubs, title: 'Joignez la vidéo source', text: 'De 4 à 20 s, en 720p au moins de préférence : le cadre et le mouvement restent les mêmes.' },
+    { img: scene, title: 'Ajoutez votre objet', text: 'Jusqu’à huit photos du produit ; précisez au besoin quel objet remplacer.' },
   ],
   'video-gen': [
     { img: scene, title: 'Partez d’une image', text: 'Ajoutez une image de départ (et de fin, si le modèle l’accepte), ou partez du texte seul.' },

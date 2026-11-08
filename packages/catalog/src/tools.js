@@ -371,7 +371,8 @@ export const TOOLS = [
   },
   // Genjutsu (Higgsfield) : la vidéo source garde son mouvement et son cadre ; les photos donnent le personnage ou l'objet.
   // Facturé à la seconde de la source, arrondie au-dessus (tarif lu sur l'estimation de l'API : 0,318 $ en 480p, 0,681 $ en 720p,
-  // 1,632 $ en 1080p, non proposé : 10 s dépasseraient le plafond d'une génération). Source de 4 s au moins.
+  // 1,632 $ en 1080p, non proposé : 20 s dépasseraient le plafond d'une génération, MAX_JOB_COST). Source de 4 à 20 s ; jusqu'à
+  // 8 photos (une par personne de la vidéo, dans l'ordre que la consigne désigne).
   ...[
     { id: 'motion-transfer', name: 'Transfert de mouvement', endpoint: 'higgsfield/genjutsu/motion-transfer/v1.0', video: 'Vidéo du mouvement', images: 'Photo du personnage', prompt: 'Ex. : garder le décor de la vidéo' },
     { id: 'object-swap', name: 'Remplacer un objet', endpoint: 'higgsfield/genjutsu/object-swap/v1.0', video: 'Vidéo source', images: 'Photo du nouvel objet', prompt: 'Ex. : remplacer la bouteille par mon produit' },
@@ -382,11 +383,11 @@ export const TOOLS = [
     provider: 'higgsfield',
     endpoint: g.endpoint,
     minSecs: 4,
-    maxSecs: 10,
+    maxSecs: 20,
     bySecs: 'video',
     inputs: [
       { key: 'video', type: 'video', label: g.video },
-      { key: 'images', type: 'images', label: g.images, min: 1, max: 4 },
+      { key: 'images', type: 'images', label: g.images, min: 1, max: 8 },
       { key: 'prompt', type: 'text', max: 1000, label: 'Consigne (facultatif)', placeholder: g.prompt },
       { key: 'resolution', type: 'select', label: 'Résolution', options: [opt('480p', '480p'), opt('720p', '720p')] },
     ],
