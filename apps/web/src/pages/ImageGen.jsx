@@ -106,7 +106,7 @@ export default function ImageGen() {
             <div className="ctl">
               <span className="sp"><Icon name="plus" size={16} /><b className="dv" /><Icon name="at" size={16} /></span>
               <Menu items={items} value={modelId} onChange={setModelId} label="Modèle image" menuWidth={420} search="Rechercher un modèle…" className="cb">
-                {logoFor(model.id) ? <ModelLogo logo={logoFor(model.id)} size={16} /> : <Icon name="sparkle" size={16} color="#d6ff3f" />}{model.name}
+                {logoFor(model.id) ? <ModelLogo logo={logoFor(model.id)} size={16} /> : <Icon name="sparkle" size={16} color="#ff5a1f" />}{model.name}
               </Menu>
               <button type="button" className="cb" aria-label={`Format : ${ratio}`} onClick={() => setRatio(nextOf(caps.ratios, ratio))}><Icon name="expand" size={15} />{ratio}</button>
               <button type="button" className="cb" aria-label={`Résolution : ${resolution}`} disabled={caps.resolutions.length < 2} onClick={() => setRes(nextOf(caps.resolutions, resolution))}><Icon name="diamond" size={15} />{resolution}</button>

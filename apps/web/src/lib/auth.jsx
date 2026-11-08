@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ClerkProvider, SignIn, SignUp, UserButton, useAuth } from '@clerk/clerk-react'
 import { setTokenGetter } from './api.js'
 import { setSentryUser } from './sentry.js'
+import stacked from '../assets/brand/qreativ-lockup-stacked-primary.svg'
 
 /**
  * Connexion avec Clerk. Sans `VITE_CLERK_PUBLISHABLE_KEY` (développement local), il n'y a pas de garde : l'API locale
@@ -16,8 +17,19 @@ const Ctx = createContext({ enabled: false, ready: true, signedIn: true })
 /** { enabled, ready, signedIn } : sans Clerk, tout le monde est « connecté » (compte de démonstration). */
 export const useAuthState = () => useContext(Ctx)
 
+// Charte Qreativ : cartes Paper sur fond Fog, texte Plum, bouton Tangerine (texte Plum), liens Cobalt.
 const appearance = {
-  variables: { colorPrimary: '#d6ff3f', colorTextOnPrimaryBackground: '#111111', colorBackground: '#16171a', colorText: '#ecece8', colorInputBackground: '#0d0e10', colorInputText: '#ecece8', borderRadius: '12px' },
+  variables: {
+    colorPrimary: '#FF5A1F', colorTextOnPrimaryBackground: '#3A1456', colorBackground: '#FFFFFF', colorText: '#3A1456', colorTextSecondary: '#4A5068',
+    colorInputBackground: '#FFFFFF', colorInputText: '#3A1456', colorNeutral: '#3A1456', colorDanger: '#C4321A', borderRadius: '14px',
+    fontFamily: "'Hanken Grotesk', Helvetica, sans-serif",
+  },
+  elements: {
+    card: { boxShadow: '0 10px 28px rgba(58, 20, 86, 0.10)', border: '1px solid #E3E7EF' },
+    headerTitle: { fontFamily: "'Bricolage Grotesque', 'Hanken Grotesk', sans-serif", fontWeight: 800 },
+    footerActionLink: { color: '#2B3BFF' },
+    formButtonPrimary: { fontWeight: 700 },
+  },
 }
 
 /**
@@ -77,7 +89,9 @@ export function AuthProvider({ children }) {
       routerReplace={(to) => navigate(to, { replace: true })}
       signInUrl="/sign-in"
       signUpUrl="/sign-up"
-      afterSignOutUrl="/"
+      afterSignOutUrl="/sign-in"
+      signInFallbackRedirectUrl="/cinema"
+      signUpFallbackRedirectUrl="/cinema"
     >
       <Bridge>{children}</Bridge>
     </ClerkProvider>
@@ -93,12 +107,24 @@ export function Protected({ children }) {
   return <Navigate to={`/sign-in?redirect_url=${encodeURIComponent(pathname + search)}`} replace />
 }
 
-const center = { minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)', padding: 16 }
-export const SignInPage = () => <main style={center}>{authEnabled ? <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" /> : <Navigate to="/" replace />}</main>
-export const SignUpPage = () => <main style={center}>{authEnabled ? <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" /> : <Navigate to="/" replace />}</main>
+/**
+ * Pages de connexion et d'inscription : la porte d'entrée tant que la page d'accueil est éteinte (drapeau `home`). Fond Fog,
+ * logo Qreativ empilé, phrase de la marque, puis le formulaire Clerk. Après connexion : le studio (ou la page demandée).
+ */
+function AuthGate({ children }) {
+  return (
+    <main className="auth-gate">
+      <img className="auth-logo" src={stacked} alt="Qreativ" width="180" height="153" />
+      <p className="auth-tag">Vos idées, en mouvement.</p>
+      {children}
+    </main>
+  )
+}
+export const SignInPage = () => (authEnabled ? <AuthGate><SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" /></AuthGate> : <Navigate to="/cinema" replace />)
+export const SignUpPage = () => (authEnabled ? <AuthGate><SignUp routing="path" path="/sign-up" signInUrl="/sign-in" /></AuthGate> : <Navigate to="/cinema" replace />)
 
 /** Menu du compte (déconnexion…), ou l'avatar de démonstration sans Clerk. */
 export function AccountMenu({ fallback = null }) {
   const { enabled, signedIn } = useAuthState()
-  return enabled && signedIn ? <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} /> : fallback
+  return enabled && signedIn ? <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} /> : fallback
 }

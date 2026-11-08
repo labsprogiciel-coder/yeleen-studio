@@ -5,7 +5,7 @@ import { useSyncExternalStore } from 'react'
  * et Créations ne montre que celles du projet ouvert. Gardés dans ce navigateur ; le serveur ne les connaît pas encore.
  */
 const KEY = 'studio.projects.v1'
-const COLORS = ['#d6ff3f', '#ffb547', '#6bb7ff', '#ff7a90', '#7cf0a8', '#c38bff']
+const COLORS = ['#ff5a1f', '#ffb547', '#6bb7ff', '#ff7a90', '#7cf0a8', '#c38bff']
 export const DEFAULT_PROJECT = 'perso'
 
 const read = () => {

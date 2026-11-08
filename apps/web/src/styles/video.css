@@ -103,7 +103,7 @@
 .video .cmp .ch{position:absolute;top:0;bottom:0;left:var(--pos);width:2px;margin-left:-1px;background:#fff;pointer-events:none}
 .video .cmp .ch:after{content:"";position:absolute;top:50%;left:50%;width:28px;height:28px;margin:-14px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
 .video .cmp input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize}
-.video .cmp:has(input:focus-visible){outline:2px solid var(--lime);outline-offset:2px}
+.video .cmp:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
 .video .evt{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
 .video .ev h1{font-size:22px;line-height:1.1;margin:0}
 .video .ev p{font-size:14px;max-width:560px;text-wrap:pretty}

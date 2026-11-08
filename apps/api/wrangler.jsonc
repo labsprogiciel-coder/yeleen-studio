@@ -11,7 +11,7 @@
   // Valeurs de production. En local, `.dev.vars` les remplace (ENV=dev offre des jetons de test).
   // ALLOWED_ORIGINS (origines du site, séparées par des virgules) est écrit ici : la construction Git de Cloudflare lance un simple
   // `wrangler deploy`, sans `--var`, et sans cette valeur le navigateur refuse toutes les réponses de l'API (CORS). Ajouter ici un
-  // domaine personnalisé du site ; `scripts/deploy.mjs` la remplace à la commande.
+  // domaine personnalisé du site ; `scripts/deploy.mjs` y ajoute l'adresse du site déployé (sans retirer celles-ci).
   // CLERK_ISSUER (adresse de l'instance Clerk) se règle dans Cloudflare (Variables et secrets) ou à la commande ; `keep_vars` empêche
   // un déploiement d'effacer ce qui est réglé dans le tableau de bord (sauf les variables écrites ici, qui l'emportent).
   // FAL_KEY est un secret : `wrangler secret put FAL_KEY` ou le tableau de bord, jamais ici.

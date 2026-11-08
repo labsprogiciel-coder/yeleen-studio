@@ -6,10 +6,10 @@
  *
  * Écrans concernés : image, video, audio, spot (Spot pub), brand (Marque) ; catalog : la Bibliothèque Yeleen (personnages, objets, vidéos)
  * dans la fenêtre de choix des références, éteinte tant que ses contenus ne sont pas prêts ; tools : tous les outils de Cinéma (éteint : une sélection dans Image, Vidéo et Audio, l'onglet Modèles reste complet ;
- * voir SHOWN dans components/cinema/tools.js). C'est un choix de présentation, pas une protection :
+ * voir SHOWN dans components/cinema/tools.js) ; home : la page d'accueil (éteinte : « / » mène au studio, donc à la connexion Clerk). C'est un choix de présentation, pas une protection :
  * l'API reste la même (la garde de l'accès, c'est Clerk). En développement, `.env.development` allume tout.
  */
-export const FEATURE_NAMES = ['image', 'video', 'audio', 'spot', 'brand', 'catalog', 'tools']
+export const FEATURE_NAMES = ['image', 'video', 'audio', 'spot', 'brand', 'catalog', 'tools', 'home']
 
 export function parseFeatures(value) {
   const list = String(value ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)

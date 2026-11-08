@@ -158,7 +158,7 @@
 @media (hover:none){.cx-vt-over{opacity:1}.cx-vt .cx-by{display:none}}
 @media (prefers-reduced-motion:reduce){.cx-vt-over,.cx-vt .cx-by{transition:none}}
 /* Vidéo à refaire choisie : la carte est encadrée et marquée ; en tête de Créations, la vidéo se lit avec ses commandes. */
-.cx-vt.on{outline:3px solid var(--lime);outline-offset:-3px}
+.cx-vt.on{outline:3px solid var(--focus);outline-offset:-3px}
 .cx-vt-sel{position:absolute;right:8px;top:8px;z-index:2;padding:4px 10px;border-radius:999px;background:var(--lime);color:var(--on-lime);font-size:12.5px;font-weight:700}
 .cx-picked{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px;align-items:center;margin-bottom:24px;padding:16px;border:1px solid var(--line);border-radius:22px;background:var(--field)}
 .cx-picked.tall{grid-template-columns:minmax(0,320px) minmax(0,1fr)}
@@ -207,3 +207,5 @@
 .cx-panel .tf-num input{min-height:44px;padding:0 12px;border:1px solid var(--line-strong);border-radius:12px;background:var(--card);color:var(--ink);font:inherit;font-size:15px;font-variant-numeric:tabular-nums}
 .cx-panel .tf-num input:focus{outline:0;border-color:var(--lime)}
 .cx-panel .tf-hint{margin:0 2px;font-size:13px;line-height:1.4;color:var(--ink-3)}
+/* Titres du studio en Bricolage Grotesque (charte Qreativ) ; le reste en Hanken Grotesk. */
+.cx-main h2,.cx-intro h2,.cx-picked-t h2{font-family:var(--font-display);font-weight:800;letter-spacing:-.01em}

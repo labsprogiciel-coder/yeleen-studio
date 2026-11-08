@@ -17,7 +17,7 @@
 .gx-err span{color:var(--ink-2)}
 .gx-err .gx-topup{align-self:flex-start;margin-top:6px;padding:6px 12px;border-radius:9px;background:var(--lime);color:var(--on-lime);text-decoration:none;border:0;font:inherit;font-weight:700;cursor:pointer}
 .gx-refund{display:flex;align-items:center;gap:6px;margin:0;font-size:13px;font-weight:600;color:var(--lime-ink)}
-.gx-spin{display:block;width:16px;height:16px;border-radius:50%;border:2px solid rgba(214,255,63,.3);border-top-color:var(--lime);animation:gxspin .8s linear infinite}
+.gx-spin{display:block;width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,90,31,.3);border-top-color:var(--lime);animation:gxspin .8s linear infinite}
 @keyframes gxspin{to{transform:rotate(360deg)}}
 
 /* Image : planche contact, tuiles qui se développent */
@@ -54,7 +54,7 @@
 .vs-wrap{flex:1 1 0;min-height:260px;container-type:size;display:flex;align-items:center;justify-content:center}
 .vs-canvas{position:relative;isolation:isolate;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;width:min(100cqw,calc(100cqh*var(--ar)));aspect-ratio:var(--ar);border-radius:16px;background:#0b0c0e;color:#fff}
 .vs-art{position:absolute;inset:-8%;z-index:-3;transition:filter .3s linear}
-.vs-glow{position:absolute;inset:-30%;z-index:-2;mix-blend-mode:screen;background:radial-gradient(circle at 30% 40%,rgba(214,255,63,.3),transparent 38%),radial-gradient(circle at 72% 62%,rgba(255,255,255,.16),transparent 44%);animation:vsdrift 7s ease-in-out infinite alternate}
+.vs-glow{position:absolute;inset:-30%;z-index:-2;mix-blend-mode:screen;background:radial-gradient(circle at 30% 40%,rgba(255,90,31,.3),transparent 38%),radial-gradient(circle at 72% 62%,rgba(255,255,255,.16),transparent 44%);animation:vsdrift 7s ease-in-out infinite alternate}
 @keyframes vsdrift{from{transform:translate(-4%,-2%) rotate(0)}to{transform:translate(5%,3%) rotate(14deg)}}
 .vs-scrim{position:absolute;inset:0;z-index:-1;background:linear-gradient(rgba(0,0,0,.6),transparent 30%,transparent 50%,rgba(0,0,0,.78))}
 .vs-queued .vs-art,.vs-in-queue .vs-art{opacity:.55}
@@ -63,7 +63,7 @@
 .vs-prompt b{font-weight:600}
 .vs-prompt span{color:#e6e6e2}
 .vs-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0 16px;text-align:center}
-.vs-pct{margin:0;font-family:'Archivo',Helvetica,sans-serif;font-stretch:78%;font-weight:800;font-size:clamp(56px,11cqh,104px);line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 2px 24px rgba(0,0,0,.5)}
+.vs-pct{margin:0;font-family:var(--font-display);font-stretch:78%;font-weight:800;font-size:clamp(56px,11cqh,104px);line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 2px 24px rgba(0,0,0,.5)}
 .vs-pct small{font-size:.4em;margin:0 4px;font-weight:700;color:var(--lime)}
 .vs-step{margin:0;font-size:16px;font-weight:600}
 .vs-eta{margin:0;font-size:13px;color:#e6e6e2}

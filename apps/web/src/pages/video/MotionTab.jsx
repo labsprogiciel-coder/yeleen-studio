@@ -28,7 +28,7 @@ export function MotionLeft({ panel }) {
         </div>
       </div>
       <div className="row">
-        <div><small>Modèle</small><b>Contrôle du mouvement 3.0 <Icon name="motion" size={16} color="#d6ff3f" /></b></div>
+        <div><small>Modèle</small><b>Contrôle du mouvement 3.0 <Icon name="motion" size={16} color="#ff5a1f" /></b></div>
         <span className="r"><Icon name="chevR" size={16} /></span>
       </div>
       <div className="row">
