@@ -7,7 +7,7 @@ import { buildInput, endpointFor, runwareInput } from './inputs.js'
 import { advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { findTool } from '@studio/catalog/tools'
-import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES } from './library.js'
+import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource } from './library.js'
 import { mediaInfo } from './media.js'
 import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
@@ -301,10 +301,21 @@ app.post('/enhance', async (c) => {
 
 app.post('/jobs', async (c) => {
   const req = await c.req.json()
+  // Vidéo à refaire par Genjutsu : la source (la vidéo du modèle), sa durée et la consigne viennent de D1 ; l'application ne fournit
+  // que les photos (une par rôle, dans l'ordre) et la résolution.
+  let tpl = null
+  if (req.kind === 'tool' && req.template != null) {
+    if (!c.env.DB) return c.json({ error: 'db_unavailable' }, 503)
+    tpl = await templateSource(c.env.DB, req.template)
+    if (!tpl || tpl.tool !== req.modelId) return c.json({ error: 'unknown_template' }, 400)
+    const images = req.inputs?.images
+    if (!Array.isArray(images) || images.length !== tpl.roles.length) return c.json({ error: 'invalid_file_url' }, 400)
+    req.inputs = { images, resolution: req.inputs?.resolution, video: `${new URL(c.req.url).origin}/files/${tpl.sourceKey}`, prompt: tpl.prompt }
+  }
   // Outil facturé à la seconde de sa source (Genjutsu) : la durée mesurée au téléversement fixe le prix (sans mesure : la durée maximale).
-  const bySecs = req.kind === 'tool' ? findTool(req.modelId)?.bySecs : null
+  const bySecs = req.kind === 'tool' && !tpl ? findTool(req.modelId)?.bySecs : null
   const src = bySecs && typeof req.inputs?.[bySecs] === 'string' ? await measured(c, req.inputs[bySecs]) : null
-  const price = priceJob(req, { secs: src?.secs })
+  const price = priceJob(req, { secs: tpl ? tpl.secs : src?.secs, trusted: tpl ? req.inputs.video : undefined })
   if (!price.ok) return c.json({ error: price.error }, 400)
   const texts = req.kind === 'video' ? req.plans.map((p) => p.text)
     : req.kind === 'tool' ? price.model.inputs.filter((f) => f.type === 'text').map((f) => req.inputs?.[f.key] ?? '')
@@ -316,7 +327,7 @@ app.post('/jobs', async (c) => {
   // Sans clé Runware, ses modèles sont refusés avant tout débit : les servir chez fal coûterait plus que leur prix au catalogue.
   if (onRunware(price.model) && !c.env.RUNWARE_KEY) return c.json({ error: 'provider_unavailable' }, 503)
   if (onHiggsfield(price.model) && !c.env.HIGGSFIELD_KEY) return c.json({ error: 'provider_unavailable' }, 503)
-  if (req.kind === 'tool') {
+  if (req.kind === 'tool' && !tpl) { // la source d'un modèle est mesurée d'avance (template_genjutsu.secs)
     const issue = await mediaIssue(c, price.model, req.inputs ?? {})
     if (issue) return c.json({ error: issue }, 400)
   }
