@@ -37,6 +37,7 @@ import useDocumentTitle from '../lib/useDocumentTitle.js'
 import useGenSettings from '../lib/useGenSettings.js'
 import { useTemplates } from '../lib/templates.js'
 import '../styles/shell.css'
+import { track } from '../lib/posthog.js'
 import '../styles/library.css'
 import '../styles/cinema.css'
 import '../styles/studio.css'
@@ -130,9 +131,11 @@ export default function Cinema() {
     if (!id) return setTool(null)
     const t = tabOf(id)
     setTab(t); setTool(id)
+    track('tool_opened', { tool: id, tab: t })
     if (t === 'recipe') pickRecipe(id)
   }
   const recreate = (t) => {
+    track('template_used', { template: t.id, genjutsu: Boolean(t.genjutsu), model: t.genjutsu?.tool ?? t.modelId ?? null })
     if (t.genjutsu) { openTool(t.genjutsu.tool); setGenTpl(t); setView('creations'); return } // la vidéo est la source : seulement des photos
     openTool('video-refs'); setTask('refs'); setAtt([]); setStyleId(null); setVideoId(t.modelId); setTpl(t); setView('creations') // la vidéo à refaire a déjà son rendu
   }
