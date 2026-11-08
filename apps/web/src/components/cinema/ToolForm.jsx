@@ -112,7 +112,7 @@ export default function ToolForm({ tool: uiTool, onDone }) {
     ...inputs,
     ...Object.fromEntries(fields.filter(isFileField).map((f) => [f.key, f.type.endsWith('s') ? (files[f.key] ?? []).filter(Boolean).map(() => 'fichier') : files[f.key] ? 'fichier' : undefined])),
   }), [fields, inputs, files])
-  const cost = toolCost(tool, priced)
+  const cost = toolCost(tool, priced, tool.bySecs ? secs[tool.bySecs] : undefined) // à la seconde de la source : sa durée mesurée
   const modelField = fields.find((f) => f.type === 'model')
 
   const blocker = (() => {
@@ -124,6 +124,8 @@ export default function ToolForm({ tool: uiTool, onDone }) {
     }
     const long = tool.maxSecs && Object.values(secs).find((s) => s > tool.maxSecs)
     if (long) return `${tool.maxSecs} s au maximum : raccourcissez le fichier (il dure ${Math.round(long)} s).`
+    const short = tool.minSecs && Object.values(secs).find((s) => s > 0 && s < tool.minSecs)
+    if (short) return `${tool.minSecs} s au minimum : cette vidéo dure ${String(short).replace('.', ',')} s.`
     const tall = tool.maxP && Object.values(media).find((m) => m?.short > tool.maxP)
     if (tall) return `${tool.maxP}p au maximum : cette vidéo est en ${tall.short}p.`
     if (tool.id === 'clip-editor' && clip > 0 && values.end > clip) return `Le clip dure ${clip} s : la fin doit venir avant.`

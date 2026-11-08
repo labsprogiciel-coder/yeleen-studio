@@ -1,6 +1,7 @@
 import { FalError, falClient } from './fal.js'
 import { outputsOf } from './inputs.js'
 import { runwareClient } from './runware.js'
+import { higgsfieldClient } from './higgsfield.js'
 import { storeOutputs } from './storage.js'
 
 /**
@@ -13,7 +14,7 @@ export const isActive = (job) => job.status === 'IN_QUEUE' || job.status === 'IN
 const STORING = 60_000 // une copie dans R2 commencée depuis moins longtemps est en cours ailleurs
 
 /**
- * État d'une génération chez son fournisseur, au même format pour fal et Runware :
+ * État d'une génération chez son fournisseur, au même format pour fal, Runware et Higgsfield :
  * { status: IN_QUEUE | IN_PROGRESS | COMPLETED | FAILED, queuePosition?, logs?, result?, failure? }.
  */
 async function providerStatus(env, job) {
@@ -24,6 +25,14 @@ async function providerStatus(env, job) {
       return { status: 'FAILED', failure: st.error.isContentPolicy ? 'moderation' : 'provider' }
     }
     return { status: st.status, result: st.result, logs: typeof st.progress === 'number' ? [`${st.progress} %`] : [] }
+  }
+  if (job.provider === 'higgsfield') {
+    const st = await higgsfieldClient({ key: env.HIGGSFIELD_KEY }).poll(job.requestId)
+    if (st.status === 'FAILED') {
+      console.error('résultat higgsfield', st.error.message)
+      return { status: 'FAILED', failure: st.error.isContentPolicy ? 'moderation' : 'provider' }
+    }
+    return st
   }
   const client = falClient({ key: env.FAL_KEY })
   const st = await client.status(job.statusUrl)

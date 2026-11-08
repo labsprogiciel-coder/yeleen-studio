@@ -17,7 +17,10 @@ import { VOICES } from './voices.js'
  * `v` : les entrées vérifiées, choix par défaut compris (voir `toolValues`). `maxP` : résolution maximale d'une vidéo fournie
  * (son plus petit côté : 1080 pour 1080p, en portrait comme en paysage), quand le prix dépend de la résolution de la source.
  *
- * Fichiers vidéo et audio : un outil facturé à la seconde l'est pour `maxSecs`, la durée maximale acceptée. Le serveur mesure
+ * Fournisseur : fal, sauf `provider: 'higgsfield'` (API Higgsfield, voir apps/api/src/higgsfield.js ; `endpoint` est alors son chemin).
+ *
+ * Fichiers vidéo et audio : un outil facturé à la seconde l'est pour `maxSecs`, la durée maximale acceptée, sauf avec `bySecs` :
+ * il l'est pour la durée mesurée du fichier (`usd(v, secs)`, en secondes entières arrondies au-dessus, `maxSecs` faute de mesure). Le serveur mesure
  * chaque fichier au téléversement (apps/api/src/media.js) et refuse, avant le débit, un fichier non mesuré ou hors limites ;
  * l'interface affiche ces limites et refuse le fichier plus tôt.
  */
@@ -366,6 +369,30 @@ export const TOOLS = [
     usd: (v) => per({ '720p': 0.1, '1080p': 0.2 })(v.resolution) * 10,
     build: (v) => ({ video_url: v.video, aspect_ratio: v.ratio, resolution: v.resolution }),
   },
+  // Genjutsu (Higgsfield) : la vidéo source garde son mouvement et son cadre ; les photos donnent le personnage ou l'objet.
+  // Facturé à la seconde de la source, arrondie au-dessus (tarif lu sur l'estimation de l'API : 0,318 $ en 480p, 0,681 $ en 720p,
+  // 1,632 $ en 1080p, non proposé : 10 s dépasseraient le plafond d'une génération). Source de 4 s au moins.
+  ...[
+    { id: 'motion-transfer', name: 'Transfert de mouvement', endpoint: 'higgsfield/genjutsu/motion-transfer/v1.0', video: 'Vidéo du mouvement', images: 'Photo du personnage', prompt: 'Ex. : garder le décor de la vidéo' },
+    { id: 'object-swap', name: 'Remplacer un objet', endpoint: 'higgsfield/genjutsu/object-swap/v1.0', video: 'Vidéo source', images: 'Photo du nouvel objet', prompt: 'Ex. : remplacer la bouteille par mon produit' },
+  ].map((g) => ({
+    id: g.id,
+    name: g.name,
+    output: 'video',
+    provider: 'higgsfield',
+    endpoint: g.endpoint,
+    minSecs: 4,
+    maxSecs: 10,
+    bySecs: 'video',
+    inputs: [
+      { key: 'video', type: 'video', label: g.video },
+      { key: 'images', type: 'images', label: g.images, min: 1, max: 4 },
+      { key: 'prompt', type: 'text', max: 1000, label: 'Consigne (facultatif)', placeholder: g.prompt },
+      { key: 'resolution', type: 'select', label: 'Résolution', options: [opt('480p', '480p'), opt('720p', '720p')] },
+    ],
+    usd: (v, secs) => per({ '480p': 0.318, '720p': 0.681 })(v.resolution) * secs,
+    build: (v) => ({ video_url: v.video, image_urls: v.images, resolution: v.resolution, ...(v.prompt ? { prompt: v.prompt } : {}) }),
+  })),
   {
     id: 'video-depth',
     name: 'Carte de profondeur',
@@ -513,7 +540,9 @@ export function toolValues(tool, inputs = {}) {
 
 /** Ce qui ne va pas (code), une fois chaque entrée valide : règles entre plusieurs champs (ex. début avant fin). */
 export const toolCheck = (tool, inputs) => tool.check?.(toolValues(tool, inputs)) ?? null
-export const toolCost = (tool, inputs = {}) => toJetons(tool.usd(toolValues(tool, inputs)))
+/** Secondes facturées : la durée mesurée (`secs`), arrondie à la seconde au-dessus, pour un outil `bySecs` ; sinon `maxSecs`. */
+export const billedSecs = (tool, secs) => (tool.bySecs && secs > 0 ? Math.min(Math.ceil(secs - 0.05), tool.maxSecs) : tool.maxSecs)
+export const toolCost = (tool, inputs = {}, secs) => toJetons(tool.usd(toolValues(tool, inputs), billedSecs(tool, secs)))
 export const toolInput = (tool, inputs = {}) => tool.build(toolValues(tool, inputs))
 /** Point d'accès fal d'un lancement : celui de l'outil, ou celui du modèle choisi (outils image au modèle choisi). */
 export const toolEndpoint = (tool, inputs = {}) => (typeof tool.endpoint === 'function' ? tool.endpoint(toolValues(tool, inputs)) : tool.endpoint)

@@ -14,6 +14,7 @@
  * Recharges Mobile Money (paygate) : PAYGATE_URL (adresse de paygate, variable), PAYGATE_KEY (pgk_…) et PAYGATE_WEBHOOK_SECRET (whsec_…),
  *           secrets ; facultatifs : sans eux, /topups répond 503. Tenant « sandbox » de paygate hors production.
  * Runware : RUNWARE_KEY, secret ; sans lui, Seedance 2.5, Kling 3.0 et Veo 3.1 Lite sont refusés (503), sans débit.
+ * Higgsfield : HIGGSFIELD_KEY (« KEY_ID:KEY_SECRET »), secret ; sans lui, Soul 2 et les outils Genjutsu sont refusés (503), sans débit.
  * Premier déploiement : CLERK_ISSUER=… VITE_CLERK_PUBLISHABLE_KEY=… FAL_KEY=… node scripts/deploy.mjs all   (la clé n'est lue que de l'environnement, jamais affichée).
  * Connexion : `pnpm exec wrangler login`, ou CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID pour l'intégration continue.
  */
@@ -152,6 +153,7 @@ function ensureSecrets() {
   ensureSecret('PAYGATE_KEY', names, { required: false })
   ensureSecret('PAYGATE_WEBHOOK_SECRET', names, { required: false })
   ensureSecret('RUNWARE_KEY', names, { required: false, missing: 'Seedance 2.5, Kling 3.0 et Veo 3.1 Lite sont refusés' })
+  ensureSecret('HIGGSFIELD_KEY', names, { required: false, missing: 'Soul 2 et les outils Genjutsu sont refusés' })
 }
 
 /** Base D1 : la crée si besoin et écrit son identifiant dans apps/api/wrangler.jsonc (à valider dans git : la construction Git de Cloudflare le lit). */
