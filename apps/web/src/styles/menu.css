@@ -22,7 +22,7 @@
 .mn-search{position:sticky;top:-6px;z-index:var(--z-raised);display:flex;align-items:center;gap:10px;margin:-6px -6px 6px;padding:12px 16px;background:var(--raised);border-bottom:1px solid var(--line);color:var(--ink-3)}
 .mn-search input{flex:1;min-width:0;border:0;background:none;color:var(--ink);font:inherit;font-size:15px}
 .mn-search input:focus{outline:0}
-.mn-search:focus-within{outline:2px solid var(--lime);outline-offset:-2px;border-radius:12px 12px 0 0}
+.mn-search:focus-within{outline:2px solid var(--focus);outline-offset:-2px;border-radius:12px 12px 0 0}
 .mn-search input::placeholder{color:var(--ink-4)}
 .mn-search:focus-within{color:var(--lime-ink)}
 .mn-none{margin:0;padding:20px 12px;text-align:center;font-size:13px;color:var(--ink-3)}

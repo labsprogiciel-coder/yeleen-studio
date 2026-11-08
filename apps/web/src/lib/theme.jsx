@@ -6,14 +6,11 @@ const FALLBACK_KEY = 'theme'
 function readStoredTheme() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(FALLBACK_KEY)
-    if (saved === 'light' || saved === 'dark') return saved
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      return 'light'
-    }
+    if (saved === 'light' || saved === 'dark') return saved // un choix enregistré l'emporte
   } catch {
     // Ignore storage errors in restricted contexts
   }
-  return 'dark'
+  return 'light' // la charte Qreativ est claire (Fog, Paper, Plum) : thème clair par défaut
 }
 
 const ThemeContext = createContext({

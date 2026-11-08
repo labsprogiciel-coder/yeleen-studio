@@ -46,12 +46,12 @@ dialog.rc-dlg::backdrop{background:rgba(0,0,0,.66)}
 .rc-pack:hover{border-color:var(--line-strong)}
 .rc-pack.on{border-color:var(--lime);background:var(--lime-tint)}
 .rc-pack input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
-.rc-pack:has(input:focus-visible){outline:2px solid var(--lime);outline-offset:2px}
+.rc-pack:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:2px}
 .rc-pack::after{content:'';position:absolute;top:10px;right:10px;width:16px;height:16px;border-radius:50%;border:2px solid var(--line-strong);box-sizing:border-box}
 .rc-pack.on::after{border:5px solid var(--lime)}
 .rc-pack em{position:absolute;top:8px;left:50%;transform:translateX(-50%);padding:2px 8px;border-radius:999px;background:var(--lime);color:var(--on-lime);font-style:normal;font-size:10px;font-weight:700;white-space:nowrap}
 .rc-qty{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--ink-2);font-size:13px;font-weight:600}
-.rc-qty b{font-family:'Archivo',Helvetica,sans-serif;font-stretch:78%;font-size:40px;line-height:1;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+.rc-qty b{font-family:var(--font-display);font-stretch:78%;font-size:40px;line-height:1;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
 .rc-pack.on .rc-qty b{color:var(--lime-ink)}
 .rc-price{align-self:stretch;display:flex;flex-direction:column;align-items:center;gap:2px;padding-top:12px;border-top:1px solid var(--line-soft)}
 .rc-price strong{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}

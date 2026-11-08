@@ -119,7 +119,7 @@ export async function endCardPng(m, logo = null) {
   canvas.height = h
   const ctx = canvas.getContext('2d')
   const g = ctx.createLinearGradient(0, 0, 0, h)
-  const b = m.brand ?? { primary: '#d6ff3f', base: '#0d0e10', onPrimary: '#111111', ink: '#ffffff' }
+  const b = m.brand ?? { primary: '#ff5a1f', base: '#3a1456', onPrimary: '#3a1456', ink: '#eef1f6' }
   g.addColorStop(0, b.base)
   g.addColorStop(1, m.brand ? b.base : '#1d2410')
   ctx.fillStyle = g

@@ -1,7 +1,7 @@
 .shell a{color:inherit;text-decoration:none}
 .shell button{font:inherit;color:inherit}
 .pg.shell{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14px;min-height:100%;display:flex;flex-direction:column}
-.shell h1,.shell h2,.shell h3,.shell .hd{font-family:'Archivo',Helvetica,sans-serif;font-stretch:78%;font-weight:800;text-transform:uppercase;margin:0}
+.shell h1,.shell h2,.shell h3,.shell .hd{font-family:var(--font-display);font-stretch:78%;font-weight:800;text-transform:uppercase;margin:0}
 .shell .nv{height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;box-sizing:border-box}
 .shell .lg{height:30px;padding:0 2px;background:none;display:flex;align-items:center;flex:none}
 .shell .lg img{display:block;height:22px;width:auto}
@@ -26,7 +26,7 @@
 .shell .pl a,.shell .bar a,.shell .pb{transition:background-color .15s,border-color .15s}
 .shell .pl a:hover,.shell .bar a:hover{border-color:var(--line-strong);color:var(--ink)}
 .image .pbx:focus-within{border-color:var(--lime)}
-.audio .box:focus-within{outline:2px solid var(--lime);outline-offset:0}
+.audio .box:focus-within{outline:2px solid var(--focus);outline-offset:0}
 .shell .ctl button,.shell .row button{min-width:28px;min-height:28px;border-radius:8px}
 .shell .ctl button:hover,.shell .row button:hover{background:var(--fill)}
 @media (pointer:coarse){

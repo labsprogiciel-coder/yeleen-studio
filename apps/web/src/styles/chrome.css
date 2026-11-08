@@ -1,17 +1,17 @@
-/* Chrome partagé : en-tête vert primaire (var(--lime)). */
+/* Chrome partagé : en-tête Plum (charte Qreativ, logo inversé) ; Tangerine reste réservé à l'action principale. */
 
-body .pg .nv{background:var(--lime);color:var(--on-light)}
+body .pg .nv{background:var(--plum);color:var(--fog)}
 body .pg .lg{background:none}
-body .pg .nl{color:rgba(17,17,17,.72)}
-body .pg .nl:hover{color:var(--on-light)}
-body .pg .nl.on{color:var(--on-light);font-weight:700;box-shadow:inset 0 -2px 0 #111;border-radius:0}
-body .pg .bd{background:#111;color:var(--lime-ink)}
-body .pg .rt{color:var(--on-light)}
-body .pg .nv .pb{background:rgba(17,17,17,.08);border:1px solid rgba(17,17,17,.22);color:var(--on-light)}
-body .pg .nv .pb:hover{background:rgba(17,17,17,.16)}
-body .pg .nv .lim{background:#111;color:var(--lime)}
-body .pg .nv .lim:hover{filter:none;background:var(--fill)}
-body .pg .nv :focus-visible{outline-color:#111}
+body .pg .nl{color:rgba(238,241,246,.72)}
+body .pg .nl:hover{color:var(--fog)}
+body .pg .nl.on{color:var(--fog);font-weight:700;box-shadow:inset 0 -2px 0 var(--tangerine);border-radius:0}
+body .pg .bd{background:var(--tangerine);color:var(--plum)}
+body .pg .rt{color:var(--fog)}
+body .pg .nv .pb{background:rgba(238,241,246,.08);border:1px solid rgba(238,241,246,.24);color:var(--fog)}
+body .pg .nv .pb:hover{background:rgba(238,241,246,.16)}
+body .pg .nv .lim{background:var(--tangerine);color:var(--plum)}
+body .pg .nv .lim:hover{filter:none;background:var(--lime-hover)}
+body .pg .nv :focus-visible{outline-color:var(--fog)}
 
 .skip{position:absolute;left:8px;top:-56px;z-index:var(--z-skip);padding:10px 16px;border-radius:10px;background:var(--lime);color:var(--on-light);font-weight:700;font-size:14px;transition:top .15s}
 .skip:focus{top:8px;outline:2px solid #111;outline-offset:2px}

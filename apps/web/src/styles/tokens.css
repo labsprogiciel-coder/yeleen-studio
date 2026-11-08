@@ -1,5 +1,5 @@
 /*
- * Jetons de design partagés. Une seule teinte d'accent (le vert-jaune) et une échelle de gris : tout le reste en découle.
+ * Jetons de design partagés, d'après la charte Qreativ : Tangerine pour l'action principale, Cobalt pour la sélection, Plum et Fog.
  * Interface sombre par défaut ; thème clair (blanc et gris) quand `<html data-theme="light">` (lib/theme.jsx) : seuls les jetons
  * changent, `color-scheme` suit pour que barres de défilement et contrôles natifs s'accordent. Ce qui est posé sur une image ou
  * une vidéo (voiles, texte blanc) garde ses couleurs fixes dans les deux thèmes.
@@ -8,46 +8,56 @@
 :root {
   color-scheme: dark;
 
-  --lime: #d6ff3f;        /* action principale, sélection, état actif */
-  --lime-hover: #c8f02f;  /* fond d'un bouton lime au survol */
-  --lime-edge: #9fbf1f;   /* arête basse des boutons lime (ombre sans flou) */
-  --lime-tint: #26300f;   /* fond d'un état actif dont le texte est lime (puce, pastille, étape) */
-  --lime-ink: var(--lime); /* texte ou icône en accent (prix, état actif) : lime en sombre, olive lisible en clair */
-  --on-light: #111111;    /* texte sur un aplat clair : lime ou blanc */
+  /* Charte Qreativ : Tangerine (l'action principale, une par écran), Cobalt (liens, focus, sélection), Plum (texte, surfaces
+     sombres), Fog (fond), Paper (cartes, champs), Slate (texte secondaire). Les jetons gardent leur nom historique (--lime…). */
+  --tangerine: #ff5a1f;
+  --cobalt: #2b3bff;
+  --plum: #3a1456;
+  --fog: #eef1f6;
+  --paper-white: #ffffff;
+  --slate: #4a5068;
+
+  --lime: var(--tangerine);   /* action principale (Tangerine) */
+  --lime-hover: #ff6d38;      /* fond d'un bouton tangerine au survol */
+  --lime-edge: #c9420f;       /* arête basse des boutons tangerine */
+  --lime-tint: #3a1a14;       /* fond d'un état actif dont le texte est en accent */
+  --lime-ink: #ff7a45;        /* texte ou icône en accent (prix, état actif) : 7,5:1 sur le fond sombre */
+  --on-light: var(--plum);    /* texte sur un aplat clair ou tangerine (Plum sur Tangerine : 4,8:1) */
   --on-lime: var(--on-light); /* texte sur fond --lime */
+  --focus: #8f97ff;           /* contour de focus (Cobalt éclairci, lisible sur le fond sombre) */
 
-  --ink: #f2f2ee;         /* texte principal */
-  --ink-2: #c4c4c0;       /* texte secondaire */
-  --ink-3: #a0a1a4;       /* texte discret, étiquettes */
-  --ink-4: #8d8e91;       /* indications, éléments inactifs (≥ 4,5:1 sur --field) */
+  --ink: #eef1f6;         /* texte principal */
+  --ink-2: #cbc6d8;       /* texte secondaire */
+  --ink-3: #aaa4bd;       /* texte discret, étiquettes */
+  --ink-4: #958eaa;       /* indications, éléments inactifs (≥ 4,5:1 sur --field) */
 
-  --bg: #0d0e10;          /* fond de page */
-  --field: #101113;       /* champs de saisie, zones en creux */
-  --surface: #16171a;     /* cartes, boutons, panneaux */
-  --raised: #1a1b1e;      /* menus et feuilles au-dessus du reste */
-  --fill: #26272b;        /* pastilles, puces, vignettes */
-  --fill-hover: #2a2b2e;  /* fond d'un contrôle sombre au survol */
+  --bg: #120a1a;          /* fond de page */
+  --field: #160d20;       /* champs de saisie, zones en creux */
+  --surface: #1d1228;     /* cartes, boutons, panneaux */
+  --raised: #22152f;      /* menus et feuilles au-dessus du reste */
+  --fill: #2e1e3d;        /* pastilles, puces, vignettes */
+  --fill-hover: #352446;  /* fond d'un contrôle sombre au survol */
 
-  --line-soft: #1f2023;   /* séparateurs discrets */
-  --line: #2f3033;        /* bordures de champs */
-  --line-strong: #3a3b3e; /* bordures au survol */
+  --line-soft: #241732;   /* séparateurs discrets */
+  --line: #36264a;        /* bordures de champs */
+  --line-strong: #47345e; /* bordures au survol */
   --ink-hi: #fff;         /* texte au survol, plus fort que --ink */
   --wash: rgba(255, 255, 255, 0.07);   /* voile léger sur une surface teintée ou une pastille */
   --wash-2: rgba(255, 255, 255, 0.12); /* le même, au survol */
   --shadow-pop: 0 6px 8px rgba(0, 0, 0, 0.35); /* menus et fenêtres */
 
   /* Studio Cinéma : fond de page, cadre, panneaux, cartes et bordures des couches */
-  --page: #08090a;
-  --shell: #0f1012;
-  --panel-bg: #141517;
-  --card-bg: #1a1b1e;
-  --edge: #232427;
+  --page: #0d0714;
+  --shell: #140b1d;
+  --panel-bg: #191022;
+  --card-bg: #20142b;
+  --edge: #2a1b38;
   /* En-têtes et icônes d'outils teintés par type (image, vidéo, modèle) */
   --tint-image-bg: #1c2540;
   --tint-image: #8fa8ff;
   --tint-video-bg: #183428;
   --tint-video: #5fe0a0;
-  --tint-recipe-bg: #272c12;
+  --tint-recipe-bg: #33170f;
   --tint-muted: rgba(255, 255, 255, 0.62); /* texte secondaire sur un fond teinté */
 
   --danger-ink: #ffb4a8;  /* texte d'erreur */
@@ -68,51 +78,55 @@
   --paper-ink-2: #4f493f;   /* 7,7:1 */
   --paper-ink-3: #5f584d;   /* 6,1:1, le plus clair admis pour du texte */
 
-  /* Caractères : Archivo (condensé) pour les titres, Hanken Grotesk pour tout le reste */
+  /* Caractères : Bricolage Grotesque pour les titres, Hanken Grotesk pour le texte, IBM Plex Mono pour les données */
   --font-body: 'Hanken Grotesk', Helvetica, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Hanken Grotesk', Helvetica, sans-serif; /* titres, grands chiffres */
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace; /* étiquettes, données techniques */
 }
 
-/* Thème clair : blanc et gris neutres, même accent. Le vert-jaune reste le fond des actions ; en texte il devient olive (--lime-ink). */
+/* Thème clair (celui de la charte) : Fog, Paper et Plum ; Tangerine reste le fond des actions, l'accent en texte devient Cobalt. */
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --lime-tint: #eef6cf;
-  --lime-ink: #4a6a00;    /* 6,2:1 sur blanc */
-  --lime-edge: #a7c62a;
+  --lime-tint: #ffe6dc;
+  --lime-ink: var(--cobalt); /* texte en accent (sélection, état actif) : Cobalt, 6,4:1 sur blanc */
+  --lime-edge: #c9420f;
+  --lime-hover: #f04c12;
+  --focus: var(--cobalt);
 
-  --ink: #17181b;
-  --ink-2: #3d3f45;
-  --ink-3: #5c5e66;       /* 6,4:1 sur blanc */
-  --ink-4: #6b6d75;       /* 5,1:1 sur blanc, 4,7:1 sur --field */
+  --ink: var(--plum);      /* 14,9:1 sur blanc */
+  --ink-2: var(--slate);
+  --ink-3: #565c75;       /* 6,4:1 sur blanc */
+  --ink-4: #686e86;       /* 5,1:1 sur blanc */
 
-  --bg: #f4f4f5;
-  --field: #f1f1f3;
+  --bg: var(--fog);
+  --field: #f6f8fb;
   --surface: #ffffff;
   --raised: #ffffff;
-  --fill: #e9e9ec;
-  --fill-hover: #e2e2e6;
+  --fill: #e3e7ef;
+  --fill-hover: #d9dee9;
 
-  --line-soft: #ececef;
-  --line: #dcdce1;
-  --line-strong: #c5c6cc;
-  --ink-hi: #000;
-  --wash: rgba(17, 18, 22, 0.05);
-  --wash-2: rgba(17, 18, 22, 0.09);
-  --shadow-pop: 0 10px 28px rgba(16, 17, 20, 0.12), 0 1px 3px rgba(16, 17, 20, 0.08);
+  --line-soft: #e6e9f0;
+  --line: #d6dbe5;
+  --line-strong: #bcc3d1;
+  --ink-hi: #1f0a30;
+  --wash: rgba(58, 20, 86, 0.05);
+  --wash-2: rgba(58, 20, 86, 0.09);
+  --shadow-pop: 0 10px 28px rgba(58, 20, 86, 0.12), 0 1px 3px rgba(58, 20, 86, 0.08);
 
   --danger-ink: #a11d14;
   --danger-bg: #fdecea;
   --danger-line: #f3c4bd;
 
-  --page: #e7e7ea;
-  --shell: #f6f6f7;
+  --page: #e4e8f0;
+  --shell: var(--fog);
   --panel-bg: #ffffff;
-  --card-bg: #f3f3f5;
-  --edge: #e0e0e4;
+  --card-bg: #f4f6fa;
+  --edge: #dde2eb;
   --tint-image-bg: #e8edff;
   --tint-image: #3651c9;
   --tint-video-bg: #e1f5ea;
   --tint-video: #12784f;
-  --tint-recipe-bg: #f1f6d9;
-  --tint-muted: rgba(17, 18, 22, 0.6);
+  --tint-recipe-bg: #ffe9df;
+  --tint-muted: rgba(58, 20, 86, 0.62);
 }

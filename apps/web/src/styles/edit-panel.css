@@ -14,7 +14,7 @@
 .ep-tile.has{border-style:solid;border-color:var(--lime)}
 .ep-tile>span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .ep-pick{position:absolute;inset:0;border:0;border-radius:inherit;background:none;cursor:pointer}
-.ep-pick:focus-visible,.ep-add:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+.ep-pick:focus-visible,.ep-add:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .mn-btn.ep-mt>svg:last-child{display:none}
 .mn-btn.ep-mt{width:100%;text-align:left}
 .ep-tile-wrap{position:relative;min-width:0}

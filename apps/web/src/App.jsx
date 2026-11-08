@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Routes, Route } from 'react-router-dom'
-import Home from './pages/Home.jsx'
 import { JobsProvider } from './lib/jobs.jsx'
 import { AssetsProvider } from './lib/assets.jsx'
 import { CatalogProvider } from './lib/catalog.jsx'
@@ -20,6 +19,9 @@ const Audio = lazy(() => import('./pages/Audio.jsx'))
 const Spot = lazy(() => import('./pages/Spot.jsx'))
 const Brand = lazy(() => import('./pages/Brand.jsx'))
 const Cinema = lazy(() => import('./pages/Cinema.jsx'))
+// Page d'accueil derrière le drapeau `home` : éteinte, « / » mène au studio Cinéma, protégé, donc à la connexion Clerk pour un visiteur.
+const Home = lazy(() => import('./pages/Home.jsx'))
+const start = features.home ? <Home /> : <Navigate to="/cinema" replace />
 
 // Les liens `href="#"` sont des emplacements : ils ne doivent pas ramener la page en haut.
 function useDeadLinkGuard() {
@@ -45,7 +47,7 @@ export default function App() {
     <RechargeDialogProvider>
     <Suspense fallback={<div className="route-fallback" />}>
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={start} />
       <Route path="/video" element={features.video ? <Protected><Video /></Protected> : <Navigate to="/cinema" replace />} />
       <Route path="/image" element={features.image ? <Protected><ImageGen /></Protected> : <Navigate to="/cinema" replace />} />
       <Route path="/audio" element={features.audio ? <Protected><Audio /></Protected> : <Navigate to="/cinema" replace />} />
@@ -55,7 +57,7 @@ export default function App() {
       <Route path="/recharge/*" element={<Protected><RechargeRoute /></Protected>} />
       <Route path="/sign-in/*" element={<SignInPage />} />
       <Route path="/sign-up/*" element={<SignUpPage />} />
-      <Route path="*" element={<Home />} />
+      <Route path="*" element={start} />
     </Routes>
     </Suspense>
     </RechargeDialogProvider>

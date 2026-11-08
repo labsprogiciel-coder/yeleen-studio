@@ -7,20 +7,20 @@ import { AccountMenu, authEnabled, useAuthState } from '../lib/auth.jsx'
 import { features } from '../lib/features.js'
 import { useLibrary } from '../lib/libraryDialog.jsx'
 import { RechargeButton } from '../lib/rechargeDialog.jsx'
-import lockup from '../assets/brand/qreativ-lockup-horizontal-primary.svg'
-import mark from '../assets/brand/qreativ-mark.svg'
+import lockup from '../assets/brand/qreativ-lockup-horizontal-reversed.svg'
+import mark from '../assets/brand/qreativ-mark-reversed.svg'
 import '../styles/chrome.css'
 
 const ROUTES = { Explorer: '/', Image: '/image', Vidéo: '/video', Audio: '/audio', 'Spot pub': '/spot', Marque: '/brand', Cinéma: '/cinema' } // Bibliothèque : une fenêtre, pas une page
 
 // Seules les pages qui existent figurent dans la navigation.
-const FLAG_OF = { Image: 'image', Vidéo: 'video', Audio: 'audio', 'Spot pub': 'spot', Marque: 'brand' } // écrans éteints par drapeau : absents de la navigation
+const FLAG_OF = { Explorer: 'home', Image: 'image', Vidéo: 'video', Audio: 'audio', 'Spot pub': 'spot', Marque: 'brand' } // écrans éteints par drapeau : absents de la navigation
 export const NAV = ['Explorer', 'Image', 'Vidéo', 'Cinéma', 'Audio', 'Spot pub', 'Marque', 'Bibliothèque'].filter((l) => !FLAG_OF[l] || features[FLAG_OF[l]])
 
 export function Logo() {
   return (
     <NavLink to="/" className="lg" aria-label="Qreativ, accueil">
-      {/* Logo horizontal (la barre est lime dans les deux thèmes : version principale, plum et mandarine) ; sur écran étroit, la marque seule. */}
+      {/* Logo horizontal inversé (la barre est Plum dans les deux thèmes) ; sur écran étroit, la marque seule. */}
       <picture>
         <source media="(max-width: 560px)" srcSet={mark} />
         <img src={lockup} alt="" height="24" />
