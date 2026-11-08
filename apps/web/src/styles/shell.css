@@ -36,6 +36,6 @@
 
 @media (max-width:600px){
 .shell .nv{gap:8px;padding:0 12px}
-.shell .rt .pb:not(:first-child){display:none}
+.shell .rt .pb:not(:first-child):not(.nv-theme){display:none}
 }
 

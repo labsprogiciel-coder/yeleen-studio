@@ -55,3 +55,6 @@ button.bal:hover{background:rgba(17,17,17,.16)}
 /* Logo Qreativ : largeur suivant la hauteur (horizontal ; marque seule sur écran étroit). */
 .lg img{display:block;width:auto;height:24px}
 @media (max-width:560px){.lg img{height:28px}}
+
+/* Bouton du thème dans la barre Plum : carré, icône seule. */
+body .pg .nv .nv-theme{display:inline-flex;align-items:center;justify-content:center;width:34px;min-height:32px;padding:0;border-radius:10px;cursor:pointer}

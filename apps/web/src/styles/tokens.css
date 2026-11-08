@@ -1,6 +1,6 @@
 /*
  * Jetons de design partagés, d'après la charte Qreativ : Tangerine pour l'action principale, Cobalt pour la sélection, Plum et Fog.
- * Interface sombre par défaut ; thème clair (blanc et gris) quand `<html data-theme="light">` (lib/theme.jsx) : seuls les jetons
+ * Thème clair (Fog, Paper, Plum) par défaut, `<html data-theme="light">` ; thème sombre au choix (lib/theme.jsx) : seuls les jetons
  * changent, `color-scheme` suit pour que barres de défilement et contrôles natifs s'accordent. Ce qui est posé sur une image ou
  * une vidéo (voiles, texte blanc) garde ses couleurs fixes dans les deux thèmes.
  * Ne créez pas un jeton par valeur : seulement les valeurs qui reviennent avec la même fonction.
@@ -55,8 +55,8 @@
   /* En-têtes et icônes d'outils teintés par type (image, vidéo, modèle) */
   --tint-image-bg: #1c2540;
   --tint-image: #8fa8ff;
-  --tint-video-bg: #183428;
-  --tint-video: #5fe0a0;
+  --tint-video-bg: #2a1838;
+  --tint-video: #c9a2ee;
   --tint-recipe-bg: #33170f;
   --tint-muted: rgba(255, 255, 255, 0.62); /* texte secondaire sur un fond teinté */
 
@@ -125,8 +125,8 @@
   --edge: #dde2eb;
   --tint-image-bg: #e8edff;
   --tint-image: #3651c9;
-  --tint-video-bg: #e1f5ea;
-  --tint-video: #12784f;
+  --tint-video-bg: #f1e8f8;
+  --tint-video: #5b2a85;
   --tint-recipe-bg: #ffe9df;
   --tint-muted: rgba(58, 20, 86, 0.62);
 }

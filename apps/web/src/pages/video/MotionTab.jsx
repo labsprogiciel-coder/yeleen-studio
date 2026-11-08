@@ -18,12 +18,12 @@ export function MotionLeft({ panel }) {
       <div className="dz2">
         <div className="dz">
           <i className="ci"><Icon name="vid" size={15} /></i>
-          <span style={{ color: '#e6e6e2', fontSize: 13 }}>Ajouter un mouvement à copier</span>
+          <span style={{ color: 'var(--ink)', fontSize: 13 }}>Ajouter un mouvement à copier</span>
           <span style={{ fontSize: 12, textAlign: 'center' }}>Durée de la vidéo : 3 à 30 secondes</span>
         </div>
         <div className="dz">
           <i className="ci"><Icon name="plus" size={15} /></i>
-          <span style={{ color: '#e6e6e2', fontSize: 13 }}>Ajoutez votre personnage</span>
+          <span style={{ color: 'var(--ink)', fontSize: 13 }}>Ajoutez votre personnage</span>
           <span style={{ fontSize: 12, textAlign: 'center' }}>Image avec visage et corps visibles</span>
         </div>
       </div>
@@ -42,7 +42,7 @@ export function MotionLeft({ panel }) {
         </div>
         {scene && (
           <>
-            <div className="seg" role="radiogroup" aria-label="Source de l’arrière-plan" style={{ background: '#101113' }}>
+            <div className="seg" role="radiogroup" aria-label="Source de l’arrière-plan">
               {SOURCES.map((s) => (
                 <button key={s} type="button" role="radio" aria-checked={source === s} className={source === s ? 'on' : ''} onClick={() => setSource(s)}>
                   <Icon name={s === 'Vidéo' ? 'vid' : 'img'} size={14} /> {s}

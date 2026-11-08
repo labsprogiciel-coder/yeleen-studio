@@ -2,8 +2,8 @@
 .audio .lp{width:384px;flex:none;border:1px solid var(--line-soft);border-radius:22px;background:var(--field);padding:14px 12px 12px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box}
 .audio .tabs{display:flex;gap:20px;white-space:nowrap;font-size:14px;color:var(--ink-4);padding:8px 8px 0;border-bottom:1px solid var(--line-soft)}
 .audio .tabs button{padding-bottom:12px}
-.audio .tabs .on{color:#fff;border-bottom:2px solid #fff}
-.audio .dz{position:relative;border:1.5px dashed #2a2b2e;border-radius:16px;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--ink-4);font-size:13px;background:var(--field)}
+.audio .tabs .on{color:var(--ink);font-weight:600;border-bottom:2px solid var(--lime)}
+.audio .dz{position:relative;border:1.5px dashed var(--line-strong);border-radius:16px;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--ink-4);font-size:13px;background:var(--field)}
 .audio .dzi{display:flex;margin-bottom:6px}
 .audio .dzi i{width:34px;height:34px;border-radius:50%;background:var(--line-soft);display:flex;align-items:center;justify-content:center;margin:0 -3px;border:2px solid var(--field);color:var(--ink-2)}
 .audio .opt{position:absolute;top:10px;right:12px;font-size:11px;color:var(--ink-4)}
@@ -22,18 +22,18 @@
 .audio .cv h1{font-family:var(--font-display);font-stretch:78%;font-weight:800;text-transform:uppercase;font-size:38px;line-height:1;margin:0;text-align:center}
 .audio .cv p.s{margin:8px 0 0;color:var(--ink-3);font-size:15px;text-align:center}
 .audio .two{display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%}
-.audio .cd{border:1px solid var(--line-soft);border-radius:20px;padding:22px 24px 16px;background:#0e0f11}
+.audio .cd{border:1px solid var(--line-soft);border-radius:20px;padding:22px 24px 16px;background:var(--surface)}
 .audio .cd h3{font-size:18px;font-weight:500;margin:0;font-family:var(--font-body);text-transform:none}
 .audio .cd p{margin:6px 0 14px;color:var(--ink-4);font-size:13px;line-height:1.5;max-width:260px}
-.audio .il{height:240px;border-radius:12px;position:relative;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,#2a4a1a,#0d1308 70%)}
+.audio .il{height:240px;border-radius:12px;position:relative;overflow:hidden;background:radial-gradient(ellipse at 30% 20%,#5a2a7a,#1f0a30 70%);color:#fff}
 .audio .vp{position:absolute;display:flex;align-items:center;gap:10px;border-radius:999px;background:rgba(255,255,255,.12);padding:6px 24px 6px 6px}
 .audio .vp i{border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none}
 .audio .vp b{display:block;font-family:var(--font-display);font-stretch:78%;font-weight:800;font-size:30px;line-height:1}
-.audio .vp span{font-size:12px;color:var(--ink-2)}
+.audio .vp span{font-size:12px;color:rgba(255,255,255,.75)}
 .audio .st{height:240px;border-radius:12px;background:var(--surface);position:relative;overflow:hidden;padding:14px 60px 0}
 .audio .sg{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--field);border-radius:14px;padding:8px}
 .audio .sl{background:var(--surface);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:8px;font-size:13px}
-.audio .sl em{width:3px;height:20px;background:#fff;border-radius:2px;margin-left:auto}
+.audio .sl em{width:3px;height:20px;background:var(--ink);border-radius:2px;margin-left:auto}
 .audio .sl u{white-space:nowrap;text-decoration:none;color:var(--ink-2);font-size:12px}
 .audio .adv{display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:13px}
 .audio .adv span{margin-left:auto}
@@ -81,22 +81,22 @@
 .audio .pm-toggle:hover{background:var(--line-soft)}
 .audio .sw-mini{flex:none;position:relative;width:36px;height:22px;border-radius:999px;background:var(--fill-hover);transition:background-color .15s}
 .audio .sw-mini:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
-.audio .pm-toggle[aria-pressed="true"] .sw-mini{background:#22c55e}
+.audio .pm-toggle[aria-pressed="true"] .sw-mini{background:var(--cobalt)}
 .audio .pm-toggle[aria-pressed="true"] .sw-mini:after{transform:translateX(14px)}
 .audio button.gn{border:0;font:inherit;font-weight:700;font-size:14px;cursor:pointer;margin-top:auto;gap:8px}
 .audio button.gn:disabled{background:var(--fill);color:var(--ink-3);cursor:not-allowed}
 .audio button.gn:hover:not(:disabled){filter:brightness(.94)}
 
 /* Sélecteur de voix : voix courante, extrait à écouter, vignettes à faire défiler */
-.audio .vpick{display:flex;flex-direction:column;justify-content:center;gap:22px;height:240px;padding:16px;border-radius:12px;background:radial-gradient(ellipse at 30% 20%,#2a4a1a,#0d1308 70%)}
+.audio .vpick{display:flex;flex-direction:column;justify-content:center;gap:22px;height:240px;padding:16px;border-radius:12px;background:radial-gradient(ellipse at 30% 20%,#5a2a7a,#1f0a30 70%);color:#fff}
 .audio .vnow{display:flex;align-items:center;gap:12px;min-width:0}
 .audio .vnow>i{flex:none;width:52px;height:52px;border-radius:50%}
 .audio .vnow>div{flex:1;min-width:0}
 .audio .vnow b{display:block;font-family:var(--font-display);font-stretch:78%;font-weight:800;font-size:28px;line-height:1}
-.audio .vnow span{display:block;margin-top:4px;font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.audio .vnow span{display:block;margin-top:4px;font-size:12px;color:rgba(255,255,255,.75);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .audio .vplay{flex:none;display:flex;align-items:center;gap:6px;height:36px;padding:0 14px;border:0;border-radius:999px;background:var(--lime);color:var(--on-light);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .audio .vplay:hover{background:var(--lime-hover)}
-.audio .vplay[aria-pressed="true"]{background:var(--ink)}
+.audio .vplay[aria-pressed="true"]{background:#fff;color:var(--plum)}
 .audio .vc{font:inherit;color:inherit;text-align:left;cursor:pointer;transition:border-color .15s}
 .audio .vc:hover{border-color:var(--line-strong)}
 .audio .vc[aria-pressed="true"]{border-color:var(--lime)}

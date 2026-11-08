@@ -93,7 +93,7 @@ export default function Audio() {
             <div className="dzi">
               <i><Icon name="wave" size={15} /></i><i><Icon name="mus" size={15} /></i><i><Icon name="img" size={15} /></i>
             </div>
-            <span style={{ color: '#e6e6e2', fontSize: 15 }}>Importer un média</span>
+            <span style={{ color: 'var(--ink)', fontSize: 15 }}>Importer un média</span>
             <span>Jusqu'à 3 voix, audios ou images</span>
           </div>
           <label className="box" style={{ height: 128 }}>
@@ -117,7 +117,7 @@ export default function Audio() {
           )}
           <div className="row">
             <b>Nombre de sorties</b>
-            <span className="r" style={{ color: '#f2f2ee', fontWeight: 600 }}>
+            <span className="r" style={{ color: 'var(--ink)', fontWeight: 600 }}>
               <button type="button" onClick={() => setCount((c) => Math.max(1, c - 1))} aria-label="Moins">−</button>
               {Math.min(count, maxOut)}/{maxOut}
               <button type="button" onClick={() => setCount((c) => Math.min(maxOut, c + 1))} aria-label="Plus">+</button>
@@ -131,7 +131,7 @@ export default function Audio() {
         <section className="mp">
           <div className="bar">
             <a href="#"><Icon name="folder" size={14} />Historique</a>
-            <a href="#" style={{ background: '#222326' }}><Icon name="book" size={14} />Comment ça marche</a>
+            <a href="#"><Icon name="book" size={14} />Comment ça marche</a>
             <a href="#" className="f"><Icon name="filter" size={13} />Filtres</a>
           </div>
           <div className="cv">
