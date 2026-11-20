@@ -47,6 +47,7 @@ const P = {
   shapes: <><circle cx="8" cy="8" r="3.5" /><rect x="12" y="12" width="8" height="8" rx="1.5" /></>,
   palette: <><path d="M12 4a8 8 0 100 16c1.5 0 2-1 1.5-2s0-2 1.5-2h2a3 3 0 003-3c0-4-4-9-8-9z" /><circle cx="8" cy="11" r="1" /><circle cx="12" cy="8" r="1" /><circle cx="16" cy="9" r="1" /></>,
   close: <path d="M6 6l12 12M18 6L6 18" />,
+  logout: <path d="M10 4H6a2 2 0 00-2 2v12a2 2 0 002 2h4M15 8l4 4-4 4M19 12H9" />,
   help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 114 2c-1 .7-1.5 1.2-1.5 2.5M12 17h.01" /></>,
   cube: <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5" />,
   mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0014 0M12 18v3" /></>,

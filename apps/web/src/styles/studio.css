@@ -9,7 +9,7 @@
 
 /*
  * Barre latérale : agrandie (232 px, icône et libellé) ou réduite (72 px, icônes seules). La colonne de la grille (`auto`) suit sa
- * largeur. Seul le milieu (.cx-rs) défile : le bas reste visible et la fenêtre du compte Clerk n'est pas rognée.
+ * largeur. Seul le milieu (.cx-rs) défile : le bas reste visible.
  */
 .cx-rail{width:232px;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:20px;background:var(--panel);transition:width .22s ease}
 .cx-rail.is-collapsed{width:72px}
@@ -26,7 +26,6 @@
 .cx-rail.is-collapsed .cx-logo{padding:0}
 .cx-fold{flex:none;display:grid;place-items:center;width:36px;height:36px;border:0;border-radius:10px;background:none;color:var(--ink-3);cursor:pointer}
 .cx-fold:hover{background:var(--card);color:var(--ink)}
-.cx-rail.is-collapsed .cx-fold{width:44px}
 .cx-new,.cx-ri,.cx-bal{flex:none;display:flex;align-items:center;gap:12px;width:100%;height:44px;padding:0 12px;box-sizing:border-box;border:0;border-radius:12px;font-size:14.5px;font-weight:600;text-align:left;white-space:nowrap;overflow:hidden;cursor:pointer;text-decoration:none}
 .cx-new>svg,.cx-ri>svg{flex:none}
 .cx-new{margin-bottom:6px;background:var(--lime);color:var(--on-lime)}
@@ -49,17 +48,50 @@
 .cx-rail.is-collapsed .cx-bal{flex-direction:column;justify-content:center;gap:2px;height:52px;padding:0}
 .cx-rail.is-collapsed .cx-bal b{font-size:12px}
 .cx-rail.is-collapsed .cx-bal .cx-lbl{display:none}
-/* Compte : l'avatar Clerk (ou celui de démonstration) tout en bas. */
-.cx-acct{display:flex;align-items:center;min-width:0;min-height:44px;padding:0 8px;margin-top:2px}
+/* Bouton du compte (AccountPopover.jsx) : l'avatar seul (barre réduite) ou l'avatar et le nom. */
+.cx-acct{flex:none;display:flex;align-items:center;gap:10px;width:100%;min-width:0;height:48px;margin-top:2px;padding:0 8px;box-sizing:border-box;border:0;border-radius:12px;background:none;color:var(--ink);font-size:14px;font-weight:600;text-align:left;cursor:pointer}
+.cx-acct:hover,.cx-acct.open{background:var(--card)}
+.cx-rail.is-collapsed .cx-acct{justify-content:center;padding:0}
+.cx-rail.is-collapsed .cx-acct .cx-lbl{display:none}
 /* Anneau de focus à l'intérieur : les éléments occupent toute la largeur d'une zone qui rogne ce qui dépasse (.cx-rs). */
 .cx-rail :focus-visible{outline-offset:-2px}
-.cx-av-demo{display:flex;align-items:center;gap:10px;min-width:0;font-size:14px;color:var(--ink-3)}
-.cx-av-demo .av{flex:none;width:28px;height:28px;border-radius:50%;background:conic-gradient(var(--lime),#4d8ad6,#e8307a,var(--lime))}
+.cx-av{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;object-fit:cover}
+.cx-av-demo{background:conic-gradient(var(--lime),#4d8ad6,#e8307a,var(--lime))}
+.cx-av-ini{background:var(--cobalt);color:var(--paper-white);font-weight:700;font-style:normal;line-height:1}
+
+/*
+ * Fenêtre du compte : au-dessus de tout (portail dans <body>, `position: fixed`), placée par placeAccountMenu (lib/accountMenu.js) à
+ * droite de la barre latérale, ou sous le bouton sur téléphone. Elle défile si l'écran est trop bas.
+ */
+.cx-am{position:fixed;z-index:var(--z-menu);box-sizing:border-box;display:flex;flex-direction:column;gap:6px;padding:10px;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line-soft);border-radius:20px;background:var(--raised);color:var(--ink);box-shadow:var(--shadow-pop);font-family:var(--font-body)}
+/* En sombre, --raised est presque la couleur de la page : bordure plus franche pour détacher la fenêtre. */
+:root:not([data-theme='light']) .cx-am{border-color:var(--line-strong)}
+.cx-am-head{display:flex;align-items:center;gap:12px;min-width:0;padding:8px 8px 10px}
+.cx-am-head .cx-av{width:44px;height:44px;box-shadow:0 0 0 2px var(--raised),0 0 0 4px var(--lime)}
+.cx-am-who{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cx-am-who b,.cx-am-who small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cx-am-who b{font-size:16px;font-weight:700}
+.cx-am-who small{font-size:13px;color:var(--ink-3)}
+.cx-am-bal{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 12px 12px 14px;border-radius:14px;background:var(--fill)}
+.cx-am-bal-tx{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cx-am-bal-tx small{font-size:13px;font-weight:600;color:var(--ink-3)}
+.cx-am-bal-n{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cx-am-bal-n b{font-family:var(--font-display);font-size:19px;font-weight:800;color:var(--ink)}
+.cx-am-top{flex:none;min-height:38px;padding:0 16px;border:0;border-radius:999px;background:var(--lime);color:var(--on-lime);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.cx-am-top:hover,.cx-am-top:focus-visible{background:var(--lime-hover)}
+.cx-am-list{display:flex;flex-direction:column;gap:2px}
+.cx-am-it{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0 12px;box-sizing:border-box;border:0;border-radius:12px;background:none;color:var(--ink);font:inherit;font-size:15px;font-weight:500;text-align:left;text-decoration:none;cursor:pointer}
+.cx-am-it>svg{flex:none;color:var(--ink-3)}
+.cx-am-it:hover,.cx-am-it:focus-visible{background:var(--wash-2)}
+.cx-am-it:hover>svg,.cx-am-it:focus-visible>svg{color:var(--ink)}
+.cx-am :focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.cx-am-sep{display:block;height:1px;margin:2px 4px;background:var(--line-soft)}
 @media (prefers-reduced-motion:reduce){.cx-rail,.cx-lbl{transition:none}.cx-bal-dot{animation:none}}
 
 /* Barre du haut */
 .cx-shell{min-width:0;min-height:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:22px;background:var(--shell);overflow:hidden}
 .cx-body{flex:1;min-height:0;display:grid;grid-template-columns:380px minmax(0,1fr);gap:10px;padding:0 10px 10px}
+.cx-top-l{display:flex;align-items:center;gap:6px;min-width:0}
 .cx-top{flex:none;height:60px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px 0 10px;border-bottom:1px solid var(--edge);margin-bottom:10px}
 .cx-proj{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 6px 0 10px;border:0;border-radius:12px;background:none;color:var(--ink);font-size:15px;font-weight:600;cursor:pointer}
 .cx-proj:hover{background:var(--card)}
@@ -232,8 +264,7 @@
   .cx-rf{grid-area:foot;flex-direction:row;align-items:center;justify-content:flex-end;padding:0;border:0}
   .cx-rail .cx-bal,.cx-rail.is-collapsed .cx-bal{flex-direction:row;width:auto;height:44px;gap:6px;padding:0 10px}
   .cx-rail .cx-bal b,.cx-rail.is-collapsed .cx-bal b{margin:0;font-size:14px}
-  .cx-acct{margin:0;padding:0 8px}
-  .cx-acct .cl-userButtonOuterIdentifier{display:none}
+  .cx-acct,.cx-rail.is-collapsed .cx-acct{width:44px;height:44px;margin:0;padding:0;justify-content:center}
   .cx-body{grid-template-columns:minmax(0,1fr)}
   .cx-shell{overflow:visible}
   .cx-panel,.cx-main{overflow:visible}

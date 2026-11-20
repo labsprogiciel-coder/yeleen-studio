@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ClerkProvider, SignIn, SignUp, UserButton, useAuth } from '@clerk/clerk-react'
+import { ClerkProvider, SignIn, SignUp, UserButton, useAuth, useClerk, useUser } from '@clerk/clerk-react'
 import { setTokenGetter } from './api.js'
 import { setSentryUser } from './sentry.js'
 import { setAnalyticsUser } from './posthog.js'
+import { displayName } from './accountMenu.js'
 import stacked from '../assets/brand/qreativ-lockup-stacked-primary.svg'
 
 /**
@@ -125,24 +126,31 @@ function AuthGate({ children }) {
 export const SignInPage = () => (authEnabled ? <AuthGate><SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" /></AuthGate> : <Navigate to="/cinema" replace />)
 export const SignUpPage = () => (authEnabled ? <AuthGate><SignUp routing="path" path="/sign-up" signInUrl="/sign-in" /></AuthGate> : <Navigate to="/cinema" replace />)
 
-/**
- * Menu du compte (déconnexion…), ou l'avatar de démonstration sans Clerk. `showName` écrit le nom à droite de l'avatar (barre latérale
- * agrandie) ; les couleurs suivent alors les jetons du thème. La fenêtre du menu se place d'elle-même (retournement, décalage) dans
- * la partie visible : la barre latérale ne la rogne pas (voir `.cx-rf` dans studio.css).
- */
-export function AccountMenu({ fallback = null, showName = false }) {
+/** Menu du compte de Clerk (déconnexion…), ou l'avatar de démonstration sans Clerk : en-têtes des pages hors studio Cinéma. */
+export function AccountMenu({ fallback = null }) {
   const { enabled, signedIn } = useAuthState()
   if (!(enabled && signedIn)) return fallback
-  const elements = { avatarBox: { width: 28, height: 28 } }
-  if (showName) {
-    Object.assign(elements, {
-      userButtonBox: { flexDirection: 'row-reverse', gap: 10, minWidth: 0 },
-      userButtonTrigger: { minWidth: 0, maxWidth: '100%' },
-      userButtonOuterIdentifier: {
-        color: 'var(--ink)', fontSize: 14, fontWeight: 600, paddingLeft: 0,
-        minWidth: 0, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      },
-    })
-  }
-  return <UserButton afterSignOutUrl="/sign-in" showName={showName} appearance={{ elements }} />
+  return <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} />
 }
+
+/**
+ * Le compte connecté, pour le menu du compte du studio Cinéma (components/cinema/AccountPopover.jsx) :
+ * { demo, name, email, imageUrl, manage, signOut }. Sans Clerk : le compte de démonstration, sans gestion ni déconnexion.
+ * `authEnabled` ne change pas pendant la vie de la page : le choix du hook est fixe, l'ordre des hooks aussi.
+ */
+function useClerkAccount() {
+  const { user } = useUser()
+  const clerk = useClerk()
+  const email = user?.primaryEmailAddress?.emailAddress ?? ''
+  return {
+    demo: false,
+    name: displayName({ fullName: user?.fullName, firstName: user?.firstName, lastName: user?.lastName, username: user?.username, email }),
+    email,
+    imageUrl: user?.hasImage ? user.imageUrl : null,
+    manage: () => clerk.openUserProfile(),
+    signOut: () => clerk.signOut({ redirectUrl: '/sign-in' }),
+  }
+}
+const DEMO = { demo: true, name: 'Compte de démonstration', email: '', imageUrl: null, manage: null, signOut: null }
+const useDemoAccount = () => DEMO
+export const useAccount = authEnabled ? useClerkAccount : useDemoAccount

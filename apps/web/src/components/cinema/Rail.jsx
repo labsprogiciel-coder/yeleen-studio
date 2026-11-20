@@ -1,15 +1,12 @@
-import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import Icon from '../../lib/icons.jsx'
-import { AccountMenu } from '../../lib/auth.jsx'
 import { features } from '../../lib/features.js'
 import { jetons, useJobs } from '../../lib/jobs.jsx'
 import { useLibrary } from '../../lib/libraryDialog.jsx'
 import { useRecharge } from '../../lib/rechargeDialog.jsx'
-import { readRail, saveRail } from '../../lib/railPrefs.js'
 import { useTheme } from '../../lib/theme.jsx'
-import useIsAdmin from '../../lib/useIsAdmin.jsx'
 import Cauri from '../Cauri.jsx'
+import AccountPopover from './AccountPopover.jsx'
 import markPlain from '../../assets/brand/qreativ-mark.svg'
 import markReversed from '../../assets/brand/qreativ-mark-reversed.svg'
 import lockupPlain from '../../assets/brand/qreativ-lockup-horizontal-primary.svg'
@@ -45,16 +42,13 @@ function RailBalance() {
 
 /**
  * Barre latérale du studio : la seule barre de l'écran. En haut le logo et « Nouvelle création », au milieu les types de création et
- * les fichiers, en bas l'administration (comptes confirmés par l'API), le solde, le thème et le compte Clerk. Réduite, elle ne montre
+ * les fichiers, en bas le solde et le compte (AccountPopover : solde, gestion du compte, administration, thème, aide, déconnexion).
+ * `collapsed` vient de Cinéma (le bouton de repli est dans la barre du projet). Réduite, elle ne montre
  * que les icônes (libellés en infobulle) ; agrandie, l'icône et le libellé. Sur téléphone, elle devient une barre horizontale en haut.
  */
-export default function Rail({ tab, onTab, onNew }) {
+export default function Rail({ tab, onTab, onNew, collapsed }) {
   const { openLibrary } = useLibrary()
-  const { isDark, toggleTheme } = useTheme()
-  const { admin } = useIsAdmin()
-  const [collapsed, setCollapsed] = useState(readRail)
-  // Enregistré seulement quand la personne clique : sans choix, la largeur de la fenêtre décide à chaque visite.
-  const toggleRail = () => setCollapsed((c) => { const next = !c; saveRail(next); return next })
+  const { isDark } = useTheme()
   // Réduite, un libellé seul (title) aide la souris ; agrandie, il est déjà écrit : pas d'infobulle en double.
   const tip = (label) => (collapsed ? label : undefined)
   const item = (key, label, iconName, props) => (
@@ -64,8 +58,6 @@ export default function Rail({ tab, onTab, onNew }) {
       </button>
     </li>
   )
-  const themeLabel = isDark ? 'Activer le mode clair' : 'Activer le mode sombre'
-  const toggleLabel = collapsed ? 'Agrandir le menu' : 'Réduire le menu'
   return (
     <nav className={`cx-rail${collapsed ? ' is-collapsed' : ''}`} aria-label="Espace de travail">
       <div className="cx-rh">
@@ -74,9 +66,6 @@ export default function Rail({ tab, onTab, onNew }) {
           <img className="cx-logo-mark" src={isDark ? markReversed : markPlain} alt="" width="32" height="32" />
           <img className="cx-logo-full" src={isDark ? lockupReversed : lockupPlain} alt="" height="26" />
         </Link>
-        <button type="button" className="cx-fold" aria-expanded={!collapsed} aria-label={toggleLabel} title={toggleLabel} onClick={toggleRail}>
-          <Icon name="sidebar" size={18} />
-        </button>
       </div>
       <button type="button" className="cx-new" aria-label="Nouvelle création" title={tip('Nouvelle création')} onClick={onNew}>
         <Icon name="plus" size={20} /><span className="cx-lbl" aria-hidden="true">Nouvelle création</span>
@@ -92,18 +81,8 @@ export default function Rail({ tab, onTab, onNew }) {
         </ul>
       </div>
       <div className="cx-rf">
-        {admin && (
-          <NavLink to="/admin" className="cx-ri" aria-label="Administration" title={tip('Administration')}>
-            <Icon name="gauge" size={20} /><span className="cx-lbl" aria-hidden="true">Administration</span>
-          </NavLink>
-        )}
         <RailBalance />
-        <button type="button" className="cx-ri" onClick={toggleTheme} aria-label={themeLabel} title={tip(themeLabel)} data-theme-switcher>
-          <Icon name={isDark ? 'sun' : 'moon'} size={20} /><span className="cx-lbl" aria-hidden="true">{isDark ? 'Mode clair' : 'Mode sombre'}</span>
-        </button>
-        <div className="cx-acct">
-          <AccountMenu showName={!collapsed} fallback={<span className="cx-av-demo" title="Compte de démonstration"><i className="av" aria-hidden="true" /><span className="cx-lbl">Compte de démonstration</span></span>} />
-        </div>
+        <AccountPopover collapsed={collapsed} />
       </div>
     </nav>
   )
