@@ -55,19 +55,26 @@ function NavLinks() {
   )
 }
 
-/** En-tête compact des écrans d'outils (Cinéma, vidéo, image, audio, spot) : la même barre Plum partout. */
-export function ShellHeader() {
+/**
+ * En-tête compact des écrans d'outils (Cinéma, vidéo, image, audio, spot) : la même barre Plum partout.
+ * `minimal` (écran d'administration) : réduite au logo, à la navigation et au compte.
+ */
+export function ShellHeader({ minimal = false }) {
   return (
     <header className="nv">
       <Logo />
       <NavLinks />
       <div className="rt">
-        <BalanceChip />
-        <Icon name="search" />
-        <ThemeToggle className="pb nv-theme" size={16} />
-        <RechargeButton className="pb">Recharger</RechargeButton>
-        <a href="#" className="pb">Entreprise</a>
-        <a href="#" className="pb">Ressources</a>
+        {!minimal && (
+          <>
+            <BalanceChip />
+            <Icon name="search" />
+            <ThemeToggle className="pb nv-theme" size={16} />
+            <RechargeButton className="pb">Recharger</RechargeButton>
+            <a href="#" className="pb">Entreprise</a>
+            <a href="#" className="pb">Ressources</a>
+          </>
+        )}
         <AccountMenu fallback={<span className="av" />} />
       </div>
     </header>

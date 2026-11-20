@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { ShellHeader, SkipLink } from '../components/Headers.jsx'
 import Icon from '../lib/icons.jsx'
 import useDocumentTitle from '../lib/useDocumentTitle.js'
-import useTabKeys from '../lib/useTabKeys.js'
 import { api } from '../lib/api.js'
 import { fcfa } from '../lib/topups.js'
 import {
@@ -19,10 +18,13 @@ import '../styles/admin.css'
  * cette page n'affiche que ce qu'elle renvoie. Le solde d'un compte cible n'est jamais versé dans le solde affiché de l'administrateur.
  */
 const TABS = [
-  { id: 'users', label: 'Utilisateurs' },
-  { id: 'jobs', label: 'Générations en cours' },
-  { id: 'topups', label: 'Recharges' },
+  { id: 'users', label: 'Utilisateurs', icon: 'user' },
+  { id: 'jobs', label: 'Générations en cours', icon: 'sparkles' },
+  { id: 'topups', label: 'Recharges', icon: 'download' },
 ]
+
+/** Adresse d'une section ; « Utilisateurs » garde le compte ouvert. */
+const sectionHref = (id, uid) => `/admin?${new URLSearchParams(id === 'users' && uid ? { t: id, u: uid } : { t: id })}`
 
 /** Liste d'une réponse, quel que soit son nom (`users`, `jobs`…), ou la réponse elle-même si c'est un tableau. */
 const rows = (r, name) => (Array.isArray(r) ? r : r?.[name] ?? r?.results ?? r?.rows ?? [])
@@ -46,27 +48,39 @@ export default function Admin() {
   const [params, setParams] = useSearchParams()
   const tab = Math.max(0, TABS.findIndex((t) => t.id === params.get('t')))
   const uid = params.get('u') ?? ''
-  const onTabKeys = useTabKeys()
+  const nav = useRef(null)
   const [dialog, setDialog] = useState(null) // { spec, n } : `n` change à chaque ouverture, donc une clé d'idempotence neuve
   const openAction = useCallback((spec) => setDialog((d) => ({ spec, n: (d?.n ?? 0) + 1 })), [])
   const attempts = useRef(null) // envois sans réponse sûre : survivent à la fermeture de la fenêtre (voir attemptStore)
   attempts.current ??= attemptStore()
   const go = (next) => setParams(Object.fromEntries(Object.entries(next).filter(([, v]) => v)))
+  // Sur téléphone la navigation défile à l'horizontale : la section courante reste visible.
+  useEffect(() => {
+    const el = nav.current?.querySelector('[aria-current="page"]')
+    const box = nav.current
+    if (!box || !el || box.scrollWidth <= box.clientWidth) return
+    // Position mesurée par rapport au défileur lui-même (offsetLeft dépend de l'ancêtre positionné).
+    const left = el.getBoundingClientRect().left - box.getBoundingClientRect().left + box.scrollLeft
+    box.scrollTo({ left: left - (box.clientWidth - el.offsetWidth) / 2 })
+  }, [tab])
 
   return (
     <div className="pg shell adm">
       <SkipLink />
-      <ShellHeader />
+      <ShellHeader minimal />
       <main className="adm-main" id="main" tabIndex={-1}>
-        <div className="adm-head">
+        <aside className="adm-side">
           <h1>Administration</h1>
-          <div className="adm-tabs" role="tablist" aria-label="Administration" onKeyDown={onTabKeys}>
+          <nav className="adm-nav" ref={nav} aria-label="Sections de l’administration">
             {TABS.map((t, i) => (
-              <button key={t.id} id={`admt-${i}`} type="button" role="tab" aria-selected={tab === i} aria-controls="adm-panel" tabIndex={tab === i ? 0 : -1} className={tab === i ? 'on' : ''} onClick={() => go({ t: t.id, u: t.id === 'users' ? uid : '' })}>{t.label}</button>
+              <Link key={t.id} to={sectionHref(t.id, uid)} className={tab === i ? 'on' : ''} aria-current={tab === i ? 'page' : undefined}>
+                <Icon name={t.icon} size={18} /><span>{t.label}</span>
+              </Link>
             ))}
-          </div>
-        </div>
-        <section className="adm-panel" role="tabpanel" id="adm-panel" aria-labelledby={`admt-${tab}`}>
+          </nav>
+        </aside>
+        <section className="adm-panel" aria-labelledby="adm-sec-t">
+          <h2 id="adm-sec-t" className="sr">{TABS[tab].label}</h2>
           {tab === 0 && <UsersTab uid={uid} select={(u) => go({ t: 'users', u })} openAction={openAction} />}
           {tab === 1 && <JobsTab openAction={openAction} />}
           {tab === 2 && <TopupsTab openAction={openAction} />}
@@ -85,36 +99,40 @@ function UsersTab({ uid, select, openAction }) {
   const found = useLoad(() => api.adminUsers(query), [query])
   const users = rows(found.data, 'users')
   return (
-    <div className={`adm-users${uid ? ' has-user' : ''}`}>
-      <div className="adm-search">
-        <form role="search" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()) }}>
-          <label className="adm-field">
-            <span>Rechercher un compte</span>
-            <div className="adm-row">
-              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Identifiant, e-mail, téléphone ou génération" autoComplete="off" />
-              <button type="submit" className="adm-btn"><Icon name="search" size={16} />Chercher</button>
-            </div>
-          </label>
+    <>
+      <div className="adm-toolbar">
+        <form className="adm-search" role="search" aria-label="Rechercher un compte" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()) }}>
+          <label className="sr" htmlFor="adm-q">Rechercher un compte</label>
+          <div className="adm-field adm-q">
+            <Icon name="search" size={16} />
+            <input id="adm-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ID, e-mail, tél., réf. ou génération" autoComplete="off" aria-describedby="adm-q-hint" />
+          </div>
+          <button type="submit" className="adm-btn primary">Chercher</button>
         </form>
-        {found.error && <p className="adm-err" role="alert">{found.error}</p>}
-        <p className="adm-note" aria-live="polite">{found.loading ? 'Recherche…' : `${users.length} compte${users.length > 1 ? 's' : ''}${query ? '' : ' récents'}`}</p>
-        <ul className="adm-list">
-          {users.map((u) => (
-            <li key={u.id}>
-              <button type="button" className={u.id === uid ? 'on' : ''} aria-current={u.id === uid ? 'true' : undefined} onClick={() => select(u.id)}>
-                <b>{u.email || u.name || u.id}</b>
-                <span>{u.email && u.name ? `${u.name} · ` : ''}{u.id}</span>
-                <span>{u.country ? `${u.country} · ` : ''}vu {formatDate(pick(u, 'lastSeenAt'))}</span>
-                {pick(u, 'blockedAt') && <em className="adm-tag ko">Suspendu</em>}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <p id="adm-q-hint" className="adm-hint">Identifiant, e-mail, téléphone, référence de recharge ou génération.</p>
       </div>
-      {uid
-        ? <UserPanel key={uid} uid={uid} close={() => select('')} openAction={openAction} onChanged={found.reload} />
-        : <p className="adm-empty">Choisissez un compte pour voir son solde, ses recharges et ses générations.</p>}
-    </div>
+      <div className={`adm-users${uid ? ' has-user' : ''}`}>
+        <div className="adm-results">
+          {found.error && <p className="adm-err" role="alert">{found.error}</p>}
+          <p className="adm-note" aria-live="polite">{found.loading ? 'Recherche…' : `${users.length} compte${users.length > 1 ? 's' : ''}${query ? '' : ' récents'}`}</p>
+          <ul className="adm-list">
+            {users.map((u) => (
+              <li key={u.id}>
+                <button type="button" className={u.id === uid ? 'on' : ''} aria-current={u.id === uid ? 'true' : undefined} onClick={() => select(u.id)}>
+                  <b>{u.email || u.name || u.id}</b>
+                  <span>{u.email && u.name ? `${u.name} · ` : ''}{u.id}</span>
+                  <span>{u.country ? `${u.country} · ` : ''}vu {formatDate(pick(u, 'lastSeenAt'))}</span>
+                  {pick(u, 'blockedAt') && <em className="adm-tag ko">Suspendu</em>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {uid
+          ? <UserPanel key={uid} uid={uid} close={() => select('')} openAction={openAction} onChanged={found.reload} />
+          : <p className="adm-empty">Choisissez un compte pour voir son solde, ses recharges et ses générations.</p>}
+      </div>
+    </>
   )
 }
 
@@ -328,39 +346,41 @@ function JobsTab({ openAction }) {
   const now = Date.now()
   const jobs = [...rows(data, 'jobs')].sort((a, b) => isStuckJob(b, now) - isStuckJob(a, now))
   return (
-    <div className="adm-card">
-      <div className="adm-bar">
+    <>
+      <div className="adm-toolbar">
         <div className="adm-seg" role="group" aria-label="Générations montrées">
           <button type="button" aria-pressed={scope === 'active'} onClick={() => setScope('active')}>Toutes les actives</button>
           <button type="button" aria-pressed={scope === 'stuck'} onClick={() => setScope('stuck')}>Bloquées (+ de 30 min)</button>
         </div>
-        <button type="button" className="adm-btn" onClick={reload} disabled={loading}><Icon name="revert" size={16} />Actualiser</button>
+        <button type="button" className="adm-btn adm-refresh" onClick={reload} disabled={loading}><Icon name="revert" size={16} />Actualiser</button>
       </div>
-      {error && <p className="adm-err" role="alert">{error}</p>}
-      {!error && !loading && !jobs.length && <p className="adm-note">Aucune génération en cours.</p>}
-      {jobs.length > 0 && (
-        <div className="adm-tw">
-          <table className="adm-table">
-            <thead><tr><th>Compte</th><th>Modèle</th><th>Statut</th><th>Âge</th><th>Coût</th><th><span className="sr">Actions</span></th></tr></thead>
-            <tbody>
-              {jobs.map((j) => {
-                const uid = pick(j, 'userId') ?? j.account
-                return (
-                  <tr key={j.id}>
-                    <td><Link className="adm-link" to={`/admin?t=users&u=${encodeURIComponent(uid)}`}>{j.email || uid}</Link></td>
-                    <td>{pick(j, 'modelId') ?? j.kind}<br /><small className="adm-mono">{j.id}</small></td>
-                    <td><JobStatus j={j} now={now} /></td>
-                    <td className="adm-num">{formatAge(j.ageMin ?? ageMin(pick(j, 'createdAt'), now))}</td>
-                    <td className="adm-num">{cauris(Number(j.cost))}</td>
-                    <td><button type="button" className="adm-btn sm danger" onClick={() => openAction(cancelSpec(uid, j, reload))}>Annuler et rembourser</button></td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+      <div className="adm-card">
+        {error && <p className="adm-err" role="alert">{error}</p>}
+        {!error && !jobs.length && <p className="adm-note" aria-live="polite">{loading ? 'Chargement…' : 'Aucune génération en cours.'}</p>}
+        {jobs.length > 0 && (
+          <div className="adm-tw">
+            <table className="adm-table">
+              <thead><tr><th>Compte</th><th>Modèle</th><th>Statut</th><th>Âge</th><th>Coût</th><th><span className="sr">Actions</span></th></tr></thead>
+              <tbody>
+                {jobs.map((j) => {
+                  const uid = pick(j, 'userId') ?? j.account
+                  return (
+                    <tr key={j.id}>
+                      <td><Link className="adm-link" to={`/admin?t=users&u=${encodeURIComponent(uid)}`}>{j.email || uid}</Link></td>
+                      <td>{pick(j, 'modelId') ?? j.kind}<br /><small className="adm-mono">{j.id}</small></td>
+                      <td><JobStatus j={j} now={now} /></td>
+                      <td className="adm-num">{formatAge(j.ageMin ?? ageMin(pick(j, 'createdAt'), now))}</td>
+                      <td className="adm-num">{cauris(Number(j.cost))}</td>
+                      <td><button type="button" className="adm-btn sm danger" onClick={() => openAction(cancelSpec(uid, j, reload))}>Annuler et rembourser</button></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -373,8 +393,8 @@ function TopupsTab({ openAction }) {
   const now = Date.now()
   const topups = sortTopups(rows(data, 'topups'), now)
   return (
-    <div className="adm-card">
-      <div className="adm-bar">
+    <>
+      <div className="adm-toolbar">
         <label className="adm-field inline">
           <span>Statut</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -383,30 +403,32 @@ function TopupsTab({ openAction }) {
           </select>
         </label>
         <label className="adm-check"><input type="checkbox" checked={stuck} onChange={(e) => setStuck(e.target.checked)} />Bloquées seulement (+ de 10 min)</label>
-        <button type="button" className="adm-btn" onClick={reload} disabled={loading}><Icon name="revert" size={16} />Actualiser</button>
+        <button type="button" className="adm-btn adm-refresh" onClick={reload} disabled={loading}><Icon name="revert" size={16} />Actualiser</button>
       </div>
-      {error && <p className="adm-err" role="alert">{error}</p>}
-      {!error && !loading && !topups.length && <p className="adm-note">Aucune recharge.</p>}
-      {topups.length > 0 && (
-        <div className="adm-tw">
-          <table className="adm-table">
-            <thead><tr><th>Date</th><th>Compte</th><th>Référence</th><th>Montant</th><th>Statut</th><th><span className="sr">Actions</span></th></tr></thead>
-            <tbody>
-              {topups.map((t) => (
-                <tr key={t.reference}>
-                  <td>{formatDate(pick(t, 'createdAt'))}</td>
-                  <td><Link className="adm-link" to={`/admin?t=users&u=${encodeURIComponent(t.account)}`}>{t.email || t.account}</Link><br /><small>{t.operator ?? ''} {t.phone ?? ''}</small></td>
-                  <td className="adm-mono">{t.reference}</td>
-                  <td className="adm-num">{fcfaOf(t)}<br /><small>{caurisLabel(Number(t.jetons))}</small></td>
-                  <td><TopupStatus t={t} now={now} /></td>
-                  <td>{canRecheck(t.status) && <button type="button" className="adm-btn sm" onClick={() => openAction(recheckSpec(t.account, t, reload))}>Revérifier</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+      <div className="adm-card">
+        {error && <p className="adm-err" role="alert">{error}</p>}
+        {!error && !topups.length && <p className="adm-note" aria-live="polite">{loading ? 'Chargement…' : 'Aucune recharge.'}</p>}
+        {topups.length > 0 && (
+          <div className="adm-tw">
+            <table className="adm-table">
+              <thead><tr><th>Date</th><th>Compte</th><th>Référence</th><th>Montant</th><th>Statut</th><th><span className="sr">Actions</span></th></tr></thead>
+              <tbody>
+                {topups.map((t) => (
+                  <tr key={t.reference}>
+                    <td>{formatDate(pick(t, 'createdAt'))}</td>
+                    <td><Link className="adm-link" to={`/admin?t=users&u=${encodeURIComponent(t.account)}`}>{t.email || t.account}</Link><br /><small>{t.operator ?? ''} {t.phone ?? ''}</small></td>
+                    <td className="adm-mono">{t.reference}</td>
+                    <td className="adm-num">{fcfaOf(t)}<br /><small>{caurisLabel(Number(t.jetons))}</small></td>
+                    <td><TopupStatus t={t} now={now} /></td>
+                    <td>{canRecheck(t.status) && <button type="button" className="adm-btn sm" onClick={() => openAction(recheckSpec(t.account, t, reload))}>Revérifier</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
