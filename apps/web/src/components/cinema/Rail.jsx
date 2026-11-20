@@ -68,7 +68,7 @@ export default function Rail({ tab, onTab, onNew, collapsed }) {
         </Link>
       </div>
       <button type="button" className="cx-new" aria-label="Nouvelle création" title={tip('Nouvelle création')} onClick={onNew}>
-        <Icon name="plus" size={20} /><span className="cx-lbl" aria-hidden="true">Nouvelle création</span>
+        <Icon name="plus" size={17} /><span className="cx-lbl" aria-hidden="true">Nouvelle création</span>
       </button>
       <div className="cx-rs">
         <ul className="cx-rl" aria-label="Type de création">
