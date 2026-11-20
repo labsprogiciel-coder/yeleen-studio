@@ -48,21 +48,9 @@ function useCountdown(expiresAt) {
   return countdown(expiresAt, now)
 }
 
-function Stepper({ step, onGo }) {
-  return (
-    <ol className="rc-stepper" aria-label="Étapes de la recharge">
-      {STEPS.map((label, i) => {
-        const state = i < step ? 'done' : i === step ? 'on' : ''
-        const back = i < step && step < 3 // on ne revient pas en arrière une fois le paiement lancé
-        const inner = <><i>{i < step ? <Icon name="check" size={12} /> : i + 1}</i><span>{label}</span></>
-        return (
-          <li key={label} className={state} aria-current={i === step ? 'step' : undefined}>
-            {back ? <button type="button" onClick={() => onGo(i)}>{inner}</button> : <div>{inner}</div>}
-          </li>
-        )
-      })}
-    </ol>
-  )
+/** Avancée de la recharge : une barre fine en haut de la fenêtre ; le nom de l'étape est dit dans le sous-titre, revenir en arrière passe par « Modifier ». */
+function Progress({ step }) {
+  return <div className="rc-prog" aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
 }
 
 /** Rappel des choix déjà faits, chacun modifiable tant que le paiement n'est pas lancé. */
@@ -396,6 +384,7 @@ export default function RechargeDialog({ open, request, onClose }) {
     foot = back(2)
   }
 
+  const flow = apiEnabled && view === 'buy' // achat en cours : barre d'avancée et étape dans le sous-titre
   return (
     <dialog
       ref={dlg}
@@ -404,14 +393,18 @@ export default function RechargeDialog({ open, request, onClose }) {
       onCancel={(e) => { e.preventDefault(); onClose() }}
       onClick={(e) => { if (e.target === dlg.current) onClose() }}
     >
+      {flow && <Progress step={step} />}
       <header className="rc-top">
         <div>
           <h2 id="rc-title">Recharger</h2>
-          <p>Solde : <b><Amount n={balance} word /></b></p>
+          {flow ? (
+            <p><b className="rc-now">{STEPS[step]}</b> · étape {step + 1} sur {STEPS.length} · solde <b><Amount n={balance} word /></b></p>
+          ) : (
+            <p>Solde : <b><Amount n={balance} word /></b></p>
+          )}
         </div>
         <button type="button" className="rc-x" onClick={onClose} aria-label="Fermer"><Icon name="close" size={18} /></button>
       </header>
-      {apiEnabled && view === 'buy' && <Stepper step={step} onGo={go} />}
       <div className="rc-body">
         {view === 'buy' && step > 0 && (
           <Summary pack={PACKS.find((p) => p.id === pack) ?? selected} operator={operator} phone={phone} country={country} step={step} onGo={go} />
