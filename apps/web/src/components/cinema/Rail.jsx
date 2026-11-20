@@ -1,6 +1,19 @@
+import { useState } from 'react'
+import { Link, NavLink } from 'react-router-dom'
 import Icon from '../../lib/icons.jsx'
+import { AccountMenu } from '../../lib/auth.jsx'
+import { features } from '../../lib/features.js'
+import { jetons, useJobs } from '../../lib/jobs.jsx'
 import { useLibrary } from '../../lib/libraryDialog.jsx'
 import { useRecharge } from '../../lib/rechargeDialog.jsx'
+import { readRail, saveRail } from '../../lib/railPrefs.js'
+import { useTheme } from '../../lib/theme.jsx'
+import useIsAdmin from '../../lib/useIsAdmin.jsx'
+import Cauri from '../Cauri.jsx'
+import markPlain from '../../assets/brand/qreativ-mark.svg'
+import markReversed from '../../assets/brand/qreativ-mark-reversed.svg'
+import lockupPlain from '../../assets/brand/qreativ-lockup-horizontal-primary.svg'
+import lockupReversed from '../../assets/brand/qreativ-lockup-horizontal-reversed.svg'
 
 const TABS = [
   { id: 'image', icon: 'img', label: 'Image' },
@@ -15,29 +28,83 @@ const FILES = [
   { view: { tab: 'favs' }, icon: 'star', label: 'Mes favoris' },
 ]
 
-/** Barre d'icônes de l'espace de travail (le logo est dans la barre Plum du haut) : nouvelle création, type de création, fichiers, bibliothèque et recharge. */
+/** Solde de cauris (et générations en cours) : ouvre la recharge. Compact quand la barre est réduite. */
+function RailBalance() {
+  const { balance, running, queued } = useJobs()
+  const { openRecharge } = useRecharge()
+  const busy = running + queued
+  const label = `Solde : ${jetons(balance)} cauris${busy ? `, ${busy} génération${busy > 1 ? 's' : ''} en cours` : ''}. Recharger`
+  return (
+    <button type="button" className="cx-bal" aria-haspopup="dialog" aria-label={label} title={label} onClick={() => openRecharge()}>
+      <span className="cx-bal-ic"><Cauri size={18} />{busy > 0 && <i className="cx-bal-dot" aria-hidden="true" />}</span>
+      <b>{jetons(balance)}</b>
+      <span className="cx-lbl">cauris{busy > 0 ? ` · ${busy} en cours` : ''}</span>
+    </button>
+  )
+}
+
+/**
+ * Barre latérale du studio : la seule barre de l'écran. En haut le logo et « Nouvelle création », au milieu les types de création et
+ * les fichiers, en bas l'administration (comptes confirmés par l'API), le solde, le thème et le compte Clerk. Réduite, elle ne montre
+ * que les icônes (libellés en infobulle) ; agrandie, l'icône et le libellé. Sur téléphone, elle devient une barre horizontale en haut.
+ */
 export default function Rail({ tab, onTab, onNew }) {
   const { openLibrary } = useLibrary()
-  const { openRecharge } = useRecharge()
+  const { isDark, toggleTheme } = useTheme()
+  const { admin } = useIsAdmin()
+  const [collapsed, setCollapsed] = useState(readRail)
+  // Enregistré seulement quand la personne clique : sans choix, la largeur de la fenêtre décide à chaque visite.
+  const toggleRail = () => setCollapsed((c) => { const next = !c; saveRail(next); return next })
+  // Réduite, un libellé seul (title) aide la souris ; agrandie, il est déjà écrit : pas d'infobulle en double.
+  const tip = (label) => (collapsed ? label : undefined)
   const item = (key, label, iconName, props) => (
     <li key={key}>
-      <button type="button" className="cx-ri" aria-label={label} title={label} {...props}><Icon name={iconName} size={20} /></button>
+      <button type="button" className="cx-ri" aria-label={label} title={tip(label)} {...props}>
+        <Icon name={iconName} size={20} /><span className="cx-lbl" aria-hidden="true">{label}</span>
+      </button>
     </li>
   )
+  const themeLabel = isDark ? 'Activer le mode clair' : 'Activer le mode sombre'
+  const toggleLabel = collapsed ? 'Agrandir le menu' : 'Réduire le menu'
   return (
-    <nav className="cx-rail" aria-label="Espace de travail">
-      <button type="button" className="cx-new" aria-label="Nouvelle création" title="Nouvelle création" onClick={onNew}><Icon name="plus" size={20} /></button>
-      <ul className="cx-rl" aria-label="Type de création">
-        {TABS.map((t) => item(t.id, t.label, t.icon, { 'aria-current': tab === t.id ? 'true' : undefined, onClick: () => onTab(t.id) }))}
-      </ul>
-      <i className="cx-sep" aria-hidden="true" />
-      <ul className="cx-rl" aria-label="Mes fichiers">
-        {FILES.map((f) => item(f.label, f.label, f.icon, { 'aria-haspopup': 'dialog', onClick: () => openLibrary(f.view) }))}
-        {item('lib', 'Bibliothèque', 'folder', { 'aria-haspopup': 'dialog', onClick: () => openLibrary() })}
-      </ul>
-      <ul className="cx-rl cx-end">
-        {item('recharge', 'Recharger mes cauris', 'diamond', { 'aria-haspopup': 'dialog', onClick: () => openRecharge() })}
-      </ul>
+    <nav className={`cx-rail${collapsed ? ' is-collapsed' : ''}`} aria-label="Espace de travail">
+      <div className="cx-rh">
+        <Link to={features.home ? '/' : '/cinema'} className="cx-logo" aria-label="Qreativ, accueil">
+          {/* Fond de la barre : blanc en thème clair (logo Plum), Plum foncé en thème sombre (logo inversé). */}
+          <img className="cx-logo-mark" src={isDark ? markReversed : markPlain} alt="" width="32" height="32" />
+          <img className="cx-logo-full" src={isDark ? lockupReversed : lockupPlain} alt="" height="26" />
+        </Link>
+        <button type="button" className="cx-fold" aria-expanded={!collapsed} aria-label={toggleLabel} title={toggleLabel} onClick={toggleRail}>
+          <Icon name="sidebar" size={18} />
+        </button>
+      </div>
+      <button type="button" className="cx-new" aria-label="Nouvelle création" title={tip('Nouvelle création')} onClick={onNew}>
+        <Icon name="plus" size={20} /><span className="cx-lbl" aria-hidden="true">Nouvelle création</span>
+      </button>
+      <div className="cx-rs">
+        <ul className="cx-rl" aria-label="Type de création">
+          {TABS.map((t) => item(t.id, t.label, t.icon, { 'aria-current': tab === t.id ? 'true' : undefined, onClick: () => onTab(t.id) }))}
+        </ul>
+        <i className="cx-sep" aria-hidden="true" />
+        <ul className="cx-rl" aria-label="Mes fichiers">
+          {FILES.map((f) => item(f.label, f.label, f.icon, { 'aria-haspopup': 'dialog', onClick: () => openLibrary(f.view) }))}
+          {item('lib', 'Bibliothèque', 'folder', { 'aria-haspopup': 'dialog', onClick: () => openLibrary() })}
+        </ul>
+      </div>
+      <div className="cx-rf">
+        {admin && (
+          <NavLink to="/admin" className="cx-ri" aria-label="Administration" title={tip('Administration')}>
+            <Icon name="gauge" size={20} /><span className="cx-lbl" aria-hidden="true">Administration</span>
+          </NavLink>
+        )}
+        <RailBalance />
+        <button type="button" className="cx-ri" onClick={toggleTheme} aria-label={themeLabel} title={tip(themeLabel)} data-theme-switcher>
+          <Icon name={isDark ? 'sun' : 'moon'} size={20} /><span className="cx-lbl" aria-hidden="true">{isDark ? 'Mode clair' : 'Mode sombre'}</span>
+        </button>
+        <div className="cx-acct">
+          <AccountMenu showName={!collapsed} fallback={<span className="cx-av-demo" title="Compte de démonstration"><i className="av" aria-hidden="true" /><span className="cx-lbl">Compte de démonstration</span></span>} />
+        </div>
+      </div>
     </nav>
   )
 }

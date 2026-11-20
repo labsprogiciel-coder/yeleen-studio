@@ -3,7 +3,7 @@ import Icon from '../lib/icons.jsx'
 import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, priceLabel, videoCost } from '@studio/catalog'
 import { recipeById, recipeCost } from '@studio/catalog/recipes'
 import { findTool, toolCost } from '@studio/catalog/tools'
-import { ShellHeader, SkipLink } from '../components/Headers.jsx'
+import { SkipLink } from '../components/Headers.jsx'
 import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
 import PlanTabs from '../components/PlanTabs.jsx'
@@ -435,8 +435,7 @@ export default function Cinema() {
   return (
     <div className="cx-page">
       <SkipLink />
-      {/* La barre Plum commune à tous les écrans (logo, navigation, solde, compte) ; `pg shell` lui donne ses styles. */}
-      <div className="pg shell cx-bar"><ShellHeader /></div>
+      {/* Pas de barre Plum ici : la barre latérale (Rail) porte le logo, le solde, le thème et le compte. */}
     <div className="cx cn">
       <Rail tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} />
 

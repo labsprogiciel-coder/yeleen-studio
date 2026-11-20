@@ -125,8 +125,24 @@ function AuthGate({ children }) {
 export const SignInPage = () => (authEnabled ? <AuthGate><SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" /></AuthGate> : <Navigate to="/cinema" replace />)
 export const SignUpPage = () => (authEnabled ? <AuthGate><SignUp routing="path" path="/sign-up" signInUrl="/sign-in" /></AuthGate> : <Navigate to="/cinema" replace />)
 
-/** Menu du compte (déconnexion…), ou l'avatar de démonstration sans Clerk. */
-export function AccountMenu({ fallback = null }) {
+/**
+ * Menu du compte (déconnexion…), ou l'avatar de démonstration sans Clerk. `showName` écrit le nom à droite de l'avatar (barre latérale
+ * agrandie) ; les couleurs suivent alors les jetons du thème. La fenêtre du menu se place d'elle-même (retournement, décalage) dans
+ * la partie visible : la barre latérale ne la rogne pas (voir `.cx-rf` dans studio.css).
+ */
+export function AccountMenu({ fallback = null, showName = false }) {
   const { enabled, signedIn } = useAuthState()
-  return enabled && signedIn ? <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} /> : fallback
+  if (!(enabled && signedIn)) return fallback
+  const elements = { avatarBox: { width: 28, height: 28 } }
+  if (showName) {
+    Object.assign(elements, {
+      userButtonBox: { flexDirection: 'row-reverse', gap: 10, minWidth: 0 },
+      userButtonTrigger: { minWidth: 0, maxWidth: '100%' },
+      userButtonOuterIdentifier: {
+        color: 'var(--ink)', fontSize: 14, fontWeight: 600, paddingLeft: 0,
+        minWidth: 0, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      },
+    })
+  }
+  return <UserButton afterSignOutUrl="/sign-in" showName={showName} appearance={{ elements }} />
 }
