@@ -74,15 +74,6 @@ export default function VideoTemplates({ templates, onPick, selectedId = null })
   const choose = (c) => { setCat(c); setShown(PAGE) }
   return (
     <section className="cx-sec" aria-labelledby="cx-vt-h">
-      <div className="cx-sec-h"><h2 id="cx-vt-h">Vidéos à refaire</h2></div>
-      <p className="cx-sub">Choisissez une vidéo : ses réglages s’ouvrent dans le générateur, ajoutez votre photo ou changez le texte.</p>
-      {cats.length > 1 && (
-        <div className="cx-cats" role="group" aria-label="Catégories">
-          {['all', ...cats].map((c) => (
-            <button key={c} type="button" aria-pressed={cat === c} onClick={() => choose(c)}>{c === 'all' ? 'Toutes' : categoryLabel(c)}</button>
-          ))}
-        </div>
-      )}
       <VideoGrid templates={list.slice(0, shown)} onPick={onPick} selectedId={selectedId} />
       {list.length > shown && <button type="button" className="cx-more" onClick={() => setShown((n) => n + PAGE)}>Voir plus</button>}
     </section>
