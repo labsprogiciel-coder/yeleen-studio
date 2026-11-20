@@ -2,27 +2,96 @@
  * Studio (Cinéma) : barre d'icônes, barre du haut, panneau d'outils et zone principale, chacun dans un panneau arrondi.
  * Le panneau d'outils reçoit le compositeur (cinema.css) ou le panneau partagé de l'écran Vidéo (edit-panel.css).
  */
-/* Page : la barre Plum commune (Headers.jsx) puis l'espace de travail, qui prend toute la hauteur restante. */
+/* Page : l'espace de travail prend toute la hauteur ; la barre latérale (Rail.jsx) est la seule barre de l'écran. */
 .cx-page{display:flex;flex-direction:column;height:100vh;height:100dvh;background:var(--page)}
-.pg.shell.cx-bar{flex:none;min-height:0;background:none}
-.cx{--panel:var(--panel-bg);--card:var(--card-bg);--chip:var(--fill-hover);flex:1;min-height:0;display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;padding:10px;box-sizing:border-box;background:var(--page)}
+.cx{--panel:var(--panel-bg);--card:var(--card-bg);--chip:var(--fill-hover);flex:1;min-height:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;padding:10px;box-sizing:border-box;background:var(--page)}
 .cx button{font-family:inherit}
 
-/* Barre d'icônes */
-.cx-rail{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0;border-radius:20px;background:var(--panel);overflow-y:auto;scrollbar-width:none}
-
-.cx-new{display:grid;place-items:center;width:44px;height:44px;margin-bottom:6px;border:0;border-radius:12px;background:var(--lime);color:var(--on-lime);cursor:pointer}
+/*
+ * Barre latérale : agrandie (232 px, icône et libellé) ou réduite (72 px, icônes seules). La colonne de la grille (`auto`) suit sa
+ * largeur. Seul le milieu (.cx-rs) défile : le bas reste visible.
+ */
+.cx-rail{width:232px;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:20px;background:var(--panel);transition:width .22s ease}
+.cx-rail.is-collapsed{width:72px}
+.cx-lbl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:opacity .15s}
+.cx-rail.is-collapsed .cx-lbl{opacity:0;visibility:hidden}
+.cx-rh{flex:none;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;margin-bottom:4px}
+.cx-rail.is-collapsed .cx-rh{flex-direction:column;justify-content:flex-start}
+.cx-logo{display:flex;align-items:center;min-width:0;padding:0 6px;border-radius:10px}
+.cx-logo img{display:block}
+.cx-logo-mark{width:32px;height:32px}
+.cx-logo-full{width:auto;height:26px}
+.cx-rail .cx-logo-mark,.cx-rail.is-collapsed .cx-logo-full{display:none}
+.cx-rail.is-collapsed .cx-logo-mark{display:block}
+.cx-rail.is-collapsed .cx-logo{padding:0}
+.cx-fold{flex:none;display:grid;place-items:center;width:36px;height:36px;border:0;border-radius:10px;background:none;color:var(--ink-3);cursor:pointer}
+.cx-fold:hover{background:var(--card);color:var(--ink)}
+.cx-new,.cx-ri,.cx-bal{flex:none;display:flex;align-items:center;gap:12px;width:100%;height:44px;padding:0 12px;box-sizing:border-box;border:0;border-radius:12px;font-size:14.5px;font-weight:600;text-align:left;white-space:nowrap;overflow:hidden;cursor:pointer;text-decoration:none}
+.cx-new>svg,.cx-ri>svg{flex:none}
+.cx-new{margin-bottom:6px;background:var(--lime);color:var(--on-lime)}
 .cx-new:hover{filter:brightness(.92)}
-.cx-rl{display:flex;flex-direction:column;align-items:center;gap:4px;margin:0;padding:0;list-style:none}
-.cx-ri{display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:12px;background:none;color:var(--ink-3);cursor:pointer;text-decoration:none}
+.cx-rs{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.cx-rs::-webkit-scrollbar{display:none}
+.cx-rl{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.cx-ri{background:none;color:var(--ink-3)}
 .cx-ri:hover{background:var(--card);color:var(--ink)}
-.cx-ri[aria-current="true"]{background:var(--chip);color:var(--ink)}
-.cx-sep{width:28px;height:1px;margin:6px 0;background:var(--edge)}
-.cx-end{margin-top:auto}
+.cx-ri[aria-current="true"],.cx-ri.active{background:var(--chip);color:var(--ink)}
+.cx-sep{flex:none;height:1px;margin:8px 4px;background:var(--edge)}
+.cx-rf{flex:none;display:flex;flex-direction:column;gap:2px;padding-top:8px;border-top:1px solid var(--edge)}
+/* Solde : cauri et montant ; réduite, le montant passe sous le cauri. */
+.cx-bal{background:none;color:var(--ink);font-variant-numeric:tabular-nums}
+.cx-bal:hover{background:var(--card)}
+.cx-bal b{margin-right:-6px;font-size:15px;font-weight:700}
+.cx-bal .cx-lbl{font-weight:500;color:var(--ink-3)}
+.cx-bal-ic{position:relative;flex:none;display:grid;place-items:center;width:20px}
+.cx-bal-dot{position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 2px var(--panel);animation:balpulse 1.2s ease-in-out infinite}
+.cx-rail.is-collapsed .cx-bal{flex-direction:column;justify-content:center;gap:2px;height:52px;padding:0}
+.cx-rail.is-collapsed .cx-bal b{font-size:12px}
+.cx-rail.is-collapsed .cx-bal .cx-lbl{display:none}
+/* Bouton du compte (AccountPopover.jsx) : l'avatar seul (barre réduite) ou l'avatar et le nom. */
+.cx-acct{flex:none;display:flex;align-items:center;gap:10px;width:100%;min-width:0;height:48px;margin-top:2px;padding:0 8px;box-sizing:border-box;border:0;border-radius:12px;background:none;color:var(--ink);font-size:14px;font-weight:600;text-align:left;cursor:pointer}
+.cx-acct:hover,.cx-acct.open{background:var(--card)}
+.cx-rail.is-collapsed .cx-acct{justify-content:center;padding:0}
+.cx-rail.is-collapsed .cx-acct .cx-lbl{display:none}
+/* Anneau de focus à l'intérieur : les éléments occupent toute la largeur d'une zone qui rogne ce qui dépasse (.cx-rs). */
+.cx-rail :focus-visible{outline-offset:-2px}
+.cx-av{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;object-fit:cover}
+.cx-av-demo{background:conic-gradient(var(--lime),#4d8ad6,#e8307a,var(--lime))}
+.cx-av-ini{background:var(--cobalt);color:var(--paper-white);font-weight:700;font-style:normal;line-height:1}
+
+/*
+ * Fenêtre du compte : au-dessus de tout (portail dans <body>, `position: fixed`), placée par placeAccountMenu (lib/accountMenu.js) à
+ * droite de la barre latérale, ou sous le bouton sur téléphone. Elle défile si l'écran est trop bas.
+ */
+.cx-am{position:fixed;z-index:var(--z-menu);box-sizing:border-box;display:flex;flex-direction:column;gap:6px;padding:10px;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line-soft);border-radius:20px;background:var(--raised);color:var(--ink);box-shadow:var(--shadow-pop);font-family:var(--font-body)}
+/* En sombre, --raised est presque la couleur de la page : bordure plus franche pour détacher la fenêtre. */
+:root:not([data-theme='light']) .cx-am{border-color:var(--line-strong)}
+.cx-am-head{display:flex;align-items:center;gap:12px;min-width:0;padding:8px 8px 10px}
+.cx-am-head .cx-av{width:44px;height:44px;box-shadow:0 0 0 2px var(--raised),0 0 0 4px var(--lime)}
+.cx-am-who{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cx-am-who b,.cx-am-who small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cx-am-who b{font-size:16px;font-weight:700}
+.cx-am-who small{font-size:13px;color:var(--ink-3)}
+.cx-am-bal{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 12px 12px 14px;border-radius:14px;background:var(--fill)}
+.cx-am-bal-tx{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cx-am-bal-tx small{font-size:13px;font-weight:600;color:var(--ink-3)}
+.cx-am-bal-n{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cx-am-bal-n b{font-family:var(--font-display);font-size:19px;font-weight:800;color:var(--ink)}
+.cx-am-top{flex:none;min-height:38px;padding:0 16px;border:0;border-radius:999px;background:var(--lime);color:var(--on-lime);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.cx-am-top:hover,.cx-am-top:focus-visible{background:var(--lime-hover)}
+.cx-am-list{display:flex;flex-direction:column;gap:2px}
+.cx-am-it{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:0 12px;box-sizing:border-box;border:0;border-radius:12px;background:none;color:var(--ink);font:inherit;font-size:15px;font-weight:500;text-align:left;text-decoration:none;cursor:pointer}
+.cx-am-it>svg{flex:none;color:var(--ink-3)}
+.cx-am-it:hover,.cx-am-it:focus-visible{background:var(--wash-2)}
+.cx-am-it:hover>svg,.cx-am-it:focus-visible>svg{color:var(--ink)}
+.cx-am :focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.cx-am-sep{display:block;height:1px;margin:2px 4px;background:var(--line-soft)}
+@media (prefers-reduced-motion:reduce){.cx-rail,.cx-lbl{transition:none}.cx-bal-dot{animation:none}}
 
 /* Barre du haut */
 .cx-shell{min-width:0;min-height:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:22px;background:var(--shell);overflow:hidden}
 .cx-body{flex:1;min-height:0;display:grid;grid-template-columns:380px minmax(0,1fr);gap:10px;padding:0 10px 10px}
+.cx-top-l{display:flex;align-items:center;gap:6px;min-width:0}
 .cx-top{flex:none;height:60px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px 0 10px;border-bottom:1px solid var(--edge);margin-bottom:10px}
 .cx-proj{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 6px 0 10px;border:0;border-radius:12px;background:none;color:var(--ink);font-size:15px;font-weight:600;cursor:pointer}
 .cx-proj:hover{background:var(--card)}
@@ -180,11 +249,22 @@
 @media (max-width:900px){
   .cx-page{height:auto;min-height:100dvh}
   .cx{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;flex:none;gap:8px;padding:8px}
-  .cx-rail{grid-row:auto;flex-direction:row;padding:8px 10px;overflow-x:auto;overflow-y:hidden}
+  /* Barre du haut sur deux lignes : logo, puis solde, thème et compte ; dessous, « Nouvelle création » et la liste qui défile. */
+  .cx-rail,.cx-rail.is-collapsed{width:auto;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"logo foot" "new list";align-items:center;gap:6px 8px;padding:8px 10px;transition:none}
+  .cx-rh{grid-area:logo;margin:0;min-height:0}
+  .cx-rail .cx-logo-mark{display:block}
+  .cx-rail .cx-logo-full,.cx-fold{display:none}
+  .cx-rail .cx-logo{padding:0}
+  .cx-lbl,.cx-rail .cx-bal .cx-lbl{display:none}
+  .cx-new{grid-area:new;width:44px;margin:0;padding:0;justify-content:center}
+  .cx-rs{grid-area:list;flex-direction:row;align-items:center;overflow-x:auto;overflow-y:hidden}
   .cx-rl{flex-direction:row}
+  .cx-ri{width:44px;padding:0;justify-content:center}
   .cx-sep{width:1px;height:28px;margin:0 4px}
-  .cx-new{margin:0 4px 0 0}
-  .cx-end{margin:0 0 0 auto}
+  .cx-rf{grid-area:foot;flex-direction:row;align-items:center;justify-content:flex-end;padding:0;border:0}
+  .cx-rail .cx-bal,.cx-rail.is-collapsed .cx-bal{flex-direction:row;width:auto;height:44px;gap:6px;padding:0 10px}
+  .cx-rail .cx-bal b,.cx-rail.is-collapsed .cx-bal b{margin:0;font-size:14px}
+  .cx-acct,.cx-rail.is-collapsed .cx-acct{width:44px;height:44px;margin:0;padding:0;justify-content:center}
   .cx-body{grid-template-columns:minmax(0,1fr)}
   .cx-shell{overflow:visible}
   .cx-panel,.cx-main{overflow:visible}

@@ -11,7 +11,6 @@ export default function ProjectPicker() {
   ]
   return (
     <Menu items={items} value={current} onChange={(id) => (id === '__new' ? createProject() : selectProject(id))} label={`Projet : ${project.name}`} menuWidth={260} className="cx-proj" listClass="cn-pop">
-      <i className="cx-proj-dot" style={{ background: project.color }} aria-hidden="true" />
       <span>{project.name}</span>
       <span className="cx-proj-ud" aria-hidden="true"><Icon name="updown" size={16} /></span>
     </Menu>

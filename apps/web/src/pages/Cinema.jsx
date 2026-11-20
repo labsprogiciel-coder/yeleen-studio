@@ -3,7 +3,7 @@ import Icon from '../lib/icons.jsx'
 import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, priceLabel, videoCost } from '@studio/catalog'
 import { recipeById, recipeCost } from '@studio/catalog/recipes'
 import { findTool, toolCost } from '@studio/catalog/tools'
-import { ShellHeader, SkipLink } from '../components/Headers.jsx'
+import { SkipLink } from '../components/Headers.jsx'
 import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
 import PlanTabs from '../components/PlanTabs.jsx'
@@ -15,6 +15,7 @@ import BrandToggle from '../components/BrandToggle.jsx'
 import { features } from '../lib/features.js'
 import ModelLogo from '../components/ModelLogo.jsx'
 import Rail from '../components/cinema/Rail.jsx'
+import { readRail, saveRail } from '../lib/railPrefs.js'
 import ToolPanel from '../components/cinema/ToolPanel.jsx'
 import Showcase from '../components/cinema/Showcase.jsx'
 import { TOOLS, tabOf } from '../components/cinema/tools.js'
@@ -71,6 +72,9 @@ export default function Cinema() {
   const [tab, setTab] = useState('video')
   const [tool, setTool] = useState(null)
   const [view, setView] = useState('creations')
+  // Barre latérale réduite ou agrandie : enregistré seulement quand la personne clique (sinon la largeur de la fenêtre décide).
+  const [railCollapsed, setRailCollapsed] = useState(readRail)
+  const toggleRail = () => setRailCollapsed((v) => { const next = !v; saveRail(next); return next })
   const mode = tab === 'recipe' ? 'recipe' : tool === 'image' ? 'image' : 'video'
   const [itext, setItext] = useState('') // texte de l'image ; en vidéo, chaque plan porte le sien (s.plans)
   const [error, setError] = useState('')
@@ -435,14 +439,19 @@ export default function Cinema() {
   return (
     <div className="cx-page">
       <SkipLink />
-      {/* La barre Plum commune à tous les écrans (logo, navigation, solde, compte) ; `pg shell` lui donne ses styles. */}
-      <div className="pg shell cx-bar"><ShellHeader /></div>
+      {/* Pas de barre Plum ici : la barre latérale (Rail) porte le logo, le solde, le thème et le compte. */}
     <div className="cx cn">
-      <Rail tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} />
+      <Rail tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} collapsed={railCollapsed} />
 
       <div className="cx-shell">
       <header className="cx-top">
-        <ProjectPicker />
+        <div className="cx-top-l">
+          {/* Bouton de repli de la barre latérale, à gauche du projet (absent sur téléphone, où la barre est en haut). */}
+          <button type="button" className="cx-fold" aria-expanded={!railCollapsed} aria-label={railCollapsed ? 'Agrandir le menu' : 'Réduire le menu'} title={railCollapsed ? 'Agrandir le menu' : 'Réduire le menu'} onClick={toggleRail}>
+            <Icon name="sidebar" size={18} />
+          </button>
+          <ProjectPicker />
+        </div>
       </header>
 
       <div className="cx-body">

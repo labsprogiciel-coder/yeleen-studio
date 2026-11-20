@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ClerkProvider, SignIn, SignUp, UserButton, useAuth } from '@clerk/clerk-react'
+import { ClerkProvider, SignIn, SignUp, UserButton, useAuth, useClerk, useUser } from '@clerk/clerk-react'
 import { setTokenGetter } from './api.js'
 import { setSentryUser } from './sentry.js'
 import { setAnalyticsUser } from './posthog.js'
+import { displayName } from './accountMenu.js'
 import stacked from '../assets/brand/qreativ-lockup-stacked-primary.svg'
 
 /**
@@ -125,8 +126,31 @@ function AuthGate({ children }) {
 export const SignInPage = () => (authEnabled ? <AuthGate><SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" /></AuthGate> : <Navigate to="/cinema" replace />)
 export const SignUpPage = () => (authEnabled ? <AuthGate><SignUp routing="path" path="/sign-up" signInUrl="/sign-in" /></AuthGate> : <Navigate to="/cinema" replace />)
 
-/** Menu du compte (déconnexion…), ou l'avatar de démonstration sans Clerk. */
+/** Menu du compte de Clerk (déconnexion…), ou l'avatar de démonstration sans Clerk : en-têtes des pages hors studio Cinéma. */
 export function AccountMenu({ fallback = null }) {
   const { enabled, signedIn } = useAuthState()
-  return enabled && signedIn ? <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} /> : fallback
+  if (!(enabled && signedIn)) return fallback
+  return <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: { width: 28, height: 28 } } }} />
 }
+
+/**
+ * Le compte connecté, pour le menu du compte du studio Cinéma (components/cinema/AccountPopover.jsx) :
+ * { demo, name, email, imageUrl, manage, signOut }. Sans Clerk : le compte de démonstration, sans gestion ni déconnexion.
+ * `authEnabled` ne change pas pendant la vie de la page : le choix du hook est fixe, l'ordre des hooks aussi.
+ */
+function useClerkAccount() {
+  const { user } = useUser()
+  const clerk = useClerk()
+  const email = user?.primaryEmailAddress?.emailAddress ?? ''
+  return {
+    demo: false,
+    name: displayName({ fullName: user?.fullName, firstName: user?.firstName, lastName: user?.lastName, username: user?.username, email }),
+    email,
+    imageUrl: user?.hasImage ? user.imageUrl : null,
+    manage: () => clerk.openUserProfile(),
+    signOut: () => clerk.signOut({ redirectUrl: '/sign-in' }),
+  }
+}
+const DEMO = { demo: true, name: 'Compte de démonstration', email: '', imageUrl: null, manage: null, signOut: null }
+const useDemoAccount = () => DEMO
+export const useAccount = authEnabled ? useClerkAccount : useDemoAccount
