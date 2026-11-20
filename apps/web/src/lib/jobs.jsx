@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { currentProject } from './projects.js'
 import { dueJobs } from './pollDelay.js'
+import { cancelPatch as cancelReply } from './jobReply.js'
 import { useAuthState } from './auth.jsx'
 import { api, apiEnabled } from './api.js'
 import { track } from './posthog.js'
@@ -18,6 +19,7 @@ import { track } from './posthog.js'
  */
 export const MAX_PARALLEL = 2
 const START_BALANCE = 240
+const cancelPatch = (r) => cancelReply(r, FAILURES)
 const BASE_MS = { image: 6000, video: 18000, audio: 5000, montage: 3000 }
 const LIVE_MS = { image: 16000, video: 90000, audio: 8000 } // durée typique chez le fournisseur : sert à estimer la progression, fal n'en donne pas
 
@@ -71,6 +73,11 @@ export const FAILURES = {
   media: {
     message: 'Fichier refusé',
     hint: 'Ce fichier est trop long ou trop court pour cet outil, de trop haute résolution, ou dans un format que le service ne sait pas mesurer (préférez MP4, MP3 ou WAV). Aucun cauri n’a été débité.',
+    retry: false,
+  },
+  blocked: {
+    message: 'Votre compte est suspendu. Contactez le support.',
+    hint: 'Les nouvelles générations sont bloquées sur ce compte. Rien n’a été débité.',
     retry: false,
   },
   provider: {
@@ -230,7 +237,7 @@ export function JobsProvider({ children }) {
   // Échec d'un appel à l'API (avant ou pendant l'envoi à fal) : la génération échoue, avec le remboursement que le serveur confirme.
   const failLive = useCallback((id, err) => {
     const code = err.body?.error
-    const failure = ['unmeasured_media', 'media_too_long', 'media_too_short', 'media_too_large'].includes(code) ? 'media' : code === 'moderation' ? 'moderation' : code === 'insufficient' ? 'insufficient' : code === 'too_expensive' ? 'too_expensive' : code === 'too_many_active' ? 'busy' : err.status === 401 || code === 'unauthorized' ? 'auth' : err.status === 0 ? 'unreachable' : err.status === 400 ? 'rejected' : 'provider'
+    const failure = ['unmeasured_media', 'media_too_long', 'media_too_short', 'media_too_large'].includes(code) ? 'media' : code === 'account_blocked' ? 'blocked' : code === 'moderation' ? 'moderation' : code === 'insufficient' ? 'insufficient' : code === 'too_expensive' ? 'too_expensive' : code === 'too_many_active' ? 'busy' : err.status === 401 || code === 'unauthorized' ? 'auth' : err.status === 0 ? 'unreachable' : err.status === 400 ? 'rejected' : 'provider'
     const job = ref.current.jobs.find((j) => j.id === id)
     dispatch({
       type: 'REMOTE', id, balance: err.body?.balance,
@@ -293,7 +300,7 @@ export function JobsProvider({ children }) {
           dispatch({ type: 'REMOTE', id: job.id, balance: r.balance, patch: { remoteId: r.jobId, logs: [{ msg: 'Demande acceptée' }] } })
           // Annulée pendant l'envoi : on prévient le serveur dès qu'il a un identifiant.
           if (ref.current.jobs.find((j) => j.id === job.id)?.status === 'CANCELED') {
-            api.cancelJob(r.jobId).then((c) => dispatch({ type: 'REMOTE', id: job.id, balance: c.balance, patch: { refund: c.refund } })).catch(() => {})
+            api.cancelJob(r.jobId).then((c) => dispatch({ type: 'REMOTE', id: job.id, balance: c.balance, patch: cancelPatch(c) })).catch(() => {})
           }
         })
         .catch((e) => failLive(job.id, e))
@@ -329,6 +336,8 @@ export function JobsProvider({ children }) {
         if (r.status === 'COMPLETED') { patch = { status: 'COMPLETED', progress: 100, finishedAt: now, outputs: r.outputs, logs: logs.concat({ msg: 'Terminé' }) }; message = `Terminée : ${j.title}.`; track('generation_completed', { kind: j.kind, ...analytics.current.get(j.id), seconds: Math.round((now - j.createdAt) / 1000) }) }
         else if (r.status === 'FAILED') { const failure = r.failure ?? 'provider'; track('generation_failed', { kind: j.kind, ...analytics.current.get(j.id), failure, stage: 'provider', refund: r.refund ?? 0 }); patch = { status: 'FAILED', failure, refund: r.refund ?? 0, finishedAt: now, logs: logs.concat({ msg: `Erreur : ${FAILURES[failure].message}`, error: true }) }; message = `Échec : ${j.title}. ${jetons(r.refund ?? 0)} cauris remboursés.` }
         else if (r.status === 'IN_PROGRESS') patch = { status: 'IN_PROGRESS', startedAt: j.startedAt ?? now, queuePosition: 0, logs: logs.length || j.logs.some((l) => l.msg === 'Génération en cours') ? logs : [{ msg: 'Génération en cours' }] } // fal ne détaille pas toujours ses étapes
+        // Annulée côté serveur (par le support) : remboursement affiché ; `failure` (« admin_cancel ») n'est pas repris, ce n'est pas un échec.
+        else if (r.status === 'CANCELED') { patch = { status: 'CANCELED', refund: r.refund ?? 0, finishedAt: now, logs: logs.concat({ msg: 'Annulée par le support' }) }; message = `Annulée par le support : ${j.title}.${r.refund ? ` ${jetons(r.refund)} cauris remboursés.` : ''}` }
         else patch = { status: 'IN_QUEUE', queuePosition: r.queuePosition ?? 0, logs }
         dispatch({ type: 'REMOTE', id: j.id, balance: r.balance, patch, message })
       } catch { /* erreur passagère : on réessaie au prochain tour */ } finally { polling.current.delete(j.id) }
@@ -343,7 +352,7 @@ export function JobsProvider({ children }) {
   const cancel = useCallback((id) => {
     const j = ref.current.jobs.find((x) => x.id === id)
     dispatch({ type: 'CANCEL', id, now: Date.now() })
-    if (j?.live && j.remoteId) api.cancelJob(j.remoteId).then((r) => dispatch({ type: 'REMOTE', id, balance: r.balance, patch: { refund: r.refund } })).catch(() => {})
+    if (j?.live && j.remoteId) api.cancelJob(j.remoteId).then((r) => dispatch({ type: 'REMOTE', id, balance: r.balance, patch: cancelPatch(r) })).catch(() => {})
   }, [])
 
   const value = useMemo(() => ({

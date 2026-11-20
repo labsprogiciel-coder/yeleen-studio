@@ -63,7 +63,25 @@ export const api = {
   upload: async (file) => (await sendFile(`/uploads?name=${encodeURIComponent(file.name)}`, file)).url,
   /** Importe un fichier dans Ma bibliothèque (gardé dans R2, retrouvé sur tous les appareils) ; renvoie l'asset du serveur. */
   importAsset: async (file, meta = {}) => (await sendFile(`/assets?${new URLSearchParams(Object.entries(meta).filter(([, v]) => v != null))}`, file)).asset,
+
+  /**
+   * Administration (réservée aux comptes listés dans ADMIN_USER_IDS côté API, qui répond 403 aux autres). Chaque action porte
+   * dans son corps JSON une clé d'idempotence `adm_…` (une par ouverture de fenêtre) et un motif ; l'en-tête resterait perdu (voir `request`).
+   */
+  adminMe: () => request('/admin/me'),
+  adminUsers: (q = '') => request(`/admin/users?${new URLSearchParams({ q })}`),
+  adminUser: (uid) => request(`/admin/users/${enc(uid)}`),
+  adminAdjust: (uid, { key, direction, amount, reason }) => post(`/admin/users/${enc(uid)}/adjust`, { key, direction, amount, reason }),
+  adminRefund: (uid, jobId, { key, amount, reason }) => post(`/admin/users/${enc(uid)}/jobs/${enc(jobId)}/refund`, { key, ...(amount != null ? { amount } : {}), reason }),
+  adminCancel: (uid, jobId, { key, reason }) => post(`/admin/users/${enc(uid)}/jobs/${enc(jobId)}/cancel`, { key, reason }),
+  adminBlock: (uid, { key, blocked, reason }) => post(`/admin/users/${enc(uid)}/block`, { key, blocked, reason }),
+  adminTopups: (q = {}) => request(`/admin/topups?${new URLSearchParams(Object.entries(q).filter(([, v]) => v != null && v !== '' && v !== false))}`),
+  adminRecheck: (uid, reference, { key, reason }) => post(`/admin/users/${enc(uid)}/topups/${enc(reference)}/recheck`, { key, reason }),
+  adminJobs: (scope = 'active') => request(`/admin/jobs?${new URLSearchParams({ scope })}`),
 }
+
+const enc = encodeURIComponent
+const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) })
 
 async function sendFile(path, file) {
   let res

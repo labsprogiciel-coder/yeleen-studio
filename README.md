@@ -89,6 +89,30 @@ Les jetons s'achètent par packs (`packages/catalog/src/packs.js`) sur la page *
 - Le navigateur n'envoie que le pack : le prix et les jetons viennent de l'API, qui crédite au webhook de paygate. Historique des recharges en bas de la page.
 - Pays proposés : `VITE_TOPUP_COUNTRIES` (variable de **build**, « BF » par défaut), à garder égale à `TOPUP_COUNTRIES` de l'API.
 
+## Administration
+
+Une page **Admin** (`/admin`, lien visible des seuls administrateurs) sert au support : retrouver un utilisateur, corriger son solde, rembourser ou annuler une génération, revérifier une recharge, bloquer un compte. Le code de l'API est dans `apps/api/src/admin.js`.
+
+- **Qui est administrateur** : les comptes Clerk listés dans la variable `ADMIN_USER_IDS` de l'API (identifiants `user_…` séparés par des virgules), à régler dans le tableau de bord Cloudflare (Variables et secrets), **jamais dans `wrangler.jsonc`** (elle serait dans git et l'emporterait sur le tableau de bord ; `keep_vars` la garde d'un déploiement à l'autre). Vide ou absente : personne. En local sans Clerk, le compte `demo` ne l'est que s'il est listé (`ADMIN_USER_IDS=demo` dans `.dev.vars`). Les autres reçoivent 403 `{ error: 'forbidden' }` sur tout `/admin/*`.
+- **Où vit l'argent** : chaque action se décide dans le Durable Object du compte **visé** (une requête : lecture, calcul, écriture), jamais dans celui de l'administrateur. D1 sert aux listes et à la recherche, et garde le journal `admin_actions` (qui, quand, quel compte, quoi, montant, motif, résultat ; migration `0008_admin.sql`). Une panne de D1 après l'action ne la défait pas : elle est journalisée.
+- **Chaque action** porte une clé envoyée par l'interface (`adm_<uuid>`, une par ouverture de la fenêtre de confirmation) et un **motif obligatoire** (3 à 300 caractères). La même clé rejouée rend le premier résultat (`replayed: true`) ; la même clé pour une autre action ou un autre montant : 409 `key_conflict`. Montants en jetons : positifs, une décimale au plus, `ADMIN_MAX_ADJUST` au plus (10 000 par défaut). Le compte visé doit exister dans D1 (sinon 404).
+
+| Route | Effet |
+| --- | --- |
+| `GET /admin/me` | `{ admin: true, uid }` (403 sinon) : l'interface s'en sert pour afficher la page. |
+| `GET /admin/users?q=` | 50 comptes au plus : identifiant exact, e-mail (morceau, sans casse), numéro ou référence d'une recharge, identifiant d'une génération ; sans `q`, les plus récents. |
+| `GET /admin/users/:uid` | Fiche : profil, solde et blocage (Durable Object), recharges, 100 dernières générations, 200 dernières lignes du grand livre, actions d'administration. |
+| `POST /admin/users/:uid/adjust` | `{ key, direction: 'credit' \| 'debit', amount, reason }` : crédit ou débit à la main (jamais sous 0 : 402 `insufficient`). Dans le grand livre, une ligne `credit` ou `debit` dont la référence est la clé `adm_…`. |
+| `POST /admin/users/:uid/jobs/:jobId/refund` | `{ key, amount?, reason }` : rembourse une génération terminée, tout ou une partie (au plus son débit), **une seule fois** (409 `already_refunded` ensuite). Une génération active s'annule (409 `job_active`). |
+| `POST /admin/users/:uid/jobs/:jobId/cancel` | `{ key, reason }` : génération encore active (bloquée). On la fait d'abord avancer comme le webhook : terminée chez le fournisseur, elle se termine avec ses fichiers (`outcome: 'completed'`, ou `'failed'` et remboursée) ; sinon elle est annulée chez le fournisseur (sans garantie), passe `CANCELED` (`failure: 'admin_cancel'`), libère sa place, et ce qui reste du débit est rendu (`outcome: 'canceled'`). Terminée : 409 `not_active`. |
+| `POST /admin/users/:uid/block` | `{ key, blocked: true \| false, reason }` : bloque ou débloque le compte. |
+| `GET /admin/topups?status=&stuck=1&limit=` | Recharges de tous les comptes (200 au plus), les plus récentes d'abord ; `stuck=1` : encore ouvertes 10 min après leur création. |
+| `POST /admin/users/:uid/topups/:reference/recheck` | `{ key }` : relit le paiement chez paygate et l'applique par le chemin habituel (crédit idempotent par référence, jamais un statut venu du navigateur ; un montant différent n'est pas crédité). Permis pour tout statut sauf `completed` (409 `already_completed`) ; une recharge échouée ou expirée payée en retard est créditée. Paygate absent : 503 ; paygate sans réponse : 502, rien n'est noté. |
+| `GET /admin/jobs?scope=active\|stuck` | Générations en file ou en cours de tous les comptes (200 au plus), avec leur âge ; `stuck` : lancées depuis plus de 30 min (au-delà de 3 h, plus aucun réveil ne les fait avancer). |
+
+- **Compte bloqué** : le blocage fait foi dans le Durable Object du compte (copie dans D1, table `user_blocks`, pour les listes). Un compte bloqué ne peut plus lancer de génération (`POST /jobs`), ouvrir ou relancer une recharge (`POST /topups`, `GET /topups/options`), importer un fichier (`POST /uploads`, `POST /assets`) ni utiliser « Améliorer » : 403 `{ error: 'account_blocked' }`. Ses générations en cours se terminent, ses webhooks de paiement sont crédités, il peut suivre et annuler ses générations et voir son solde ; `GET /me` renvoie `blocked: true`. La session Clerk n'est pas coupée : pour cela, bannir aussi l'utilisateur dans Clerk.
+- Une génération dans un état définitif (`COMPLETED`, `FAILED`, `CANCELED`) ne change plus de statut : un webhook ou un réveil en retard n'écrase pas une annulation.
+
 ## Déploiement (Cloudflare)
 
 Un seul script déploie l'API (Worker, Durable Object, R2) puis le site (fichiers statiques) : `scripts/deploy.mjs`.

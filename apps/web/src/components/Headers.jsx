@@ -7,12 +7,13 @@ import ThemeToggle from './ThemeToggle.jsx'
 import { AccountMenu, authEnabled, useAuthState } from '../lib/auth.jsx'
 import { features } from '../lib/features.js'
 import { useLibrary } from '../lib/libraryDialog.jsx'
+import useIsAdmin from '../lib/useIsAdmin.jsx'
 import { RechargeButton } from '../lib/rechargeDialog.jsx'
 import lockup from '../assets/brand/qreativ-lockup-horizontal-reversed.svg'
 import mark from '../assets/brand/qreativ-mark-reversed.svg'
 import '../styles/chrome.css'
 
-const ROUTES = { Explorer: '/', Image: '/image', Vidéo: '/video', Audio: '/audio', 'Spot pub': '/spot', Marque: '/brand', Cinéma: '/cinema' } // Bibliothèque : une fenêtre, pas une page
+const ROUTES = { Explorer: '/', Image: '/image', Vidéo: '/video', Audio: '/audio', 'Spot pub': '/spot', Marque: '/brand', Cinéma: '/cinema', Admin: '/admin' } // Bibliothèque : une fenêtre, pas une page
 
 // Seules les pages qui existent figurent dans la navigation.
 const FLAG_OF = { Explorer: 'home', Image: 'image', Vidéo: 'video', Audio: 'audio', 'Spot pub': 'spot', Marque: 'brand' } // écrans éteints par drapeau : absents de la navigation
@@ -34,6 +35,8 @@ function NavLinks() {
   const nav = useRef(null)
   const { pathname } = useLocation()
   const { openLibrary } = useLibrary()
+  const { admin } = useIsAdmin() // lien « Admin » seulement pour un compte confirmé par l'API ; la page reste gardée de son côté
+  const links = admin ? [...NAV, 'Admin'] : NAV
   // Sur écran étroit la barre défile : on amène le lien de la page courante dans la zone visible.
   useEffect(() => {
     const el = nav.current?.querySelector('.nl.on')
@@ -41,7 +44,7 @@ function NavLinks() {
   }, [pathname])
   return (
     <nav className="nls" ref={nav} aria-label="Navigation principale">
-      {NAV.map((label) => (label === 'Bibliothèque'
+      {links.map((label) => (label === 'Bibliothèque'
         ? <button key={label} type="button" className="nl" aria-haspopup="dialog" onClick={() => openLibrary()}>{label}</button>
         : (
           <NavLink key={label} to={ROUTES[label]} end={label === 'Explorer'} className={({ isActive }) => `nl${isActive ? ' on' : ''}`}>

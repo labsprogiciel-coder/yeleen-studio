@@ -6,6 +6,8 @@
  * à usage unique), `processing`, `completed`, `failed`, `expired`. Seul `completed` est définitif : un paiement échoué ou expiré
  * peut encore aboutir en retard, et il est alors crédité.
  */
+import { PaygateError } from './paygate.js'
+
 export const OPEN_STATUSES = ['pending', 'awaiting_code', 'processing']
 export const isOpen = (t) => OPEN_STATUSES.includes(t.status)
 
@@ -59,3 +61,33 @@ export const topupView = (t) => ({
   authUrl: t.authUrl ?? null, failure: t.failure ?? null, late: t.late ?? false, expiresAt: t.expiresAt ?? null,
   createdAt: t.createdAt, updatedAt: t.updatedAt,
 })
+
+/**
+ * Relecture d'une recharge chez paygate, puis le chemin habituel (`/topup/apply` du compte : crédit idempotent par référence, jamais
+ * un statut venu du navigateur). Partagée par le suivi de l'utilisateur (GET /topups/:reference) et la revérification de l'administration.
+ * `acct(path, body)` appelle le Durable Object du compte visé ; `checkedAt` est noté tant que la recharge est dans l'un des statuts `from`
+ * (on y ajoute son statut actuel, sauf `completed`). Inconnue chez paygate après 2 min, une recharge `pending` passe `failed` (jamais créée).
+ * Rend { topup, credited, mismatch, error } ; `error` vaut 'provider' si paygate n'a pas répondu, 'not_found' ou 'not_found_yet' s'il ne la connaît pas.
+ */
+export async function recheckTopup({ pg, acct, topup, from = ['pending', 'processing'], now = Date.now() }) {
+  let t = topup
+  const stamp = [...new Set([...from, t.status])].filter((s) => s !== 'completed')
+  try {
+    const out = await acct('/topup/apply', { reference: t.reference, payment: await pg.collection(t.reference) })
+    t = out.topup ?? t
+    // Le crédit est fait : la date de vérification n'est qu'une note, son échec ne doit pas faire croire à un crédit nul.
+    try { await acct('/topup/patch', { reference: t.reference, from: stamp, checkedAt: now }) } catch (e) { console.error('recharge : checkedAt non noté', e.message) }
+    return { topup: t, credited: out.credited ?? 0, mismatch: out.mismatch ?? false, error: null }
+  } catch (e) {
+    if (e instanceof PaygateError && e.status === 404 && t.status === 'pending' && now - t.createdAt > 120_000) {
+      t = (await acct('/topup/patch', { reference: t.reference, from: ['pending'], status: 'failed', failure: 'not_created' })).topup ?? t
+      return { topup: t, credited: 0, mismatch: false, error: null }
+    }
+    console.error('lecture paygate', e.message)
+    await acct('/topup/patch', { reference: t.reference, from: stamp, checkedAt: now })
+    // Inconnue chez paygate : `not_found_yet` pour une recharge `pending` de moins de 2 min (paygate peut ne pas l'avoir encore ;
+    // la prochaine vérification peut la trouver, ou la passer `failed`), `not_found` sinon (une nouvelle vérification ne change rien).
+    const unknown = e instanceof PaygateError && e.status === 404
+    return { topup: t, credited: 0, mismatch: false, error: unknown ? (t.status === 'pending' ? 'not_found_yet' : 'not_found') : 'provider' }
+  }
+}
