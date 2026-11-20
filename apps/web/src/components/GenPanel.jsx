@@ -146,6 +146,7 @@ export function RefTile({ asset, token, off = false, onCite, onRemove }) {
 }
 
 const ENHANCE_ERRORS = {
+  account_blocked: () => 'Votre compte est suspendu. Contactez le support.',
   daily_limit: (e) => `Limite du jour atteinte : ${e.body.max} améliorations. Revenez demain.`,
   moderation: () => 'Ce texte ne peut pas être amélioré.',
   invalid_text: () => 'Écrivez d’abord quelques mots.',

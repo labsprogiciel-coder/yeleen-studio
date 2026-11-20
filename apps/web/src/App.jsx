@@ -12,6 +12,7 @@ import { ToastProvider } from './lib/toasts.jsx'
 import { ThemeProvider } from './lib/theme.jsx'
 import { Protected, SignInPage, SignUpPage } from './lib/auth.jsx'
 import { features } from './lib/features.js'
+import { AdminOnly } from './lib/useIsAdmin.jsx'
 // Écrans éteints par drapeau (lib/features.js) : on revient au studio Cinéma. Les écrans d'outils sont chargés à la demande : l'accueil n'embarque pas leur code.
 const Video = lazy(() => import('./pages/Video.jsx'))
 const ImageGen = lazy(() => import('./pages/ImageGen.jsx'))
@@ -19,6 +20,8 @@ const Audio = lazy(() => import('./pages/Audio.jsx'))
 const Spot = lazy(() => import('./pages/Spot.jsx'))
 const Brand = lazy(() => import('./pages/Brand.jsx'))
 const Cinema = lazy(() => import('./pages/Cinema.jsx'))
+// Administration : réservée aux comptes que l'API reconnaît (GET /admin/me) ; son code n'est chargé que pour eux.
+const Admin = lazy(() => import('./pages/Admin.jsx'))
 // Page d'accueil derrière le drapeau `home` : éteinte, « / » mène au studio Cinéma, protégé, donc à la connexion Clerk pour un visiteur.
 const Home = lazy(() => import('./pages/Home.jsx'))
 const start = features.home ? <Home /> : <Navigate to="/cinema" replace />
@@ -54,6 +57,7 @@ export default function App() {
       <Route path="/spot" element={features.spot ? <Protected><Spot /></Protected> : <Navigate to="/cinema" replace />} />
       <Route path="/brand" element={features.brand ? <Protected><Brand /></Protected> : <Navigate to="/cinema" replace />} />
       <Route path="/cinema" element={<Protected><Cinema /></Protected>} />
+      <Route path="/admin" element={<Protected><AdminOnly><Admin /></AdminOnly></Protected>} />
       <Route path="/recharge/*" element={<Protected><RechargeRoute /></Protected>} />
       <Route path="/sign-in/*" element={<SignInPage />} />
       <Route path="/sign-up/*" element={<SignUpPage />} />

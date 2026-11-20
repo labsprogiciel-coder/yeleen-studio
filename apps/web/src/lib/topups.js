@@ -74,6 +74,7 @@ export function maskPhone(e164) {
 }
 
 const MESSAGES = {
+  account_blocked: 'Votre compte est suspendu. Contactez le support.',
   payments_not_configured: 'Les recharges ne sont pas encore ouvertes. Réessayez plus tard.',
   unsupported_country: 'Les recharges ne sont pas encore disponibles dans ce pays.',
   invalid_operator: 'Cet opérateur n’est pas proposé dans ce pays.',

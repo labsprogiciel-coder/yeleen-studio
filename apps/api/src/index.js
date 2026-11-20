@@ -17,8 +17,9 @@ import { priceJob } from './pricing.js'
 import { runwareClient } from './runware.js'
 import { higgsfieldClient } from './higgsfield.js'
 import { serveFile, uploadKey } from './storage.js'
-import { newReference, topupView } from './topups.js'
+import { newReference, recheckTopup, topupView } from './topups.js'
 import { ensureUser, getUser, markWelcomed } from './users.js'
+import { adminApp, isAdmin } from './admin.js'
 
 export { Account } from './account-do.js'
 
@@ -59,6 +60,8 @@ app.use('*', async (c, next) => {
   setUser({ id: accountId(c) }) // Sentry : le compte seulement (sans effet si Sentry n'est pas actif)
   return next()
 })
+// Administration (voir admin.js) : après la garde, réservée aux comptes de ADMIN_USER_IDS ; les autres reçoivent 403.
+app.use('/admin/*', async (c, next) => (isAdmin(c) ? next() : c.json({ error: 'forbidden' }, 403)))
 
 const accountId = (c) => c.get('uid')
 // Le Durable Object d'un compte. Son nom (le `sub` Clerk) lui est passé dans `x-account` : il en a besoin pour ses copies dans D1.
@@ -98,6 +101,20 @@ const onRunware = (model) => model.provider === 'runware' // voir le catalogue :
 const higgsfield = (c) => higgsfieldClient({ key: c.env.HIGGSFIELD_KEY })
 const onHiggsfield = (model) => model.provider === 'higgsfield' // Soul 2, Genjutsu (outils)
 
+/** Annulation chez le fournisseur, sans garantie (une erreur est journalisée) ; Runware ne sait pas annuler. */
+async function providerCancel(env, job) {
+  if (job.provider === 'runware') return
+  try {
+    await (job.provider === 'higgsfield' ? higgsfieldClient({ key: env.HIGGSFIELD_KEY }) : falClient({ key: env.FAL_KEY })).cancel(job.cancelUrl)
+  } catch (e) {
+    console.error(`annulation ${job.provider ?? 'fal'}`, e.message)
+  }
+}
+
+// Compte bloqué par un administrateur (voir account-do.js) : plus de recharge, d'import ni d'« Améliorer ». Les générations sont
+// refusées par le Durable Object lui-même (`/job/claim`).
+const notBlocked = async (c, next) => ((await call(c, '/blocked')).blocked ? c.json({ error: 'account_blocked' }, 403) : next())
+
 const MAX_UPLOAD = 25 * 1024 * 1024
 const MAX_VIDEO_UPLOAD = 60 * 1024 * 1024 // une vidéo de téléphone de 30 s en 1080p ; le fichier est gardé en mémoire le temps de l'envoi
 const UPLOAD_TYPES = /^(image\/(png|jpeg|webp|gif)|audio\/(mpeg|mp3|wav|x-wav|mp4|x-m4a|aac|ogg|webm|flac)|video\/(mp4|quicktime|webm))$/
@@ -109,7 +126,7 @@ app.get('/health', (c) => c.json({ ok: true }))
 app.get('/debug/sentry', () => { throw new Error('Essai Sentry : erreur volontaire de /debug/sentry') })
 
 // Fichiers d'entrée (image de départ, image de fin, audio) : déposés chez fal, l'adresse revient ici.
-app.post('/uploads', async (c) => {
+app.post('/uploads', notBlocked, async (c) => {
   const type = (c.req.header('content-type') ?? '').split(';')[0]
   if (!UPLOAD_TYPES.test(type)) return c.json({ error: 'unsupported_type' }, 415)
   const max = type.startsWith('video/') ? MAX_VIDEO_UPLOAD : MAX_UPLOAD
@@ -130,12 +147,12 @@ app.post('/uploads', async (c) => {
   }
 })
 app.get('/wallet', async (c) => c.json(await call(c, '/balance')))
-// Mon profil (D1) et mon solde (Durable Object).
+// Mon profil (D1), mon solde et mon blocage éventuel (Durable Object).
 app.get('/me', async (c) => {
   if (!c.env.DB) return c.json({ error: 'db_unavailable' }, 503)
   const user = await getUser(c.env.DB, accountId(c))
   if (!user) return c.json({ error: 'not_found' }, 404)
-  return c.json({ ...user, balance: (await call(c, '/balance')).balance })
+  return c.json({ ...user, balance: (await call(c, '/balance')).balance, blocked: Boolean((await call(c, '/blocked')).blocked) })
 })
 
 // Ma bibliothèque (D1) : fichiers générés gardés dans R2, du plus récent au plus ancien ; `kind`, `before` et `limit` en option.
@@ -169,7 +186,7 @@ async function importId(account, key) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${account}:${key}`))
   return `up-${[...new Uint8Array(digest).slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('')}`
 }
-app.post('/assets', withDb(async (c, db) => {
+app.post('/assets', notBlocked, withDb(async (c, db) => {
   const bucket = c.env.FILES
   if (!bucket) return c.json({ error: 'storage_unavailable' }, 503)
   const type = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase()
@@ -272,7 +289,7 @@ async function mediaIssue(c, tool, inputs) {
 // (kind: 'voice', dans la langue choisie) ou précise le texte d'un modèle de la page Modèles (kind: 'template', workflowId + field).
 // Gratuit, MAX_ENHANCE_PER_DAY fois par jour et par compte (30 par défaut, partagé) ; un échec ne compte pas. Le texte est contrôlé
 // avant et après, comme une génération.
-app.post('/enhance', async (c) => {
+app.post('/enhance', notBlocked, async (c) => {
   const req = await c.req.json().catch(() => ({}))
   const text = typeof req.text === 'string' ? req.text.trim() : ''
   if (text.length < MIN_CHARS || text.length > MAX_CHARS) return c.json({ error: 'invalid_text', min: MIN_CHARS, max: MAX_CHARS }, 400)
@@ -340,7 +357,7 @@ app.post('/jobs', async (c) => {
     const prev = await account(c).fetch(`https://account/job/get?id=${claim.existing}`).then((r) => r.json())
     return c.json({ jobId: claim.existing, status: prev?.status ?? 'IN_QUEUE', cost: prev?.cost ?? price.cost, balance: (await call(c, '/balance')).balance, deduped: true }, 202)
   }
-  if (!claim.ok) return c.json(claim, 429) // { error: 'too_many_active', max }
+  if (!claim.ok) return c.json(claim, claim.error === 'account_blocked' ? 403 : 429) // { error: 'too_many_active', max } ou compte bloqué
   const debit = await call(c, '/debit', { jobId: id, amount: price.cost })
   if (!debit.ok) { await call(c, '/job/release', { jobId: id }); return c.json(debit, 402) } // { error: 'insufficient', missing } : le message que l'interface affiche déjà
 
@@ -394,12 +411,10 @@ app.post('/jobs/:id/cancel', async (c) => {
   const job = await account(c).fetch(`https://account/job/get?id=${c.req.param('id')}`).then((r) => r.json())
   if (!job) return c.json({ error: 'not_found' }, 404)
   if (job.status !== 'IN_QUEUE' && job.status !== 'IN_PROGRESS') return c.json(view(job))
-  if (job.provider === 'higgsfield') try { await higgsfield(c).cancel(job.cancelUrl) } catch (e) { console.error('annulation higgsfield', e.message) }
-  else if (job.provider !== 'runware') try { await fal(c).cancel(job.cancelUrl) } catch (e) { console.error('annulation fal', e.message) }
-  const back = job.status === 'IN_QUEUE' ? await call(c, '/refund', { jobId: job.id }) : { refunded: 0, balance: (await call(c, '/balance')).balance }
-  const next = { ...job, status: 'CANCELED', refund: back.refunded ?? 0, finishedAt: Date.now() }
-  await call(c, '/job/put', next)
-  return c.json(view(next, { balance: back.balance }))
+  await providerCancel(c.env, job)
+  // Vérification, remboursement et CANCELED en une requête du compte : terminée entre-temps (webhook, suivi), elle reste telle quelle.
+  const r = await call(c, '/job/cancel', { jobId: job.id, user: true })
+  return c.json(view(r.job ?? job, { balance: r.balance ?? (await call(c, '/balance')).balance }))
 })
 
 /** Adresse du webhook fal d'une génération, signée pour ce compte et cette génération ; sans WEBHOOK_SECRET, pas de webhook. */
@@ -458,7 +473,7 @@ function returnUrls(env, reference) {
 const ours = (e) => !(e instanceof PaygateError) || e.status >= 500 || e.status === 401 || e.status === 404
 
 // Avant d'afficher le bouton de paiement : ce moyen marche-t-il pour ce numéro, avec quelles limites et quelle validation (`authType`).
-app.get('/topups/options', async (c) => {
+app.get('/topups/options', notBlocked, async (c) => {
   const pg = paygate(c)
   if (!pg) return c.json({ error: 'payments_not_configured' }, 503)
   const q = c.req.query()
@@ -478,7 +493,7 @@ app.get('/topups', async (c) => c.json({ topups: (await account(c).fetch('https:
 
 // Recharge : pack du catalogue → enregistrement → encaissement paygate. Orange Burkina exige d'abord un code à usage unique :
 // paygate répond 422 sans rien créer, la recharge passe en `awaiting_code`, et on renvoie la même demande avec `reference` et `preAuthCode`.
-app.post('/topups', async (c) => {
+app.post('/topups', notBlocked, async (c) => {
   const pg = paygate(c)
   if (!pg) return c.json({ error: 'payments_not_configured' }, 503)
   const req = await c.req.json().catch(() => ({}))
@@ -500,7 +515,7 @@ app.post('/topups', async (c) => {
     const now = Date.now()
     topup = { reference: newReference(now), pack: pack.id, amountFcfa: pack.fcfa, jetons: pack.jetons, operator: who.operator, phone: who.phone, country: who.country, status: 'pending', createdAt: now, updatedAt: now }
     const opened = await call(c, '/topup/open', { topup, max: Number(c.env.MAX_OPEN_TOPUPS ?? 3) })
-    if (!opened.ok) return c.json(opened, 429) // { error: 'too_many_open', max }
+    if (!opened.ok) return c.json(opened, opened.error === 'account_blocked' ? 403 : 429) // { error: 'too_many_open', max }
   }
 
   const patch = (fields) => call(c, '/topup/patch', { reference: topup.reference, from: ['pending', 'awaiting_code'], ...fields })
@@ -536,15 +551,7 @@ app.get('/topups/:reference', async (c) => {
   const pg = paygate(c)
   const now = Date.now()
   if (pg && (t.status === 'processing' || t.status === 'pending') && now - t.createdAt > 30_000 && now - (t.checkedAt ?? 0) > 10_000) {
-    const from = ['pending', 'processing']
-    try {
-      t = (await call(c, '/topup/apply', { reference: t.reference, payment: await pg.collection(t.reference) })).topup
-      await call(c, '/topup/patch', { reference: t.reference, from, checkedAt: now })
-    } catch (e) {
-      // Inconnue chez paygate après 2 min : l'encaissement n'a jamais été créé.
-      if (e instanceof PaygateError && e.status === 404 && t.status === 'pending' && now - t.createdAt > 120_000) t = (await call(c, '/topup/patch', { reference: t.reference, from: ['pending'], status: 'failed', failure: 'not_created' })).topup ?? t
-      else { console.error('lecture paygate', e.message); await call(c, '/topup/patch', { reference: t.reference, from, checkedAt: now }) }
-    }
+    t = (await recheckTopup({ pg, acct: (path, body) => call(c, path, body), topup: t, now })).topup // voir topups.js
   }
   return c.json({ topup: topupView(t), balance: (await call(c, '/balance')).balance })
 })
@@ -576,6 +583,8 @@ app.post('/webhooks/payments', async (c) => {
   if (out.credited && out.topup.late) console.warn('paygate : paiement tardif crédité', p.reference)
   return c.json({ ok: true })
 })
+
+app.route('/admin', adminApp({ accountStub, paygate: (env) => paygate({ env }), providerCancel }))
 
 // Erreur imprévue dans une route : Hono la transforme en réponse 500 sans la relancer, donc l'enveloppe Sentry du Worker
 // (withSentry, voir worker.js) ne la voit pas. On l'envoie ici (sans effet si Sentry n'est pas actif), puis la même réponse.

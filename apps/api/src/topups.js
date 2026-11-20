@@ -6,6 +6,8 @@
  * à usage unique), `processing`, `completed`, `failed`, `expired`. Seul `completed` est définitif : un paiement échoué ou expiré
  * peut encore aboutir en retard, et il est alors crédité.
  */
+import { PaygateError } from './paygate.js'
+
 export const OPEN_STATUSES = ['pending', 'awaiting_code', 'processing']
 export const isOpen = (t) => OPEN_STATUSES.includes(t.status)
 
@@ -59,3 +61,29 @@ export const topupView = (t) => ({
   authUrl: t.authUrl ?? null, failure: t.failure ?? null, late: t.late ?? false, expiresAt: t.expiresAt ?? null,
   createdAt: t.createdAt, updatedAt: t.updatedAt,
 })
+
+/**
+ * Relecture d'une recharge chez paygate, puis le chemin habituel (`/topup/apply` du compte : crédit idempotent par référence, jamais
+ * un statut venu du navigateur). Partagée par le suivi de l'utilisateur (GET /topups/:reference) et la revérification de l'administration.
+ * `acct(path, body)` appelle le Durable Object du compte visé ; `checkedAt` est noté tant que la recharge est dans l'un des statuts `from`
+ * (on y ajoute son statut actuel, sauf `completed`). Inconnue chez paygate après 2 min, une recharge `pending` passe `failed` (jamais créée).
+ * Rend { topup, credited, mismatch, error } ; `error` vaut 'provider' si paygate n'a pas répondu.
+ */
+export async function recheckTopup({ pg, acct, topup, from = ['pending', 'processing'], now = Date.now() }) {
+  let t = topup
+  const stamp = [...new Set([...from, t.status])].filter((s) => s !== 'completed')
+  try {
+    const out = await acct('/topup/apply', { reference: t.reference, payment: await pg.collection(t.reference) })
+    t = out.topup ?? t
+    await acct('/topup/patch', { reference: t.reference, from: stamp, checkedAt: now })
+    return { topup: t, credited: out.credited ?? 0, mismatch: out.mismatch ?? false, error: null }
+  } catch (e) {
+    if (e instanceof PaygateError && e.status === 404 && t.status === 'pending' && now - t.createdAt > 120_000) {
+      t = (await acct('/topup/patch', { reference: t.reference, from: ['pending'], status: 'failed', failure: 'not_created' })).topup ?? t
+      return { topup: t, credited: 0, mismatch: false, error: null }
+    }
+    console.error('lecture paygate', e.message)
+    await acct('/topup/patch', { reference: t.reference, from: stamp, checkedAt: now })
+    return { topup: t, credited: 0, mismatch: false, error: e instanceof PaygateError && e.status === 404 ? 'not_found' : 'provider' }
+  }
+}

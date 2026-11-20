@@ -11,7 +11,7 @@ import { storeOutputs } from './storage.js'
  */
 export const isActive = (job) => job.status === 'IN_QUEUE' || job.status === 'IN_PROGRESS'
 
-const STORING = 60_000 // une copie dans R2 commencée depuis moins longtemps est en cours ailleurs
+export const STORING = 60_000 // une copie dans R2 commencée depuis moins longtemps est en cours ailleurs
 
 /**
  * État d'une génération chez son fournisseur, au même format pour fal, Runware et Higgsfield :
@@ -51,28 +51,32 @@ async function providerStatus(env, job) {
  * Rend { job, queuePosition?, logs?, balance? } ; une erreur passagère du fournisseur est levée (on réessaiera).
  */
 export async function advanceJob({ env, acct, accountId, origin, job }) {
+  // Échec : le Durable Object rembourse et note FAILED d'un coup, seulement si la génération est encore active chez lui.
   const fail = async (failure) => {
-    const back = await acct('/refund', { jobId: job.id })
-    const next = { ...job, status: 'FAILED', failure, refund: back.refunded ?? job.cost, finishedAt: Date.now() }
-    await acct('/job/put', next)
-    return { job: next, balance: back.balance }
+    const r = await acct('/job/fail', { jobId: job.id, failure })
+    return { job: r.job ?? { ...job, status: 'FAILED', failure, refund: r.refunded ?? 0, finishedAt: Date.now() }, balance: r.balance }
+  }
+  // Écriture refusée (déjà terminée ailleurs : annulée, échouée, enregistrée) : `stale` rend la génération enregistrée.
+  const put = async (next) => {
+    const r = await acct('/job/put', next)
+    return r?.ok === false && r.job ? { stale: r.job } : {}
   }
   const st = await providerStatus(env, job)
   if (st.status === 'FAILED') return fail(st.failure)
   if (st.status !== 'COMPLETED') {
     const next = { ...job, status: st.status, ...(st.status === 'IN_PROGRESS' && !job.startedAt ? { startedAt: Date.now() } : {}) }
-    if (next.status !== job.status) await acct('/job/put', next)
+    if (next.status !== job.status) { const { stale } = await put(next); if (stale) return { job: stale } }
     return { job: next, queuePosition: st.queuePosition ?? 0, logs: (st.logs ?? []).slice(-3) }
   }
   const found = outputsOf(job.kind, st.result)
   if (!found.length) return fail('provider')
   // Copie dans R2 : un seul suivi à la fois s'en charge ; les autres voient « enregistrement » et réessaient.
   if (job.storingAt && Date.now() - job.storingAt < STORING) return { job: { ...job, status: 'IN_PROGRESS' }, logs: ['Enregistrement du résultat'] }
-  if (env.FILES) await acct('/job/put', { ...job, status: 'IN_PROGRESS', storingAt: Date.now() })
+  if (env.FILES) { const { stale } = await put({ ...job, status: 'IN_PROGRESS', storingAt: Date.now() }); if (stale) return { job: stale } }
   const outputs = await storeOutputs({ bucket: env.FILES, origin, accountId, jobId: job.id, outputs: found })
   const next = { ...job, status: 'COMPLETED', outputs, finishedAt: Date.now(), storingAt: undefined }
-  await acct('/job/put', next)
-  return { job: next }
+  const { stale } = await put(next)
+  return { job: stale ?? next }
 }
 
 /** Jeton du webhook fal d'une génération : HMAC-SHA256 de « compte:génération » avec WEBHOOK_SECRET, en base64url. */
