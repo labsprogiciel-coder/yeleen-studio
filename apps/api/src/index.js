@@ -18,7 +18,7 @@ import { runwareClient } from './runware.js'
 import { higgsfieldClient } from './higgsfield.js'
 import { serveFile, uploadKey } from './storage.js'
 import { newReference, recheckTopup, topupView } from './topups.js'
-import { ensureUser, getUser, markWelcomed } from './users.js'
+import { avatarUrl, ensureUser, getUser, markWelcomed } from './users.js'
 import { adminApp, isAdmin } from './admin.js'
 
 export { Account } from './account-do.js'
@@ -80,7 +80,7 @@ async function provision(c, claims = {}) {
   if (!db) return
   const id = accountId(c)
   try {
-    const user = await ensureUser(db, id, { email: short(claims.email), name: short(claims.name ?? claims.full_name), country: short(c.req.raw.cf?.country) })
+    const user = await ensureUser(db, id, { email: short(claims.email), name: short(claims.name ?? claims.full_name), country: short(c.req.raw.cf?.country), avatarUrl: avatarUrl(claims) })
     const welcome = Number(c.env.WELCOME_JETONS ?? 0)
     if (welcome > 0 && !user.welcomedAt) {
       const credited = await call(c, '/credit', { paymentId: 'welcome', amount: welcome }) // idempotent : rejoué, il ne crédite pas deux fois

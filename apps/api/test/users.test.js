@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { ensureUser, getUser, markWelcomed, resetUserCache } from '../src/users.js'
+import { avatarUrl, ensureUser, getUser, markWelcomed, resetUserCache } from '../src/users.js'
 import { testD1 } from './d1.js'
 
 const MIN = 60_000
@@ -10,7 +10,7 @@ test('première visite : la ligne est créée avec son pays et son profil', asyn
   const db = testD1()
   const r = await ensureUser(db, 'user_a1', { email: 'a@example.com', name: 'Awa', country: 'BF' }, 1000)
   assert.equal(r.created, true)
-  assert.deepEqual({ ...(await getUser(db, 'user_a1')) }, { id: 'user_a1', createdAt: 1000, lastSeenAt: 1000, email: 'a@example.com', name: 'Awa', country: 'BF', welcomedAt: null })
+  assert.deepEqual({ ...(await getUser(db, 'user_a1')) }, { id: 'user_a1', createdAt: 1000, lastSeenAt: 1000, email: 'a@example.com', name: 'Awa', country: 'BF', welcomedAt: null, avatarUrl: null })
 })
 
 test('visites suivantes : D1 n’est pas interrogé dans les 10 minutes, puis la date est mise à jour', async () => {
@@ -53,4 +53,38 @@ test('le crédit de bienvenue ne se marque qu’une fois', async () => {
   assert.equal(await markWelcomed(db, 'user_a1', 2000), true)
   assert.equal(await markWelcomed(db, 'user_a1', 3000), false)
   assert.equal((await getUser(db, 'user_a1')).welcomedAt, 2000)
+})
+
+test('photo de profil : lue dans `picture` (sinon `image_url`), https seulement, 500 caractères au plus', () => {
+  const ok = 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkifQ'
+  assert.equal(avatarUrl({ picture: ok }), ok)
+  assert.equal(avatarUrl({ image_url: ok }), ok)
+  assert.equal(avatarUrl({ picture: ok, image_url: 'https://autre.example/x.png' }), ok) // `picture` d'abord
+  for (const bad of [undefined, null, '', 42, 'http://img.clerk.com/a.png', 'javascript:alert(1)', 'data:image/png;base64,AAAA', '//img.clerk.com/a.png',
+    'https://user:pass@img.clerk.com/a.png', 'https://img.clerk.com/a b.png', `https://img.clerk.com/${'a'.repeat(480)}`, 'pas une adresse']) {
+    assert.equal(avatarUrl({ picture: bad }), null, String(bad))
+  }
+  assert.equal(avatarUrl(), null)
+})
+
+test('photo de profil : gardée avec le profil, jamais effacée par un jeton sans photo, remplacée quand elle change', async () => {
+  const db = testD1()
+  await ensureUser(db, 'user_a1', { email: 'a@example.com', avatarUrl: 'https://img.clerk.com/a1' }, 1000)
+  assert.equal((await getUser(db, 'user_a1')).avatarUrl, 'https://img.clerk.com/a1')
+  await ensureUser(db, 'user_a1', { avatarUrl: null }, 1000 + 20 * MIN)
+  assert.equal((await getUser(db, 'user_a1')).avatarUrl, 'https://img.clerk.com/a1')
+  // Même photo : la ligne n'est pas réécrite (sa date ne bouge pas).
+  await ensureUser(db, 'user_a1', { avatarUrl: 'https://img.clerk.com/a1' }, 1000 + 40 * MIN)
+  assert.equal(db.raw.prepare('SELECT updated_at FROM user_avatars WHERE user_id = ?').get('user_a1').updated_at, 1000)
+  // Nouvelle photo, mais dans les 10 minutes : rien n'est lu ni écrit (le même cache que le profil).
+  const calls = db.calls
+  await ensureUser(db, 'user_a1', { avatarUrl: 'https://img.clerk.com/a2' }, 1000 + 45 * MIN)
+  assert.equal(db.calls, calls)
+  await ensureUser(db, 'user_a1', { avatarUrl: 'https://img.clerk.com/a2' }, 1000 + 60 * MIN)
+  assert.equal((await getUser(db, 'user_a1')).avatarUrl, 'https://img.clerk.com/a2')
+  assert.equal(db.raw.prepare('SELECT updated_at FROM user_avatars WHERE user_id = ?').get('user_a1').updated_at, 1000 + 60 * MIN)
+  assert.equal(db.raw.prepare('SELECT COUNT(*) AS n FROM user_avatars').get().n, 1)
+  // Sans photo : aucune ligne.
+  await ensureUser(db, 'user_b2', { email: 'b@example.com' }, 1000)
+  assert.equal((await getUser(db, 'user_b2')).avatarUrl, null)
 })

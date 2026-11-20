@@ -49,7 +49,7 @@ function setup(vars = {}) {
     PAYGATE_URL: 'https://paygate.test', PAYGATE_KEY: 'pgk', PAYGATE_WEBHOOK_SECRET: 'whsec', ...vars,
     ACCOUNT: { idFromName: (n) => n, get: (name) => ({ fetch: (url, init) => account(name).fetch(new Request(url, init)) }) },
   }
-  const t = { db, stores, account, fal: 'IN_QUEUE', pg: {}, cancels: [] }
+  const t = { db, stores, account, fal: 'IN_QUEUE', pg: {}, cancels: [], claims: {} } // `claims` : champs en plus du jeton, par compte
   const real = globalThis.fetch
   globalThis.fetch = async (url, init) => {
     const u = String(url)
@@ -68,7 +68,7 @@ function setup(vars = {}) {
   resetUserCache() // nouvelle base : chaque utilisateur doit y être recréé
   const tokens = {}
   t.as = async (sub, path, init = {}) => {
-    tokens[sub] ??= await K.sign({ sub, email: `${sub.replace('user_', '')}@example.test` })
+    tokens[sub] ??= await K.sign({ sub, email: `${sub.replace('user_', '')}@example.test`, ...(t.claims[sub] ?? {}) })
     const res = await app.fetch(new Request(`http://api${path}`, { ...init, headers: { ...(init.headers ?? {}), authorization: `Bearer ${tokens[sub]}` } }), env)
     const text = await res.text()
     let json = null
@@ -126,7 +126,7 @@ test('administration : recherche par identifiant, e-mail, numéro, génération 
     await t.as('user_bob', '/wallet')
     const recent = await t.admin('/admin/users')
     assert.deepEqual(recent.body.users.map((u) => u.id).sort(), ['user_admin', 'user_alice', 'user_bob'])
-    assert.deepEqual(Object.keys(recent.body.users[0]).sort(), ['blockedAt', 'country', 'createdAt', 'email', 'id', 'lastSeenAt', 'name'])
+    assert.deepEqual(Object.keys(recent.body.users[0]).sort(), ['avatarUrl', 'blockedAt', 'country', 'createdAt', 'email', 'id', 'lastSeenAt', 'name'])
     assert.deepEqual((await t.admin('/admin/users?q=user_bob')).body.users.map((u) => u.id), ['user_bob'])
     assert.deepEqual((await t.admin('/admin/users?q=ALICE@EXAMPLE')).body.users.map((u) => u.id), ['user_alice'])
     assert.deepEqual((await t.admin('/admin/users?q=%25')).body.users, []) // % et _ sont pris à la lettre
@@ -445,6 +445,29 @@ test('blocage : plus de génération, de recharge, d\'import ni d\'« Améliorer
     assert.equal((await t.admin('/admin/users?q=user_alice')).body.users[0].blockedAt, null)
     assert.deepEqual(t.rows('SELECT action FROM admin_actions ORDER BY at').map((r) => r.action), ['block', 'unblock'])
     assert.equal((await t.admin('/admin/users/user_alice/block', post({ key: key(), blocked: 'oui', reason: 'Fraude suspectée' }))).status, 400)
+  } finally { t.restore() }
+})
+
+test('administration : photo, nom et e-mail du jeton dans la recherche, la fiche, les recharges et les générations ; adresse invalide ignorée', async () => {
+  const t = setup()
+  try {
+    t.claims.user_alice = { name: 'Alice Ouédraogo', picture: 'https://img.clerk.com/alice' }
+    t.claims.user_bob = { name: 'Bob', picture: 'http://img.clerk.com/bob' } // pas https : ignorée
+    await t.as('user_alice', '/wallet')
+    await t.as('user_bob', '/wallet')
+    const list = await t.admin('/admin/users')
+    const byId = Object.fromEntries(list.body.users.map((u) => [u.id, u]))
+    assert.deepEqual([byId.user_alice.name, byId.user_alice.email, byId.user_alice.avatarUrl], ['Alice Ouédraogo', 'alice@example.test', 'https://img.clerk.com/alice'])
+    assert.deepEqual([byId.user_bob.name, byId.user_bob.avatarUrl], ['Bob', null])
+    assert.equal(byId.user_admin.avatarUrl, null)
+    assert.deepEqual((await t.admin('/admin/users?q=alice@')).body.users.map((u) => u.avatarUrl), ['https://img.clerk.com/alice'])
+    const page = await t.admin('/admin/users/user_alice')
+    assert.deepEqual([page.body.user.name, page.body.user.email, page.body.user.avatarUrl], ['Alice Ouédraogo', 'alice@example.test', 'https://img.clerk.com/alice'])
+    assert.equal((await t.admin('/admin/users/user_bob')).body.user.avatarUrl, null)
+    await t.as('user_alice', '/topups', post(topupReq))
+    const job = await t.as('user_bob', '/jobs', post(image))
+    assert.deepEqual((await t.admin('/admin/topups')).body.topups.map((x) => [x.account, x.name, x.avatarUrl]), [['user_alice', 'Alice Ouédraogo', 'https://img.clerk.com/alice']])
+    assert.deepEqual((await t.admin('/admin/jobs')).body.jobs.map((j) => [j.id, j.name, j.email, j.avatarUrl]), [[job.body.jobId, 'Bob', 'bob@example.test', null]])
   } finally { t.restore() }
 })
 

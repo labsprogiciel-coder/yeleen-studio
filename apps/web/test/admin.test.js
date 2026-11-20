@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  adminError, adminKey, attemptStore, failureKind, ageMin, canRecheck, cauris, checkReason, formatAge, isActiveJob, isAdminKey, isStuckJob, isStuckTopup,
+  adminError, adminKey, attemptStore, avatarSrc, identity, failureKind, ageMin, canRecheck, cauris, checkReason, formatAge, isActiveJob, isAdminKey, isStuckJob, isStuckTopup,
   parseAmount, pick, refundable, resultText, sortTopups,
 } from '../src/lib/admin.js'
 
@@ -159,4 +159,23 @@ test('fenêtre fermée après une issue incertaine : rouverte pour la même acti
   store.settle(credit, 'uncertain', attempt)
   store.settle(credit, failureKind({ status: 402, body: { error: 'insufficient' } })) // refus net : oubliée aussi
   assert.equal(store.get(credit), null)
+})
+
+test('photo de profil : https seulement, sinon rien (les initiales prennent le relais)', () => {
+  assert.equal(avatarSrc('https://img.clerk.com/a1'), 'https://img.clerk.com/a1')
+  for (const bad of [null, undefined, '', 'http://img.clerk.com/a1', 'javascript:alert(1)', 'data:image/png;base64,AA', 42, `https://x.test/${'a'.repeat(500)}`]) {
+    assert.equal(avatarSrc(bad), null, String(bad))
+  }
+})
+
+test('identité d’un compte : nom en titre et e-mail dessous, sinon l’e-mail seul, sinon l’identifiant ; initiales de repli', () => {
+  assert.deepEqual(identity({ id: 'user_1', name: '  Awa   Traoré ', email: 'awa@exemple.com', avatarUrl: 'https://img.clerk.com/a' }),
+    { id: 'user_1', name: 'Awa Traoré', title: 'Awa Traoré', email: 'awa@exemple.com', initials: 'AT', avatar: 'https://img.clerk.com/a' })
+  assert.deepEqual(identity({ id: 'user_2', email: 'kofi.mensah@exemple.com', avatarUrl: 'http://x.test/a' }),
+    { id: 'user_2', name: '', title: 'kofi.mensah@exemple.com', email: '', initials: 'KM', avatar: null })
+  assert.deepEqual(identity({ id: 'user_abc' }), { id: 'user_abc', name: '', title: 'user_abc', email: '', initials: 'A', avatar: null })
+  // Lignes de génération (`userId`) et de recharge (`account`), en camelCase ou snake_case.
+  assert.equal(identity({ id: 'job_1', userId: 'user_9', name: 'Bob' }).id, 'user_9')
+  assert.equal(identity({ reference: 'r1', account: 'user_8', avatar_url: 'https://img.clerk.com/b' }).avatar, 'https://img.clerk.com/b')
+  assert.equal(identity().title, '—')
 })

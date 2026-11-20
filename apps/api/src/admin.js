@@ -58,7 +58,7 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
   const target = async (c) => {
     const uid = c.req.param('uid')
     if (!UID.test(uid ?? '')) return { error: c.json({ error: 'invalid_user' }, 400) }
-    const user = await c.env.DB.prepare('SELECT u.id, email, name, country, created_at AS createdAt, last_seen_at AS lastSeenAt, welcomed_at AS welcomedAt, b.blocked_at AS blockedAt, b.reason AS blockedReason FROM users u LEFT JOIN user_blocks b ON b.user_id = u.id WHERE u.id = ?1').bind(uid).first()
+    const user = await c.env.DB.prepare('SELECT u.id, u.email, u.name, u.country, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt, u.welcomed_at AS welcomedAt, b.blocked_at AS blockedAt, b.reason AS blockedReason, a.url AS avatarUrl FROM users u LEFT JOIN user_blocks b ON b.user_id = u.id LEFT JOIN user_avatars a ON a.user_id = u.id WHERE u.id = ?1').bind(uid).first()
     if (!user) return { error: c.json({ error: 'not_found' }, 404) }
     return { uid, user, acct: acctOf(c.env, uid) }
   }
@@ -134,14 +134,15 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
   // Recherche : identifiant exact, e-mail (morceau, sans casse), numéro d'une recharge, référence de recharge ou identifiant de génération.
   a.get('/users', async (c) => {
     const q = (c.req.query('q') ?? '').trim().slice(0, 200)
-    const cols = 'u.id, u.email, u.name, u.country, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt, b.blocked_at AS blockedAt'
+    const cols = 'u.id, u.email, u.name, u.country, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt, b.blocked_at AS blockedAt, a.url AS avatarUrl'
+    const from = 'users u LEFT JOIN user_blocks b ON b.user_id = u.id LEFT JOIN user_avatars a ON a.user_id = u.id'
     const db = c.env.DB
     let rows
-    if (!q) ({ results: rows } = await db.prepare(`SELECT ${cols} FROM users u LEFT JOIN user_blocks b ON b.user_id = u.id ORDER BY u.created_at DESC LIMIT ?1`).bind(50).all())
+    if (!q) ({ results: rows } = await db.prepare(`SELECT ${cols} FROM ${from} ORDER BY u.created_at DESC LIMIT ?1`).bind(50).all())
     else {
       const like = `%${q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%`
       const digits = q.replace(/\D/g, '')
-      ;({ results: rows } = await db.prepare(`SELECT ${cols} FROM users u LEFT JOIN user_blocks b ON b.user_id = u.id WHERE u.id = ?1 OR lower(u.email) LIKE ?2 ESCAPE '\\'
+      ;({ results: rows } = await db.prepare(`SELECT ${cols} FROM ${from} WHERE u.id = ?1 OR lower(u.email) LIKE ?2 ESCAPE '\\'
         OR u.id IN (SELECT account FROM topups WHERE reference = ?1 OR phone = ?1 OR (?3 IS NOT NULL AND phone LIKE ?3))
         OR u.id IN (SELECT user_id FROM jobs WHERE id = ?1)
         ORDER BY u.created_at DESC LIMIT 50`).bind(q, like, digits.length >= 8 ? `%${digits}` : null).all())
@@ -292,9 +293,9 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     const n = Math.min(Math.max(Math.trunc(Number(limit)) || 100, 1), 200) // entier : SQLite refuse LIMIT 1.5
     const now = Date.now()
     const open = OPEN_STATUSES.map((x) => `'${x}'`).join(', ')
-    const { results } = await c.env.DB.prepare(`SELECT t.reference, t.account, u.email, t.pack, t.amount_fcfa AS amountFcfa, t.jetons, t.country, t.operator, t.phone,
+    const { results } = await c.env.DB.prepare(`SELECT t.reference, t.account, u.email, u.name, a.url AS avatarUrl, t.pack, t.amount_fcfa AS amountFcfa, t.jetons, t.country, t.operator, t.phone,
         t.status, t.failure, t.late, t.paygate_id AS paygateId, t.created_at AS createdAt, t.updated_at AS updatedAt, t.completed_at AS completedAt
-      FROM topups t LEFT JOIN users u ON u.id = t.account
+      FROM topups t LEFT JOIN users u ON u.id = t.account LEFT JOIN user_avatars a ON a.user_id = t.account
       WHERE (?1 IS NULL OR t.status = ?1) AND (?2 = 0 OR (t.status IN (${open}) AND t.created_at < ?3))
       ORDER BY t.created_at DESC LIMIT ?4`).bind(status || null, stuck === '1' ? 1 : 0, now - STUCK_TOPUP, n).all()
     return c.json({
@@ -338,9 +339,9 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
   a.get('/jobs', async (c) => {
     const stuck = c.req.query('scope') === 'stuck'
     const now = Date.now()
-    const { results } = await c.env.DB.prepare(`SELECT j.id, j.user_id AS userId, u.email, j.kind, j.model_id AS modelId, j.status, j.cost, j.prompt,
+    const { results } = await c.env.DB.prepare(`SELECT j.id, j.user_id AS userId, u.email, u.name, a.url AS avatarUrl, j.kind, j.model_id AS modelId, j.status, j.cost, j.prompt,
         j.created_at AS createdAt, j.started_at AS startedAt
-      FROM jobs j LEFT JOIN users u ON u.id = j.user_id
+      FROM jobs j LEFT JOIN users u ON u.id = j.user_id LEFT JOIN user_avatars a ON a.user_id = j.user_id
       WHERE j.status IN ('IN_QUEUE', 'IN_PROGRESS') AND (?1 = 0 OR j.created_at < ?2)
       ORDER BY j.created_at DESC LIMIT 200`).bind(stuck ? 1 : 0, now - STUCK_JOB).all()
     return c.json({ jobs: results.map((j) => ({ ...j, ageMin: minutes(now - j.createdAt), stuck: now - j.createdAt > STUCK_JOB })) })
