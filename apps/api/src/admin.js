@@ -64,31 +64,44 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
   }
 
   /**
-   * Corps d'une action : clé et motif obligatoires. Une clé déjà notée rend son premier résultat (`replayed`) si c'est la même action
-   * (même compte, même nature, même objet, même montant si `amount` est donné), sinon un conflit. Rend { key, reason, replay? } ou { error }.
+   * Corps d'une action : clé et motif obligatoires. La clé est d'abord réservée dans `admin_actions` (ligne sans résultat), d'un coup,
+   * avec ce qu'elle désigne : deux envois simultanés de la même clé pour deux comptes ne peuvent pas passer tous les deux (le second
+   * voit la réservation du premier : conflit). Une clé déjà notée rend son premier résultat (`replayed`) si c'est la même action
+   * (même compte, même nature, même objet, même montant si `amount` est donné), sinon un conflit ; réservée sans résultat pour la même
+   * action (premier envoi en cours, refusé ou journal non écrit), on continue : le Durable Object du compte est idempotent par clé.
+   * Rend { key, reason } ou { error }.
    */
   const begin = async (c, uid, { action, ref = null, amount, body }) => {
     if (typeof body.key !== 'string' || !KEY.test(body.key)) return { error: c.json({ error: 'invalid_key' }, 400) }
     const reason = cleanReason(body.reason)
     if (!reason) return { error: c.json({ error: 'invalid_reason', min: 3, max: 300 }, 400) }
     try {
-      const prev = await c.env.DB.prepare('SELECT target, action, ref, amount, result FROM admin_actions WHERE id = ?1').bind(body.key).first()
+      const db = c.env.DB
+      await db.prepare('INSERT INTO admin_actions (id, at, actor, target, action, ref, amount, reason, result) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL) ON CONFLICT (id) DO NOTHING')
+        .bind(body.key, Date.now(), c.get('uid'), uid, action, ref, amount ?? null, reason).run()
+      const prev = await db.prepare('SELECT target, action, ref, amount, result FROM admin_actions WHERE id = ?1').bind(body.key).first()
       if (prev) {
         // Un remboursement note dans `amount` ce qui a été rendu ; le montant demandé (comparé ici) est gardé dans le résultat.
         const kept = parse(prev.result)
         const asked = kept && typeof kept === 'object' && 'requested' in kept ? kept.requested : prev.amount ?? null
-        const same = prev.target === uid && prev.action === action && (prev.ref ?? null) === ref && (amount === undefined || asked === amount)
-        return { error: same ? c.json({ ...parse(prev.result), replayed: true }) : c.json({ error: 'key_conflict' }, 409) }
+        const same = prev.target === uid && prev.action === action && (prev.ref ?? null) === ref && (amount === undefined || asked === (amount ?? null))
+        if (!same) return { error: c.json({ error: 'key_conflict' }, 409) }
+        if (prev.result != null) return { error: c.json({ ...kept, replayed: true }) }
       }
     } catch (e) {
       console.error('administration : lecture du journal (D1)', e.message) // le Durable Object reste idempotent par lui-même
     }
     return { key: body.key, reason }
   }
-  /** Note l'action réussie dans `admin_actions` ; une panne de D1 ne défait rien, elle est journalisée. */
+  /**
+   * Note l'action réussie dans `admin_actions` : complète sa réservation (ou l'écrit, si D1 n'a pas pu la faire), jamais un résultat déjà
+   * noté ni la réservation d'une autre action. Une panne de D1 ne défait rien, elle est journalisée.
+   */
   const log = async (c, { key, uid, action, ref = null, amount = null, reason, result }) => {
     try {
-      await c.env.DB.prepare('INSERT OR IGNORE INTO admin_actions (id, at, actor, target, action, ref, amount, reason, result) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
+      await c.env.DB.prepare(`INSERT INTO admin_actions (id, at, actor, target, action, ref, amount, reason, result) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        ON CONFLICT (id) DO UPDATE SET amount = excluded.amount, result = excluded.result
+        WHERE admin_actions.result IS NULL AND admin_actions.target = excluded.target AND admin_actions.action = excluded.action`)
         .bind(key, Date.now(), c.get('uid'), uid, action, ref, amount, reason, JSON.stringify(result)).run()
     } catch (e) {
       console.error('administration : journal non écrit (D1)', key, action, uid, e.message)
@@ -96,6 +109,25 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
   }
   const body = (c) => c.req.json().then((b) => (b && typeof b === 'object' ? b : {}), () => ({}))
   const topupAdmin = (t) => ({ ...topupView(t), country: t.country ?? null, paygateId: t.paygateId ?? null, mismatch: t.mismatch ?? null, checkedAt: t.checkedAt ?? null, completedAt: t.completedAt ?? null })
+
+  /** Copie du blocage dans D1 (`user_blocks`) : une ligne si `blocked` ({ at, actor, reason }), aucune sinon. */
+  const writeBlock = (db, uid, blocked) => (blocked
+    ? db.prepare('INSERT INTO user_blocks (user_id, blocked_at, reason, actor) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (user_id) DO UPDATE SET blocked_at = excluded.blocked_at, reason = excluded.reason, actor = excluded.actor')
+      .bind(uid, blocked.at, blocked.reason ?? '', blocked.actor ?? '')
+    : db.prepare('DELETE FROM user_blocks WHERE user_id = ?1').bind(uid)).run()
+  /**
+   * Copie l'état ACTUEL du Durable Object (jamais le résultat rendu, qui peut être celui d'une clé rejouée), puis le relit : changé
+   * entre-temps (un blocage et un déblocage croisés, dont les écritures dans D1 arrivent dans le désordre), on recopie. La dernière
+   * écriture dans D1 est donc toujours suivie d'une relecture qui la confirme ; une écriture perdue se répare à la lecture de la fiche.
+   */
+  const mirrorBlock = async (db, uid, acct) => {
+    for (let i = 0; i < 3; i++) {
+      const want = (await acct('/admin/state')).body.blocked ?? null
+      await writeBlock(db, uid, want)
+      const now = (await acct('/admin/state')).body.blocked ?? null
+      if ((now?.at ?? null) === (want?.at ?? null)) return
+    }
+  }
 
   a.get('/me', (c) => c.json({ admin: true, uid: c.get('uid') }))
 
@@ -127,10 +159,17 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
       t.acct('/topup/list?limit=200'),
       db.prepare('SELECT id, kind, model_id AS modelId, status, cost, count, prompt, failure, refund, outputs, created_at AS createdAt, started_at AS startedAt, finished_at AS finishedAt FROM jobs WHERE user_id = ?1 ORDER BY created_at DESC LIMIT 100').bind(t.uid).all(),
       ledgerOf(db, t.uid, { limit: 200 }),
-      db.prepare('SELECT id, at, actor, action, ref, amount, reason, result FROM admin_actions WHERE target = ?1 ORDER BY at DESC LIMIT 100').bind(t.uid).all(),
+      db.prepare('SELECT id, at, actor, action, ref, amount, reason, result FROM admin_actions WHERE target = ?1 AND result IS NOT NULL ORDER BY at DESC LIMIT 100').bind(t.uid).all(),
     ])
+    // Copie de D1 (`user_blocks`) différente du Durable Object (écriture perdue ou arrivée dans le désordre) : réparée ici.
+    const blocked = state.body.blocked ?? null
+    let user = t.user
+    if ((blocked?.at ?? null) !== (user.blockedAt ?? null)) {
+      try { await writeBlock(db, t.uid, blocked) } catch (e) { console.error('administration : blocage non copié (D1)', t.uid, e.message) }
+      user = { ...user, blockedAt: blocked?.at ?? null, blockedReason: blocked?.reason ?? null }
+    }
     return c.json({
-      user: t.user, balance: state.body.balance, blocked: state.body.blocked,
+      user, balance: state.body.balance, blocked: state.body.blocked,
       topups: topups.body.map(topupAdmin),
       jobs: jobs.results.map((j) => ({ ...j, outputs: parse(j.outputs) ?? [] })),
       ledger,
@@ -202,6 +241,9 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
       await advanceJob({ env: c.env, acct, accountId: t.uid, origin: job.origin ?? new URL(c.req.url).origin, job })
     } catch (e) {
       console.error('administration : suivi avant annulation', job.provider ?? 'fal', e.message)
+      // Terminée chez le fournisseur mais résultat illisible pour l'instant : l'annuler perdrait ses fichiers. Rien n'est fait ni gardé
+      // sous la clé : on réessaie plus tard (même clé). Une autre erreur (état illisible, génération bloquée) n'empêche pas l'annulation.
+      if (e.completedAtProvider) return c.json({ error: 'provider_unavailable', retryable: true }, 503)
     }
     job = (await getJob()) ?? job
     let result
@@ -234,11 +276,7 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     const r = await t.acct('/admin/block', { blocked: b.blocked, reason: s.reason, actor: c.get('uid'), key: s.key })
     if (!r.body.ok) return c.json(r.body, r.status) // key_conflict
     try {
-      const db = c.env.DB
-      await (r.body.blocked
-        ? db.prepare('INSERT INTO user_blocks (user_id, blocked_at, reason, actor) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (user_id) DO UPDATE SET blocked_at = excluded.blocked_at, reason = excluded.reason, actor = excluded.actor')
-          .bind(t.uid, r.body.blocked.at, s.reason, c.get('uid'))
-        : db.prepare('DELETE FROM user_blocks WHERE user_id = ?1').bind(t.uid)).run()
+      await mirrorBlock(c.env.DB, t.uid, t.acct)
     } catch (e) {
       console.error('administration : blocage non copié (D1)', t.uid, e.message)
     }
@@ -251,7 +289,7 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
   a.get('/topups', async (c) => {
     const { status, stuck, limit } = c.req.query()
     if (status && !/^[a-z_]{3,20}$/.test(status)) return c.json({ error: 'invalid_status' }, 400)
-    const n = Math.min(Math.max(Number(limit) || 100, 1), 200)
+    const n = Math.min(Math.max(Math.trunc(Number(limit)) || 100, 1), 200) // entier : SQLite refuse LIMIT 1.5
     const now = Date.now()
     const open = OPEN_STATUSES.map((x) => `'${x}'`).join(', ')
     const { results } = await c.env.DB.prepare(`SELECT t.reference, t.account, u.email, t.pack, t.amount_fcfa AS amountFcfa, t.jetons, t.country, t.operator, t.phone,
@@ -275,6 +313,13 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     const b = await body(c)
     const s = await begin(c, t.uid, { action: 'recheck_topup', ref: reference, body: { reason: 'Revérification paygate', ...b } })
     if (s.error) return s.error
+    // Clé déjà traitée mais absente de D1 (journal non écrit) : le Durable Object a gardé le premier résultat (voir plus bas).
+    const seen = (await t.acct('/admin/kept', { key: s.key })).body
+    if (seen) {
+      if (seen.action !== 'recheck_topup' || seen.ref !== reference) return c.json({ error: 'key_conflict' }, 409)
+      await log(c, { key: s.key, uid: t.uid, action: 'recheck_topup', ref: reference, amount: seen.result.credited || null, reason: s.reason, result: seen.result })
+      return c.json({ ...seen.result, replayed: true })
+    }
     const topup = (await t.acct(`/topup/get?ref=${encodeURIComponent(reference)}`)).body
     if (!topup) return c.json({ error: 'not_found' }, 404)
     if (topup.status === 'completed') return c.json({ error: 'already_completed', topup: topupAdmin(topup) }, 409)
@@ -283,6 +328,8 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     const fresh = (await t.acct(`/topup/get?ref=${encodeURIComponent(reference)}`)).body ?? out.topup
     const result = { topup: topupAdmin(fresh), credited: out.credited, mismatch: out.mismatch, balance: (await t.acct('/admin/state')).body.balance, ...(out.error ? { error: out.error } : {}) }
     if (out.error) return c.json(result, 502) // paygate n'a pas répondu : rien n'est noté, on peut réessayer avec la même clé
+    // Gardé dans le Durable Object avant D1 : si le journal n'est pas écrit, la même clé rend ce résultat (et le note) au lieu de 409.
+    await t.acct('/admin/kept', { key: s.key, entry: { action: 'recheck_topup', ref: reference, result } })
     await log(c, { key: s.key, uid: t.uid, action: 'recheck_topup', ref: reference, amount: out.credited || null, reason: s.reason, result })
     return c.json(result)
   })

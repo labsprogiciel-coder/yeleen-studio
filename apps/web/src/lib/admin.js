@@ -61,6 +61,9 @@ const MESSAGES = {
   not_active: 'Cette génération n’est plus en cours (statut : {status}).',
   storing: 'Cette génération est terminée chez le fournisseur et ses fichiers sont en cours d’enregistrement : elle va se terminer. Rien n’a été annulé ni remboursé.',
   paygate_not_found: 'Paygate ne connaît pas ce paiement : il n’a jamais été créé chez lui. Rien n’a changé, une nouvelle vérification donnera le même résultat.',
+  not_found_yet: 'Paygate ne connaît pas encore ce paiement (recharge de moins de 2 minutes). Rien n’a changé : réessayez dans deux minutes ; s’il est toujours inconnu, la recharge sera marquée échouée.',
+  provider_unavailable: 'La génération est terminée chez le fournisseur, mais son résultat est momentanément illisible. Rien n’a été annulé ni remboursé : réessayez dans un instant.',
+  resumed: 'Un envoi précédent de cette opération est resté sans réponse sûre : il a peut-être abouti. « Réessayer » renvoie la même opération, que le serveur ne refera pas deux fois.',
   payments_not_configured: 'Paygate n’est pas configuré sur cette API : impossible de revérifier.',
   provider: 'Paygate ne répond pas. Réessayez dans un instant.',
   account_blocked: 'Votre compte est suspendu. Contactez le support.',
@@ -73,7 +76,10 @@ const MESSAGES = {
   db_unavailable: 'La base de données de l’API est indisponible.',
 }
 
-/** Revérification : paygate ne connaît pas le paiement (502 `not_found`). Rien n'a bougé et réessayer donnerait la même réponse. */
+/**
+ * Revérification : paygate ne connaît pas le paiement (502 `not_found`). Rien n'a bougé et réessayer donnerait la même réponse.
+ * (Une recharge `pending` de moins de 2 min rend `not_found_yet` : une vérification plus tard peut changer l'issue, donc incertain.)
+ */
 const paygateUnknown = (err) => err?.status === 502 && err?.body?.error === 'not_found'
 
 /**
@@ -94,6 +100,21 @@ export function failureKind(err) {
   if (paygateUnknown(err)) return 'final'
   if (err?.status >= 400 && err.status < 500 && REFUSALS.has(err?.body?.error)) return 'refused'
   return 'uncertain'
+}
+
+/**
+ * Envois d'action restés sans réponse sûre (`uncertain`), gardés hors de la fenêtre, par action et objet visé (compte, génération,
+ * recharge) : fermer puis rouvrir la même action reprend la même clé et la même saisie, et le serveur rend le premier résultat au lieu
+ * de refaire l'opération. Oubliés dès qu'une réponse nette arrive (résultat, refus, échec définitif).
+ */
+export function attemptStore() {
+  const m = new Map()
+  const id = (spec) => `${spec.action}:${spec.target ?? ''}:${spec.ref ?? ''}`
+  return {
+    get: (spec) => m.get(id(spec)) ?? null,
+    /** `outcome` : 'done', ou l'issue de `failureKind` ; seule une issue incertaine garde la tentative. */
+    settle: (spec, outcome, attempt) => { if (outcome === 'uncertain') m.set(id(spec), attempt); else m.delete(id(spec)) },
+  }
 }
 
 /** Message lisible pour une erreur de l'API (`ApiError`) ou un code, avec les détails de la réponse (plafond, montant déjà rendu, statut). */

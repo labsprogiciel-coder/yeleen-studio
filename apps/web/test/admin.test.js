@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  adminError, adminKey, failureKind, ageMin, canRecheck, cauris, checkReason, formatAge, isActiveJob, isAdminKey, isStuckJob, isStuckTopup,
+  adminError, adminKey, attemptStore, failureKind, ageMin, canRecheck, cauris, checkReason, formatAge, isActiveJob, isAdminKey, isStuckJob, isStuckTopup,
   parseAmount, pick, refundable, resultText, sortTopups,
 } from '../src/lib/admin.js'
 
@@ -135,4 +135,28 @@ test('échec d’une action : 401 et 403 (avant la lecture de la clé) et 4xx in
     [409, 'already_refunded'], [409, 'not_active'], [409, 'storing'], [409, 'no_debit'], [409, 'job_active'], [404, 'not_found'], [409, 'already_completed']]) {
     assert.equal(failureKind({ status, body: { error } }), 'refused', error)
   }
+})
+
+test('revérification : recharge en attente de moins de 2 min inconnue de paygate (502 not_found_yet) → incertain, réessayable, sans promettre le même résultat', () => {
+  const young = { status: 502, body: { error: 'not_found_yet' } }
+  assert.equal(failureKind(young), 'uncertain')
+  assert.match(adminError(young), /pas encore/)
+  assert.doesNotMatch(adminError(young), /même résultat/)
+  assert.equal(failureKind({ status: 503, body: { error: 'provider_unavailable', retryable: true } }), 'uncertain')
+  assert.match(adminError({ status: 503, body: { error: 'provider_unavailable' } }), /Rien n’a été annulé/)
+})
+
+test('fenêtre fermée après une issue incertaine : rouverte pour la même action et le même objet, elle reprend la même clé et la même saisie', () => {
+  const store = attemptStore()
+  const credit = { action: 'adjust', target: 'user_alice' }
+  const attempt = { key: adminKey(), reason: 'Geste', amount: '50', direction: 'credit' }
+  store.settle(credit, failureKind({ status: 0 }), attempt) // réponse perdue
+  assert.deepEqual(store.get({ action: 'adjust', target: 'user_alice' }), attempt) // nouvelle ouverture : même clé
+  assert.equal(store.get({ action: 'adjust', target: 'user_bob' }), null) // un autre compte : nouvelle opération
+  assert.equal(store.get({ action: 'refund_job', target: 'user_alice', ref: 'j1' }), null)
+  store.settle(credit, 'done') // le serveur a répondu (premier résultat rejoué) : oubliée
+  assert.equal(store.get(credit), null)
+  store.settle(credit, 'uncertain', attempt)
+  store.settle(credit, failureKind({ status: 402, body: { error: 'insufficient' } })) // refus net : oubliée aussi
+  assert.equal(store.get(credit), null)
 })

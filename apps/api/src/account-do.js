@@ -175,9 +175,14 @@ export class Account {
       // le refus rend la génération enregistrée, pour que l'appelant réponde avec elle. Remettre le même statut reste permis
       // (sortie enregistrée), mais sans perdre ce que l'administration ou un remboursement y a noté (copie faite d'un état plus ancien).
       const prev = await this.state.storage.get(`job:${job.id}`)
+      // Prise de la copie dans R2 (`storingAt` avec son jeton `storingBy`) : un seul suivi à la fois. Deux suivis partis de la même
+      // copie de la génération voient tous deux le fournisseur terminé ; le second est refusé et rend la génération enregistrée.
+      if (prev && job.storingAt && prev.storingAt && Date.now() - prev.storingAt < STORING && prev.storingBy !== job.storingBy && !TERMINAL.includes(prev.status)) {
+        return Response.json({ ok: false, error: 'storing', job: prev }, { status: 409 })
+      }
       // Copie d'un état plus ancien (encore active, sans `storingAt`) pendant qu'un autre suivi copie les fichiers : la marque reste,
       // sinon une annulation passerait pendant la copie et l'enregistrement final serait refusé.
-      if (prev && !TERMINAL.includes(job.status) && !job.storingAt && prev.storingAt && Date.now() - prev.storingAt < STORING) job.storingAt = prev.storingAt
+      if (prev && !TERMINAL.includes(job.status) && !job.storingAt && prev.storingAt && Date.now() - prev.storingAt < STORING) Object.assign(job, { storingAt: prev.storingAt, storingBy: prev.storingBy })
       if (prev && TERMINAL.includes(prev.status) && job.status !== prev.status) return Response.json({ ok: false, error: 'terminal', status: prev.status, job: prev }, { status: 409 })
       if (prev && TERMINAL.includes(prev.status)) {
         job.refund = Math.max(prev.refund ?? 0, job.refund ?? 0)
@@ -257,12 +262,16 @@ export class Account {
       return Response.json({ ok: true, topup: next })
     }
 
+    // Le corps est lu AVANT le portefeuille : attendre le corps n'est pas une opération de stockage, une autre requête pourrait
+    // écrire le portefeuille pendant ce temps et la nôtre réécrirait une copie périmée. Entre la lecture et l'écriture du portefeuille,
+    // il n'y a ensuite que des opérations de stockage (rien ne s'intercale).
+    const input = pathname === '/balance' ? null : await request.json()
     const w = await this.wallet()
     if (pathname === '/balance') return Response.json({ balance: w.balance })
     // État d'un paiement paygate (webhook ou lecture) : mise à jour de la recharge et crédit dans la même requête, donc sans croisement.
     // Le crédit est idempotent par référence : un webhook rejoué ou une lecture après le webhook ne crédite pas deux fois.
     if (pathname === '/topup/apply') {
-      const { reference, payment, late } = await request.json()
+      const { reference, payment, late } = input
       const t = await this.state.storage.get(`topup:${reference}`)
       if (!t) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
       const out = applyPayment(t, payment, { late })
@@ -281,7 +290,7 @@ export class Account {
     // Ajustement à la main : la clé de l'administrateur (« adm_… ») sert de référence au crédit ou au débit (types du grand livre
     // inchangés) ; le résultat est gardé sous `adm:<clé>`. Rejouée, la même clé rend ce résultat ; avec un autre montant : conflit.
     if (pathname === '/admin/adjust') {
-      const { key, direction, amount, reason, actor } = await request.json()
+      const { key, direction, amount, reason, actor } = input
       const prev = await this.state.storage.get(`adm:${key}`)
       if (prev) {
         if (prev.direction !== direction || prev.amount !== amount) return Response.json({ ok: false, error: 'key_conflict' }, { status: 409 })
@@ -296,7 +305,7 @@ export class Account {
     }
     // Remboursement d'une génération terminée : une seule fois par génération, au plus son débit ; noté sur la génération.
     if (pathname === '/job/refund') {
-      const { jobId, amount, reason, actor, key } = await request.json()
+      const { jobId, amount, reason, actor, key } = input
       const seen = await kept(key) // même clé : le premier résultat, même si D1 ne l'a pas noté
       if (seen) {
         const same = seen.action === 'refund_job' && seen.ref === jobId && (seen.amount ?? null) === (amount ?? null)
@@ -322,7 +331,7 @@ export class Account {
     // remboursée seulement si elle n'avait pas commencé. Elle passe CANCELED et libère sa place ; l'annulation chez le fournisseur
     // se fait avant, dans le Worker. Pendant la copie de ses fichiers dans R2 (`storingAt` récent), elle est en fait terminée : refusée.
     if (pathname === '/job/cancel') {
-      const { jobId, reason, actor, user = false, key } = await request.json()
+      const { jobId, reason, actor, user = false, key } = input
       const job = await this.state.storage.get(`job:${jobId}`)
       if (!job) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
       if (TERMINAL.includes(job.status)) return Response.json({ ok: false, error: 'not_active', status: job.status, job, balance: w.balance }, { status: 409 })
@@ -333,7 +342,7 @@ export class Account {
       const refunded = r?.refunded ?? 0
       const now = Date.now()
       const note = user ? {} : { failure: 'admin_cancel', adminCancel: { at: now, actor, reason } }
-      const next = { ...job, status: 'CANCELED', refund: w.ops[`refund:${jobId}`]?.amount ?? 0, finishedAt: now, storingAt: undefined, ...note }
+      const next = { ...job, status: 'CANCELED', refund: w.ops[`refund:${jobId}`]?.amount ?? 0, finishedAt: now, storingAt: undefined, storingBy: undefined, ...note }
       await this.state.storage.put(`job:${jobId}`, next)
       await this.track(jobId, false)
       if (!user) await keep(key, { action: 'cancel_job', ref: jobId, result: { outcome: 'canceled', job: next, refunded, balance: w.balance } }) // résultat rendu par la route
@@ -344,7 +353,7 @@ export class Account {
     // Échec d'une génération constaté chez le fournisseur : remboursée et passée FAILED en une requête, seulement si elle est encore
     // active (une génération annulée ou terminée entre-temps n'est ni remboursée ni réécrite : 409 avec la génération enregistrée).
     if (pathname === '/job/fail') {
-      const { jobId, failure } = await request.json()
+      const { jobId, failure } = input
       const job = await this.state.storage.get(`job:${jobId}`)
       if (!job) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
       if (TERMINAL.includes(job.status)) return Response.json({ ok: false, error: 'terminal', status: job.status, job, balance: w.balance }, { status: 409 })
@@ -352,14 +361,14 @@ export class Account {
       if (job.storingAt && Date.now() - job.storingAt < STORING) return Response.json({ ok: false, error: 'storing', status: job.status, job, balance: w.balance }, { status: 409 })
       const r = refund(w, { jobId })
       if (r.ok && !r.replay) await this.state.storage.put('wallet', w)
-      const next = { ...job, status: 'FAILED', failure, refund: w.ops[`refund:${jobId}`]?.amount ?? job.cost, finishedAt: Date.now(), storingAt: undefined }
+      const next = { ...job, status: 'FAILED', failure, refund: w.ops[`refund:${jobId}`]?.amount ?? job.cost, finishedAt: Date.now(), storingAt: undefined, storingBy: undefined }
       await this.state.storage.put(`job:${jobId}`, next)
       await this.track(jobId, false)
       await this.record(...(r.ok && !r.replay ? [ledgerItem('refund', jobId, r.refunded, w.balance)] : []), jobItem(next))
       return Response.json({ ok: true, refunded: r.refunded ?? 0, balance: w.balance, job: next })
     }
 
-    const body = await request.json()
+    const body = input
     const run = { '/debit': debit, '/refund': refund, '/credit': credit }[pathname]
     if (!run) return new Response('not found', { status: 404 })
     const result = run(w, body)

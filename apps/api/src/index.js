@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 import { AuthError, verifyClerkToken } from './auth.js'
 import { falClient } from './fal.js'
 import { buildInput, endpointFor, runwareInput } from './inputs.js'
-import { advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
+import { STORING, advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { findTool } from '@studio/catalog/tools'
 import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource } from './library.js'
@@ -411,6 +411,9 @@ app.post('/jobs/:id/cancel', async (c) => {
   const job = await account(c).fetch(`https://account/job/get?id=${c.req.param('id')}`).then((r) => r.json())
   if (!job) return c.json({ error: 'not_found' }, 404)
   if (job.status !== 'IN_QUEUE' && job.status !== 'IN_PROGRESS') return c.json(view(job))
+  // Fichiers en cours de copie : terminée chez le fournisseur, elle va se terminer ; ni annulation chez lui ni ici (le Durable Object
+  // refuse aussi, pour une copie commencée après cette lecture).
+  if (job.storingAt && Date.now() - job.storingAt < STORING) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { balance: (await call(c, '/balance')).balance }))
   await providerCancel(c.env, job)
   // Vérification, remboursement et CANCELED en une requête du compte : terminée entre-temps (webhook, suivi), elle reste telle quelle.
   const r = await call(c, '/job/cancel', { jobId: job.id, user: true })

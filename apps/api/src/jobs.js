@@ -13,6 +13,9 @@ export const isActive = (job) => job.status === 'IN_QUEUE' || job.status === 'IN
 
 export const STORING = 60_000 // une copie dans R2 commencée depuis moins longtemps est en cours ailleurs
 
+/** Refus définitif de fal (4xx autre que 408 et 429, ou refus pour contenu) ; le reste (5xx, réseau) est passager. */
+const permanent = (e) => e instanceof FalError && (e.isContentPolicy || (e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429))
+
 /**
  * État d'une génération chez son fournisseur, au même format pour fal, Runware et Higgsfield :
  * { status: IN_QUEUE | IN_PROGRESS | COMPLETED | FAILED, queuePosition?, logs?, result?, failure? }.
@@ -40,8 +43,11 @@ async function providerStatus(env, job) {
   try {
     return { status: 'COMPLETED', result: await client.result(job.responseUrl) }
   } catch (e) {
+    // Terminée chez fal mais résultat illisible pour l'instant (5xx, 408, 429, réseau) : erreur passagère, levée. La génération reste
+    // active et le prochain suivi relira le résultat ; la marquer FAILED perdrait des fichiers déjà produits (et payés chez fal).
+    if (!permanent(e)) { e.completedAtProvider = true; throw e }
     console.error('résultat fal', e.message)
-    return { status: 'FAILED', failure: e instanceof FalError && e.isContentPolicy ? 'moderation' : 'provider' }
+    return { status: 'FAILED', failure: e.isContentPolicy ? 'moderation' : 'provider' }
   }
 }
 
@@ -72,9 +78,10 @@ export async function advanceJob({ env, acct, accountId, origin, job }) {
   if (!found.length) return fail('provider')
   // Copie dans R2 : un seul suivi à la fois s'en charge ; les autres voient « enregistrement » et réessaient.
   if (job.storingAt && Date.now() - job.storingAt < STORING) return { job: { ...job, status: 'IN_PROGRESS' }, logs: ['Enregistrement du résultat'] }
-  if (env.FILES) { const { stale } = await put({ ...job, status: 'IN_PROGRESS', storingAt: Date.now() }); if (stale) return { job: stale } }
+  // La prise est vérifiée par le Durable Object (jeton `storingBy`) : un autre suivi parti de la même copie est refusé et ne copie rien.
+  if (env.FILES) { const { stale } = await put({ ...job, status: 'IN_PROGRESS', storingAt: Date.now(), storingBy: crypto.randomUUID() }); if (stale) return { job: stale } }
   const outputs = await storeOutputs({ bucket: env.FILES, origin, accountId, jobId: job.id, outputs: found })
-  const next = { ...job, status: 'COMPLETED', outputs, finishedAt: Date.now(), storingAt: undefined }
+  const next = { ...job, status: 'COMPLETED', outputs, finishedAt: Date.now(), storingAt: undefined, storingBy: undefined }
   const { stale } = await put(next)
   return { job: stale ?? next }
 }

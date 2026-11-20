@@ -174,7 +174,7 @@ test('ajustement : crédit et débit sur le compte visé, journal ; clé rejoué
 
     const ledger = t.rows("SELECT kind, ref, delta, balance FROM ledger WHERE account = 'user_alice' AND ref LIKE 'adm_%' ORDER BY at")
     assert.deepEqual(ledger.map((l) => [l.kind, l.delta, l.balance]), [['credit', 50.5, 290.5], ['debit', -90.5, 200]])
-    const log = t.rows("SELECT id, actor, target, action, amount, reason FROM admin_actions ORDER BY at")
+    const log = t.rows("SELECT id, actor, target, action, amount, reason FROM admin_actions WHERE result IS NOT NULL ORDER BY at") // les clés refusées restent réservées, sans résultat
     assert.deepEqual(log.map((l) => [l.actor, l.target, l.action, l.amount, l.reason]), [['user_admin', 'user_alice', 'credit', 50.5, 'Geste commercial'], ['user_admin', 'user_alice', 'debit', 90.5, 'Erreur de crédit']])
     assert.equal(log[0].id, k)
   } finally { t.restore() }
@@ -220,7 +220,7 @@ test('remboursement d\'une génération terminée : partiel, une seule fois ; re
     assert.equal((await t.as('user_alice', '/wallet')).body.balance, 240 - job.body.cost + 2)
     assert.equal(t.rows("SELECT refund FROM jobs WHERE id = ?", id)[0].refund, 2) // D1 suit le Durable Object
     assert.equal(t.rows("SELECT delta FROM ledger WHERE kind = 'refund' AND ref = ?", id)[0].delta, 2)
-    assert.equal(t.rows("SELECT action, ref, amount FROM admin_actions WHERE action = 'refund_job'").length, 1)
+    assert.equal(t.rows("SELECT action, ref, amount FROM admin_actions WHERE action = 'refund_job' AND result IS NOT NULL").length, 1)
     assert.equal((await t.admin('/admin/users/user_alice/jobs/inconnue/refund', post({ key: key(), reason: 'Résultat raté' }))).status, 404)
     // Plus que le débit : plafonné au débit (une autre génération).
     t.fal = 'IN_QUEUE'
@@ -477,7 +477,7 @@ test('recharges : liste de tous les comptes (statut, bloquées) ; revérificatio
     assert.equal((await t.as('user_alice', '/wallet')).body.balance, 400) // une seule fois
     assert.equal((await t.admin('/wallet')).body.balance, 240)
     assert.equal(t.rows("SELECT status FROM topups")[0].status, 'completed')
-    assert.equal(t.rows("SELECT * FROM admin_actions WHERE action = 'recheck_topup'").length, 2)
+    assert.equal(t.rows("SELECT * FROM admin_actions WHERE action = 'recheck_topup' AND result IS NOT NULL").length, 2)
     // Un montant différent n'est jamais crédité.
     const other = await t.as('user_bob', '/topups', post(topupReq))
     t.pg[other.body.topup.reference] = { id: 'pg2', reference: other.body.topup.reference, status: 'completed', amount: 9999, currency: 'XOF' }
@@ -536,7 +536,7 @@ test('administration : D1 en panne après l\'action → l\'argent reste, l\'erre
     await t.as('user_alice', '/wallet')
     // `target` lit D1 (réussite), puis le journal échoue : on simule une panne seulement sur l'écriture du journal.
     const prepare = t.db.prepare
-    t.db.prepare = (sql) => (sql.startsWith('INSERT OR IGNORE INTO admin_actions') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
+    t.db.prepare = (sql) => (sql.includes('DO UPDATE SET amount') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
     const r = await t.admin('/admin/users/user_alice/adjust', post({ key: key(), direction: 'credit', amount: 10, reason: 'Geste commercial' }))
     assert.deepEqual([r.status, r.body.balance], [200, 250])
     assert.ok(errors.some((e) => e.includes('journal non écrit')))
@@ -558,7 +558,7 @@ test('échec vu par un second suivi pendant la copie des fichiers : refusé (sto
     globalThis.fetch = async (url, init) => {
       const u = String(url)
       if (u === 'https://fal.media/chat.png') { await gate; return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }) }
-      if (resultDown && u === 'https://queue.fal.run/x/requests/r1') return Response.json({ detail: 'panne passagère' }, { status: 500 })
+      if (resultDown && u === 'https://queue.fal.run/x/requests/r1') return Response.json({ detail: 'résultat refusé' }, { status: 422 }) // définitif : FAILED « provider »
       return fake(url, init)
     }
     const files = new Map()
@@ -647,14 +647,14 @@ test('administration : journal D1 non écrit et réponse perdue → la même cl�
     t.fal = 'IN_QUEUE'
     const c = (await t.as('user_alice', '/jobs', post(image))).body
     const prepare = t.db.prepare
-    t.db.prepare = (sql) => (sql.startsWith('INSERT OR IGNORE INTO admin_actions') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
+    t.db.prepare = (sql) => (sql.includes('DO UPDATE SET amount') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
     const kr = key(), kc = key(), kb = key()
     const refund = () => t.admin(`/admin/users/user_alice/jobs/${a.jobId}/refund`, post({ key: kr, amount: 2, reason: 'Résultat raté' }))
     const cancel = () => t.admin(`/admin/users/user_alice/jobs/${c.jobId}/cancel`, post({ key: kc, reason: 'Bloquée chez fal' }))
     const block = () => t.admin('/admin/users/user_alice/block', post({ key: kb, blocked: true, reason: 'Fraude' }))
     const first = [await refund(), await cancel(), await block()]
     assert.deepEqual(first.map((r) => r.status), [200, 200, 200])
-    assert.equal(t.rows('SELECT * FROM admin_actions').length, 0)
+    assert.equal(t.rows('SELECT * FROM admin_actions WHERE result IS NOT NULL').length, 0) // réservées, sans résultat
     t.db.prepare = prepare
     const r = await refund()
     assert.deepEqual([r.status, r.body.replayed, r.body.refunded], [200, true, 2])
@@ -668,4 +668,219 @@ test('administration : journal D1 non écrit et réponse perdue → la même cl�
     assert.equal((await t.admin(`/admin/users/user_alice/jobs/${c.jobId}/cancel`, post({ key: kr, reason: 'Bloquée chez fal' }))).body.error, 'key_conflict')
     assert.equal((await t.admin('/admin/users/user_alice/block', post({ key: kc, blocked: false, reason: 'Fraude' }))).status, 409)
   } finally { console.error = realError; t.restore() }
+})
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+/** Requête dont le corps arrive en retard (`ms`) : pendant ce temps, d'autres requêtes passent dans le Durable Object. */
+const slowRequest = (path, body, ms) => new Request(`https://account${path}`, {
+  method: 'POST', duplex: 'half',
+  body: new ReadableStream({ async start(ctrl) { await sleep(ms); ctrl.enqueue(new TextEncoder().encode(JSON.stringify(body))); ctrl.close() } }),
+})
+const memAccount = () => {
+  const m = new Map()
+  const a = new Account({ storage: { get: async (k) => structuredClone(m.get(k)), put: async (k, v) => { m.set(k, structuredClone(v)) } } }, { ENV: 'dev' })
+  const call = async (path, body) => (await a.fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))).json()
+  return { m, a, call }
+}
+
+test('Durable Object : un corps lu lentement ne réécrit pas un portefeuille périmé (ajustement, crédit, échec) pendant qu\'un débit passe', async () => {
+  for (const [path, body, expected] of [
+    ['/admin/adjust', { key: 'adm_lent_12345678', direction: 'credit', amount: 100, reason: 'Geste', actor: 'user_admin' }, 300],
+    ['/credit', { paymentId: 'p-lent', amount: 100 }, 300],
+  ]) {
+    const { m, a, call } = memAccount()
+    assert.equal((await call('/balance', {})).balance, 240)
+    const slow = a.fetch(slowRequest(path, body, 30)) // le portefeuille (240) serait lu avant le corps
+    const d = await call('/debit', { jobId: 'j1', amount: 40 })
+    assert.equal(d.ok, true)
+    await slow
+    assert.equal(m.get('wallet').balance, expected, path) // 240 - 40 + 100, pas 340
+    assert.ok(m.get('wallet').ops['debit:j1'], path) // le débit n'est pas perdu
+  }
+  // Échec constaté (remboursement de j0) pendant un débit de j1.
+  const { m, a, call } = memAccount()
+  await call('/debit', { jobId: 'j0', amount: 50 })
+  await call('/job/put', { id: 'j0', status: 'IN_PROGRESS', cost: 50 })
+  const slow = a.fetch(slowRequest('/job/fail', { jobId: 'j0', failure: 'provider' }, 30))
+  await call('/debit', { jobId: 'j1', amount: 40 })
+  await slow
+  assert.deepEqual([m.get('wallet').balance, Boolean(m.get('wallet').ops['debit:j1'])], [200, true]) // 240 - 50 - 40 + 50
+})
+
+test('clé d\'administration réservée avant l\'action : la même clé envoyée en même temps pour deux comptes ne crédite qu\'un seul compte', async () => {
+  const t = setup()
+  try {
+    await t.as('user_alice', '/wallet')
+    await t.as('user_bob', '/wallet')
+    // Les deux requêtes passent la lecture du journal avant que l'une n'atteigne son Durable Object (au plus 100 ms d'attente).
+    let arrived = 0, release
+    const both = new Promise((r) => { release = r })
+    for (const name of ['user_alice', 'user_bob']) {
+      const acct = t.account(name)
+      const real = acct.fetch.bind(acct)
+      acct.fetch = async (req) => {
+        if (new URL(req.url).pathname === '/admin/adjust') { if (++arrived === 2) release(); await Promise.race([both, sleep(100)]) }
+        return real(req)
+      }
+    }
+    const k = key()
+    const [a, b] = await Promise.all(['user_alice', 'user_bob'].map((u) => t.admin(`/admin/users/${u}/adjust`, post({ key: k, direction: 'credit', amount: 100, reason: 'Geste commercial' }))))
+    assert.deepEqual([a.status, b.status].sort(), [200, 409])
+    assert.equal([a, b].find((r) => r.status === 409).body.error, 'key_conflict')
+    const balances = [(await t.as('user_alice', '/wallet')).body.balance, (await t.as('user_bob', '/wallet')).body.balance]
+    assert.deepEqual(balances.sort(), [240, 340]) // un seul crédit
+    const rows = t.rows('SELECT target FROM admin_actions WHERE id = ? AND result IS NOT NULL', k)
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].target, [a, b][0].status === 200 ? 'user_alice' : 'user_bob') // la ligne est celle du compte crédité
+    // Fiche : une clé réservée sans résultat (refusée) n'apparaît pas comme une action faite.
+    const r = await t.admin('/admin/users/user_alice/adjust', post({ key: key(), direction: 'debit', amount: 9999, reason: 'Erreur de crédit' }))
+    assert.equal(r.status, 402)
+    assert.ok((await t.admin('/admin/users/user_alice')).body.actions.every((x) => x.result))
+  } finally { t.restore() }
+})
+
+test('revérification créditée mais journal D1 non écrit : la même clé rend le premier résultat et le note (au lieu de 409 already_completed)', async () => {
+  const t = setup()
+  const realError = console.error
+  console.error = () => {}
+  try {
+    const top = await t.as('user_alice', '/topups', post(topupReq))
+    const ref = top.body.topup.reference
+    t.pg[ref] = { id: 'pg1', reference: ref, status: 'completed', amount: 5000, currency: 'XOF' }
+    const prepare = t.db.prepare
+    t.db.prepare = (sql) => (sql.includes('DO UPDATE SET amount') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
+    const k = key()
+    const first = await t.admin(`/admin/users/user_alice/topups/${ref}/recheck`, post({ key: k }))
+    assert.deepEqual([first.status, first.body.credited, first.body.topup.status], [200, 160, 'completed'])
+    assert.equal(t.rows("SELECT * FROM admin_actions WHERE action = 'recheck_topup' AND result IS NOT NULL").length, 0)
+    t.db.prepare = prepare
+    const again = await t.admin(`/admin/users/user_alice/topups/${ref}/recheck`, post({ key: k }))
+    assert.deepEqual([again.status, again.body.replayed, again.body.credited], [200, true, 160])
+    const row = t.rows("SELECT amount, result FROM admin_actions WHERE id = ? AND result IS NOT NULL", k)
+    assert.deepEqual([row.length, row[0].amount], [1, 160])
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, 400) // une seule fois
+    // La même clé pour une autre recharge : conflit.
+    const other = await t.as('user_alice', '/topups', post(topupReq))
+    assert.equal((await t.admin(`/admin/users/user_alice/topups/${other.body.topup.reference}/recheck`, post({ key: k }))).body.error, 'key_conflict')
+  } finally { console.error = realError; t.restore() }
+})
+
+test('terminée chez fal mais résultat en 503 : ni échec ni remboursement ; l\'annulation de l\'administration rend 503 sans annuler, les fichiers arrivent ensuite', async () => {
+  const t = setup()
+  const realError = console.error
+  console.error = () => {}
+  try {
+    const job = await t.as('user_alice', '/jobs', post(image))
+    const id = job.body.jobId
+    const charged = 240 - job.body.cost
+    t.fal = 'COMPLETED'
+    let down = true
+    const fake = globalThis.fetch
+    globalThis.fetch = async (url, init) => (down && String(url) === 'https://queue.fal.run/x/requests/r1' ? Response.json({ detail: 'indisponible' }, { status: 503 }) : fake(url, init))
+    const poll = await t.as('user_alice', `/jobs/${id}`)
+    assert.deepEqual([poll.status, poll.body.error], [502, 'upstream']) // passagère : l'interface réessaiera
+    const k = key()
+    const cancel = await t.admin(`/admin/users/user_alice/jobs/${id}/cancel`, post({ key: k, reason: 'Bloquée chez fal' }))
+    assert.deepEqual([cancel.status, cancel.body.error, cancel.body.retryable], [503, 'provider_unavailable', true])
+    assert.deepEqual([t.stores.get('user_alice').get(`job:${id}`).status, t.cancels.length], ['IN_QUEUE', 0]) // ni FAILED ni CANCELED
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, charged) // rien n'est remboursé
+    down = false
+    const done = await t.as('user_alice', `/jobs/${id}`)
+    assert.deepEqual([done.body.status, done.body.outputs.length, done.body.refund], ['COMPLETED', 1, 0])
+    // La même clé, réessayée : la génération est terminée, rien n'est annulé.
+    assert.deepEqual([(await t.admin(`/admin/users/user_alice/jobs/${id}/cancel`, post({ key: k, reason: 'Bloquée chez fal' }))).status], [409])
+  } finally { console.error = realError; t.restore() }
+})
+
+test('liste des comptes suspendus (D1) : un blocage dont l\'écriture arrive après un déblocage est corrigé ; une écriture perdue se répare à la lecture de la fiche', async () => {
+  const t = setup()
+  const realError = console.error
+  console.error = () => {}
+  try {
+    await t.as('user_alice', '/wallet')
+    const prepare = t.db.prepare
+    let hold = true, held, reached
+    const gate = new Promise((r) => { held = r })
+    const atInsert = new Promise((r) => { reached = r })
+    t.db.prepare = (sql) => {
+      if (!sql.startsWith('INSERT INTO user_blocks') || !hold) return prepare(sql)
+      hold = false
+      const stmt = prepare(sql)
+      return { bind: (...args) => ({ run: async () => { reached(); await gate; return stmt.bind(...args).run() } }) }
+    }
+    const blocking = t.admin('/admin/users/user_alice/block', post({ key: key(), blocked: true, reason: 'Fraude' }))
+    await atInsert // le blocage est fait dans le Durable Object, sa copie dans D1 est retenue
+    const unblock = await t.admin('/admin/users/user_alice/block', post({ key: key(), blocked: false, reason: 'Erreur' }))
+    assert.equal(unblock.status, 200)
+    held()
+    assert.equal((await blocking).status, 200)
+    assert.equal((await t.as('user_alice', '/me')).body.blocked, false)
+    assert.deepEqual(t.rows('SELECT * FROM user_blocks'), []) // pas « suspendu » dans la liste
+    assert.equal((await t.admin('/admin/users?q=user_alice')).body.users[0].blockedAt, null)
+
+    // Écriture dans D1 perdue : le Durable Object bloque, la liste ne le sait pas ; la fiche la répare.
+    t.db.prepare = (sql) => (sql.startsWith('INSERT INTO user_blocks') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
+    assert.equal((await t.admin('/admin/users/user_alice/block', post({ key: key(), blocked: true, reason: 'Fraude' }))).status, 200)
+    assert.deepEqual(t.rows('SELECT * FROM user_blocks'), [])
+    t.db.prepare = prepare
+    const page = await t.admin('/admin/users/user_alice')
+    assert.ok(page.body.user.blockedAt)
+    assert.equal(t.rows('SELECT reason FROM user_blocks WHERE user_id = ?', 'user_alice')[0].reason, 'Fraude')
+    assert.ok((await t.admin('/admin/users?q=user_alice')).body.users[0].blockedAt)
+  } finally { console.error = realError; t.restore() }
+})
+
+test('recharges : `limit` non entier (1.5) est arrondi, pas une erreur SQLite', async () => {
+  const t = setup()
+  try {
+    await t.as('user_alice', '/topups', post(topupReq))
+    for (const limit of ['1.5', '199.5', '-3.7', 'abc']) {
+      const r = await t.admin(`/admin/topups?limit=${limit}`)
+      assert.equal(r.status, 200, limit)
+      assert.equal(r.body.topups.length, 1, limit)
+    }
+  } finally { t.restore() }
+})
+
+test('annulation de l\'utilisateur pendant l\'enregistrement des fichiers : pas d\'annulation chez fal, la génération reste en cours', async () => {
+  const t = setup()
+  try {
+    const job = await t.as('user_alice', '/jobs', post(image))
+    const m = t.stores.get('user_alice')
+    m.set(`job:${job.body.jobId}`, { ...m.get(`job:${job.body.jobId}`), status: 'IN_PROGRESS', storingAt: Date.now() })
+    const r = await t.as('user_alice', `/jobs/${job.body.jobId}/cancel`, { method: 'POST' })
+    assert.deepEqual([r.status, r.body.status, r.body.refund, t.cancels.length], [200, 'IN_PROGRESS', 0, 0])
+    assert.equal(m.get(`job:${job.body.jobId}`).status, 'IN_PROGRESS')
+  } finally { t.restore() }
+})
+
+test('deux suivis partis de la même copie voient fal terminé : un seul copie les fichiers dans R2', async () => {
+  const t = setup()
+  try {
+    const job = await t.as('user_alice', '/jobs', post(image))
+    const id = job.body.jobId
+    const snapshot = t.stores.get('user_alice').get(`job:${id}`)
+    t.fal = 'COMPLETED'
+    let open
+    const gate = new Promise((r) => { open = r })
+    let downloads = 0
+    const fake = globalThis.fetch
+    globalThis.fetch = async (url, init) => {
+      if (String(url) === 'https://fal.media/chat.png') { downloads++; await gate; return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }) }
+      return fake(url, init)
+    }
+    let puts = 0
+    const env = { FAL_KEY: 'test', FILES: { put: async () => { puts++ } } }
+    const acct = async (path, body) => (await t.account('user_alice').fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))).json()
+    const first = advanceJob({ env, acct, accountId: 'user_alice', origin: ORIGIN, job: snapshot })
+    while (!t.stores.get('user_alice').get(`job:${id}`).storingAt) await sleep(1)
+    const second = advanceJob({ env, acct, accountId: 'user_alice', origin: ORIGIN, job: snapshot }) // même copie, sans storingAt
+    await sleep(20)
+    open()
+    const [a, b] = await Promise.all([first, second])
+    assert.deepEqual([puts, downloads], [1, 1])
+    assert.equal(a.job.status, 'COMPLETED')
+    assert.equal(b.job.status, 'IN_PROGRESS') // refusé : l'autre suivi enregistre
+    assert.equal(t.stores.get('user_alice').get(`job:${id}`).status, 'COMPLETED')
+  } finally { t.restore() }
 })

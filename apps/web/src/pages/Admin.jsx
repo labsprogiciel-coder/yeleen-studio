@@ -7,7 +7,7 @@ import useTabKeys from '../lib/useTabKeys.js'
 import { api } from '../lib/api.js'
 import { fcfa } from '../lib/topups.js'
 import {
-  ACTIONS, JOB_STATUS, LEDGER_KIND, MAX_ADJUST, TOPUP_STATUS, adminError, adminKey, ageMin, canRecheck, cauris, caurisLabel, checkReason,
+  ACTIONS, JOB_STATUS, LEDGER_KIND, MAX_ADJUST, TOPUP_STATUS, adminError, adminKey, ageMin, attemptStore, canRecheck, cauris, caurisLabel, checkReason,
   failureKind, formatAge, formatDate, isActiveJob, isStuckJob, isStuckTopup, parseAmount, pick, refundable, resultText, sortTopups,
 } from '../lib/admin.js'
 import '../styles/shell.css'
@@ -49,6 +49,8 @@ export default function Admin() {
   const onTabKeys = useTabKeys()
   const [dialog, setDialog] = useState(null) // { spec, n } : `n` change à chaque ouverture, donc une clé d'idempotence neuve
   const openAction = useCallback((spec) => setDialog((d) => ({ spec, n: (d?.n ?? 0) + 1 })), [])
+  const attempts = useRef(null) // envois sans réponse sûre : survivent à la fermeture de la fenêtre (voir attemptStore)
+  attempts.current ??= attemptStore()
   const go = (next) => setParams(Object.fromEntries(Object.entries(next).filter(([, v]) => v)))
 
   return (
@@ -70,7 +72,7 @@ export default function Admin() {
           {tab === 2 && <TopupsTab openAction={openAction} />}
         </section>
       </main>
-      {dialog && <ActionDialog key={dialog.n} spec={dialog.spec} onClose={() => setDialog(null)} />}
+      {dialog && <ActionDialog key={dialog.n} spec={dialog.spec} attempts={attempts.current} onClose={() => setDialog(null)} />}
     </div>
   )
 }
@@ -154,17 +156,17 @@ function UserPanel({ uid, close, openAction, onChanged }) {
         )}
         <div className="adm-actions">
           <button type="button" className="adm-btn primary" onClick={() => act({
-            action: 'adjust', title: 'Ajuster le solde', intro: `Solde actuel de ${who} : ${caurisLabel(balance)}. L’opération est inscrite dans l’historique du solde et le journal admin.`,
+            action: 'adjust', target: uid, title: 'Ajuster le solde', intro: `Solde actuel de ${who} : ${caurisLabel(balance)}. L’opération est inscrite dans l’historique du solde et le journal admin.`,
             directions: true, amount: true, max: MAX_ADJUST, confirm: 'Enregistrer',
             run: ({ key, reason, amount, direction }) => api.adminAdjust(uid, { key, direction, amount, reason }).then((r) => ({ amount, ...r })),
           })}>Ajuster le solde</button>
           {blocked
             ? <button type="button" className="adm-btn" onClick={() => act({
-                action: 'unblock', title: 'Débloquer le compte', intro: `${who} pourra de nouveau générer, recharger et importer des fichiers.`, confirm: 'Débloquer',
+                action: 'unblock', target: uid, title: 'Débloquer le compte', intro: `${who} pourra de nouveau générer, recharger et importer des fichiers.`, confirm: 'Débloquer',
                 run: ({ key, reason }) => api.adminBlock(uid, { key, blocked: false, reason }),
               })}>Débloquer</button>
             : <button type="button" className="adm-btn danger" onClick={() => act({
-                action: 'block', title: 'Bloquer le compte', intro: `${who} ne pourra plus lancer de génération, de recharge ni d’import. Les générations en cours et les paiements déjà lancés continuent.`, confirm: 'Bloquer', danger: true,
+                action: 'block', target: uid, title: 'Bloquer le compte', intro: `${who} ne pourra plus lancer de génération, de recharge ni d’import. Les générations en cours et les paiements déjà lancés continuent.`, confirm: 'Bloquer', danger: true,
                 run: ({ key, reason }) => api.adminBlock(uid, { key, blocked: true, reason }),
               })}>Bloquer</button>}
         </div>
@@ -298,21 +300,21 @@ function JobStatus({ j, now = Date.now() }) {
 /* Fenêtres d'action partagées par les trois onglets. */
 
 const recheckSpec = (uid, t, onDone) => ({
-  action: 'recheck_topup', title: 'Revérifier la recharge', onDone,
+  action: 'recheck_topup', target: uid, ref: t.reference, title: 'Revérifier la recharge', onDone,
   intro: `La recharge ${t.reference} (${fcfaOf(t)}) est redemandée à Paygate. Si elle est payée, elle est créditée par le chemin habituel ; jamais d’après un statut saisi ici.`,
   confirm: 'Revérifier',
   run: ({ key, reason }) => api.adminRecheck(uid, t.reference, { key, reason }),
 })
 
 const refundSpec = (uid, j, onDone) => ({
-  action: 'refund_job', title: 'Rembourser la génération', onDone,
+  action: 'refund_job', target: uid, ref: j.id, title: 'Rembourser la génération', onDone,
   intro: `Coût débité : ${caurisLabel(Number(j.cost))}. Un seul remboursement par génération, au plus ce coût. Laissez le montant vide pour tout rembourser.`,
   amount: true, optional: true, max: refundable(j), confirm: 'Rembourser',
   run: ({ key, reason, amount }) => api.adminRefund(uid, j.id, { key, reason, amount }),
 })
 
 const cancelSpec = (uid, j, onDone) => ({
-  action: 'cancel_job', title: 'Annuler et rembourser', danger: true, onDone,
+  action: 'cancel_job', target: uid, ref: j.id, title: 'Annuler et rembourser', danger: true, onDone,
   intro: 'On redemande d’abord son état au fournisseur : si elle est terminée, elle est enregistrée avec ses fichiers et rien n’est remboursé. Sinon elle est annulée et son coût rendu.',
   confirm: 'Annuler et rembourser',
   run: ({ key, reason }) => api.adminCancel(uid, j.id, { key, reason }),
@@ -414,17 +416,19 @@ function TopupsTab({ openAction }) {
  * Confirmation d'une action : motif obligatoire, montant si besoin, puis le compte-rendu du serveur. Une clé d'idempotence par
  * ouverture : réessayer après une coupure renvoie la même clé, et le serveur rend le premier résultat au lieu de refaire l'opération.
  * Après un refus net du serveur (4xx), rien n'a bougé : la clé est renouvelée pour que la saisie corrigée parte comme une nouvelle opération.
- * Après une issue incertaine (réseau, 5xx), les champs sont figés pour que l'essai suivant soit identique.
+ * Après une issue incertaine (réseau, 5xx), les champs sont figés pour que l'essai suivant soit identique ; la tentative est gardée hors
+ * de la fenêtre (`attempts`) : fermée puis rouverte, la même action reprend la même clé et la même saisie (jamais une clé neuve).
  */
-function ActionDialog({ spec, onClose }) {
+function ActionDialog({ spec, attempts, onClose }) {
   const ref = useRef(null)
-  const [key, setKey] = useState(adminKey)
-  const [reason, setReason] = useState('')
-  const [amount, setAmount] = useState('')
-  const [direction, setDirection] = useState('credit')
+  const [saved] = useState(() => attempts?.get(spec) ?? null)
+  const [key, setKey] = useState(() => saved?.key ?? adminKey())
+  const [reason, setReason] = useState(saved?.reason ?? '')
+  const [amount, setAmount] = useState(saved?.amount ?? '')
+  const [direction, setDirection] = useState(saved?.direction ?? 'credit')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const [locked, setLocked] = useState(false)
+  const [error, setError] = useState(saved ? adminError('resumed') : null)
+  const [locked, setLocked] = useState(Boolean(saved))
   const [stopped, setStopped] = useState(false) // échec sans issue (rien n'a bougé, réessayer ne changerait rien) : seulement « Fermer »
   const [result, setResult] = useState(null)
 
@@ -436,7 +440,7 @@ function ActionDialog({ spec, onClose }) {
   const close = () => {
     if (busy) return
     onClose()
-    if (result) spec.onDone?.()
+    if (result || locked) spec.onDone?.() // issue incertaine : l'opération a pu aboutir, on relit le compte
   }
 
   const submit = async (e) => {
@@ -453,10 +457,12 @@ function ActionDialog({ spec, onClose }) {
     setBusy(true); setError(null)
     try {
       const res = await spec.run({ key, reason: r.reason, amount: value, direction })
+      attempts?.settle(spec, 'done')
       setResult(resultText(spec.action === 'adjust' ? direction : spec.action, res))
     } catch (err) {
       setError(adminError(err))
       const kind = failureKind(err)
+      attempts?.settle(spec, kind, { key, reason, amount, direction })
       if (kind === 'refused') { setKey(adminKey()); setLocked(false) } else { setLocked(true); setStopped(kind === 'final') }
     } finally { setBusy(false) }
   }

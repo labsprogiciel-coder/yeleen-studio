@@ -246,3 +246,40 @@ test('applyPayment et newReference', () => {
   assert.equal(applyPayment({ ...t, status: 'completed' }, { reference: ref, status: 'completed', amount: 1000 }).credit, 0)
   assert.equal(applyPayment(t, { reference: ref, status: 'completed', amount: 1000, currency: 'EUR' }).mismatch, true)
 })
+
+test('revérification : crédit fait puis note de vérification en échec → le crédit est rendu, pas « 0 et erreur paygate »', async () => {
+  const { recheckTopup } = await import('../src/topups.js')
+  const realError = console.error
+  console.error = () => {}
+  try {
+    const topup = { reference: 'yl_A', status: 'processing', createdAt: Date.now() }
+    const acct = async (path) => {
+      if (path === '/topup/apply') return { topup: { ...topup, status: 'completed' }, credited: 160, mismatch: false }
+      throw new Error('Durable Object réinitialisé') // /topup/patch
+    }
+    const out = await recheckTopup({ pg: { collection: async () => ({ status: 'completed', amount: 5000 }) }, acct, topup })
+    assert.deepEqual([out.credited, out.error, out.topup.status], [160, null, 'completed'])
+  } finally { console.error = realError }
+})
+
+test('revérification : paygate ne connaît pas une recharge en attente de moins de 2 min → `not_found_yet` (pas définitif) ; après 2 min, échouée', async () => {
+  const { recheckTopup } = await import('../src/topups.js')
+  const { PaygateError } = await import('../src/paygate.js')
+  const realError = console.error
+  console.error = () => {}
+  try {
+    const createdAt = Date.now()
+    let stored = { reference: 'yl_B', status: 'pending', createdAt }
+    const acct = async (path, body) => {
+      if (path === '/topup/patch') { if (body.from.includes(stored.status)) stored = { ...stored, ...Object.fromEntries(Object.entries(body).filter(([k]) => !['reference', 'from'].includes(k))) }; return { ok: true, topup: stored } }
+      throw new Error(path)
+    }
+    const pg = { collection: async () => { throw new PaygateError(404, { error: { code: 'not_found' } }, 'collection') } }
+    const young = await recheckTopup({ pg, acct, topup: stored, now: createdAt + 30_000 })
+    assert.equal(young.error, 'not_found_yet')
+    const old = await recheckTopup({ pg, acct, topup: stored, now: createdAt + 130_000 })
+    assert.deepEqual([old.error, old.topup.status], [null, 'failed'])
+    const gone = await recheckTopup({ pg, acct, topup: { ...stored, status: 'failed' }, now: createdAt + 200_000 })
+    assert.equal(gone.error, 'not_found')
+  } finally { console.error = realError }
+})

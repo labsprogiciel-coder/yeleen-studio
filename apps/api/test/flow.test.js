@@ -64,7 +64,7 @@ test('échec pendant la génération : une seule fois remboursé, même si on in
   const t = setup((url) => {
     if (url.endsWith('/nano-banana-pro')) return { body: queued }
     if (url.includes('/status')) return { body: { status: 'COMPLETED' } }
-    return { status: 500, body: { detail: 'erreur interne' } }
+    return { status: 422, body: { detail: 'requête refusée' } } // refus définitif du résultat (un 5xx est passager : voir admin.test.js)
   })
   try {
     const start = (await (await t.req('/wallet')).json()).balance
