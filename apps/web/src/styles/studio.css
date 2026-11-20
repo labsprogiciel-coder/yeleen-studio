@@ -29,6 +29,10 @@
 .cx-new,.cx-ri,.cx-bal{flex:none;display:flex;align-items:center;gap:12px;width:100%;height:44px;padding:0 12px;box-sizing:border-box;border:0;border-radius:12px;font-size:14.5px;font-weight:600;text-align:left;white-space:nowrap;overflow:hidden;cursor:pointer;text-decoration:none}
 .cx-new>svg,.cx-ri>svg{flex:none}
 .cx-new{margin-bottom:6px;background:var(--lime);color:var(--on-lime)}
+/* « Nouvelle création » 15 % plus petit que les autres entrées (44 → 38 px de haut, texte 14,5 → 12,5 px), agrandie comme réduite. */
+.cx-rail .cx-new{height:38px;gap:10px;padding:0 10px;border-radius:10px;font-size:12.5px}
+.cx-rail.is-collapsed .cx-new{width:38px;padding:0;justify-content:center;align-self:center}
+.cx-rail.is-collapsed .cx-new .cx-lbl{display:none}
 .cx-new:hover{filter:brightness(.92)}
 .cx-rs{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
 .cx-rs::-webkit-scrollbar{display:none}
@@ -256,7 +260,7 @@
   .cx-rail .cx-logo-full,.cx-fold{display:none}
   .cx-rail .cx-logo{padding:0}
   .cx-lbl,.cx-rail .cx-bal .cx-lbl{display:none}
-  .cx-new{grid-area:new;width:44px;margin:0;padding:0;justify-content:center}
+  .cx-new,.cx-rail .cx-new,.cx-rail.is-collapsed .cx-new{grid-area:new;width:38px;height:38px;margin:0;padding:0;justify-content:center;align-self:center}
   .cx-rs{grid-area:list;flex-direction:row;align-items:center;overflow-x:auto;overflow-y:hidden}
   .cx-rl{flex-direction:row}
   .cx-ri{width:44px;padding:0;justify-content:center}
