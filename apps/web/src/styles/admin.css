@@ -59,15 +59,31 @@
 .adm-btn:focus-visible,.adm-x:focus-visible,.adm-list button:focus-visible,.adm-seg button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
 .adm-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:min(60vh,640px);overflow-y:auto}
-.adm-list button{position:relative;width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border:1px solid var(--line-soft);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.adm-list button{position:relative;width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line-soft);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .adm-list button:hover{border-color:var(--line-strong)}
 .adm-list button.on{border-color:var(--lime-ink);background:var(--lime-tint)}
 .adm-list b{font-size:14px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.adm-list span{font-size:12px;color:var(--ink-3);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .adm-list .adm-tag{position:absolute;top:8px;right:8px}
+.adm-who{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.adm-list .adm-who>span{font-size:12px;color:var(--ink-3);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-list button:has(.adm-tag) .adm-who>b{padding-right:72px;box-sizing:border-box}
+
+/* Photo ronde d'un compte, ou ses initiales (repli). */
+.adm-av{flex:none;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;overflow:hidden;background:var(--fill);color:var(--ink-2);font-family:var(--font-display);font-size:13px;font-weight:700;line-height:1;letter-spacing:.02em;user-select:none;box-shadow:inset 0 0 0 1px var(--line-soft)}
+.adm-av img{width:100%;height:100%;object-fit:cover;display:block}
+.adm-av-sm{width:28px;height:28px;font-size:11px}
+.adm-av-lg{width:56px;height:56px;font-size:20px}
+.adm-ell{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-acct{display:flex;align-items:flex-start;gap:8px;min-width:160px;max-width:260px}
+.adm-acct>div{min-width:0;display:flex;flex-direction:column;gap:1px}
+.adm-acct .adm-link{display:block;margin-right:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-acct .adm-av{margin-top:1px}
 
 .adm-user{display:flex;flex-direction:column;gap:12px;min-width:0}
-.adm-ph{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.adm-ph{display:flex;align-items:center;gap:14px}
+.adm-ph-t{flex:1;min-width:0}
+.adm-ph>.adm-x{align-self:flex-start}
+.adm-mail{margin:4px 0 0;font-size:14px;color:var(--ink-2)}
 .adm-ph h2{font-size:22px;line-height:1.1;overflow-wrap:anywhere;text-transform:none}
 .adm-id{margin:4px 0 0;font-family:var(--font-mono);font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
 .adm-x{flex:none;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border:0;border-radius:50%;background:var(--fill);color:var(--ink);cursor:pointer}
@@ -76,6 +92,7 @@
 .adm-dl div{min-width:0}
 .adm-dl dt{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4)}
 .adm-dl dd{margin:2px 0 0;font-size:14px;overflow-wrap:anywhere}
+.adm-dl dd.adm-ell{overflow-wrap:normal}
 .adm-dl dd.adm-num{font-family:var(--font-display);font-size:22px;font-weight:800;color:var(--ink)}
 .adm-blocked{display:flex;gap:8px;align-items:flex-start;margin:14px 0 0;padding:10px 12px;border-radius:12px;background:var(--danger-bg);color:var(--danger-ink);font-size:13px;line-height:1.4}
 .adm-blocked svg{flex:none;margin-top:1px}

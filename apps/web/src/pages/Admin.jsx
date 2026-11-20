@@ -7,7 +7,7 @@ import { api } from '../lib/api.js'
 import { fcfa } from '../lib/topups.js'
 import {
   ACTIONS, JOB_STATUS, LEDGER_KIND, MAX_ADJUST, TOPUP_STATUS, adminError, adminKey, ageMin, attemptStore, canRecheck, cauris, caurisLabel, checkReason,
-  failureKind, formatAge, formatDate, isActiveJob, isStuckJob, isStuckTopup, parseAmount, pick, refundable, resultText, sortTopups,
+  failureKind, formatAge, formatDate, identity, isActiveJob, isStuckJob, isStuckTopup, parseAmount, pick, refundable, resultText, sortTopups,
 } from '../lib/admin.js'
 import '../styles/shell.css'
 import '../styles/admin.css'
@@ -25,6 +25,37 @@ const TABS = [
 
 /** Adresse d'une section ; « Utilisateurs » garde le compte ouvert. */
 const sectionHref = (id, uid) => `/admin?${new URLSearchParams(id === 'users' && uid ? { t: id, u: uid } : { t: id })}`
+
+/**
+ * Photo ronde d'un compte (`who` : voir identity) ; sans photo, ou si elle ne se charge pas, ses initiales. Décorative (alt="") :
+ * le nom est toujours écrit à côté. `no-referrer` : l'hébergeur de la photo ne voit pas l'adresse de l'administration.
+ */
+function Avatar({ who, size = 'md' }) {
+  const [broken, setBroken] = useState(false)
+  useEffect(() => setBroken(false), [who.avatar])
+  return (
+    <span className={`adm-av adm-av-${size}`} aria-hidden="true">
+      {who.avatar && !broken
+        ? <img src={who.avatar} alt="" referrerPolicy="no-referrer" loading="lazy" decoding="async" onError={() => setBroken(true)} />
+        : who.initials}
+    </span>
+  )
+}
+
+/** Compte dans une colonne de tableau : petite photo, lien vers sa fiche (nom ou e-mail), e-mail dessous. */
+function AccountCell({ row, children }) {
+  const who = identity(row)
+  return (
+    <div className="adm-acct">
+      <Avatar who={who} size="sm" />
+      <div>
+        <Link className="adm-link" to={`/admin?t=users&u=${encodeURIComponent(who.id)}`}>{who.title}</Link>
+        {who.email && <small className="adm-ell" title={who.email}>{who.email}</small>}
+        {children}
+      </div>
+    </div>
+  )
+}
 
 /** Liste d'une réponse, quel que soit son nom (`users`, `jobs`…), ou la réponse elle-même si c'est un tableau. */
 const rows = (r, name) => (Array.isArray(r) ? r : r?.[name] ?? r?.results ?? r?.rows ?? [])
@@ -116,16 +147,22 @@ function UsersTab({ uid, select, openAction }) {
           {found.error && <p className="adm-err" role="alert">{found.error}</p>}
           <p className="adm-note" aria-live="polite">{found.loading ? 'Recherche…' : `${users.length} compte${users.length > 1 ? 's' : ''}${query ? '' : ' récents'}`}</p>
           <ul className="adm-list">
-            {users.map((u) => (
-              <li key={u.id}>
-                <button type="button" className={u.id === uid ? 'on' : ''} aria-current={u.id === uid ? 'true' : undefined} onClick={() => select(u.id)}>
-                  <b>{u.email || u.name || u.id}</b>
-                  <span>{u.email && u.name ? `${u.name} · ` : ''}{u.id}</span>
-                  <span>{u.country ? `${u.country} · ` : ''}vu {formatDate(pick(u, 'lastSeenAt'))}</span>
-                  {pick(u, 'blockedAt') && <em className="adm-tag ko">Suspendu</em>}
-                </button>
-              </li>
-            ))}
+            {users.map((u) => {
+              const who = identity(u)
+              return (
+                <li key={u.id}>
+                  <button type="button" className={u.id === uid ? 'on' : ''} aria-current={u.id === uid ? 'true' : undefined} onClick={() => select(u.id)}>
+                    <Avatar who={who} />
+                    <span className="adm-who">
+                      <b>{who.title}</b>
+                      {who.email && <span>{who.email}</span>}
+                      <span>{u.country ? `${u.country} · ` : ''}vu {formatDate(pick(u, 'lastSeenAt'))}</span>
+                    </span>
+                    {pick(u, 'blockedAt') && <em className="adm-tag ko">Suspendu</em>}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </div>
         {uid
@@ -145,15 +182,20 @@ function UserPanel({ uid, close, openAction, onChanged }) {
   const jobs = data.jobs ?? []
   const ledger = data.ledger ?? []
   const actions = data.actions ?? []
-  const who = user.email || user.name || uid
+  const id = identity({ ...user, id: uid })
+  const who = id.title
+  // Les confirmations désignent le compte sans ambiguïté : le nom (choisi par l'utilisateur, non unique) est suivi de l'e-mail ou de l'identifiant.
+  const target = id.name ? `${id.name} (${id.email || uid})` : who
   const act = (spec) => openAction({ ...spec, onDone: () => { reload(); onChanged?.() } }) // la liste aussi (« Suspendu »)
 
   return (
     <div className="adm-user" aria-busy={loading}>
       <div className="adm-card adm-profile">
         <div className="adm-ph">
-          <div>
-            <h2>{who}</h2>
+          <Avatar who={id} size="lg" />
+          <div className="adm-ph-t">
+            <h2 className={id.name ? undefined : 'adm-ell'} title={who}>{who}</h2>
+            {id.email && <p className="adm-mail adm-ell" title={id.email}>{id.email}</p>}
             <p className="adm-id">{uid}</p>
           </div>
           <button type="button" className="adm-x" aria-label="Fermer ce compte" onClick={close}><Icon name="close" size={16} /></button>
@@ -161,7 +203,7 @@ function UserPanel({ uid, close, openAction, onChanged }) {
         <dl className="adm-dl">
           <div><dt>Solde</dt><dd className="adm-num">{caurisLabel(balance)}</dd></div>
           <div><dt>Nom</dt><dd>{user.name || '—'}</dd></div>
-          <div><dt>E-mail</dt><dd>{user.email || '—'}</dd></div>
+          <div><dt>E-mail</dt><dd className="adm-ell" title={user.email || undefined}>{user.email || '—'}</dd></div>
           <div><dt>Pays</dt><dd>{user.country || '—'}</dd></div>
           <div><dt>Inscrit</dt><dd>{formatDate(pick(user, 'createdAt'))}</dd></div>
           <div><dt>Vu</dt><dd>{formatDate(pick(user, 'lastSeenAt'))}</dd></div>
@@ -174,17 +216,17 @@ function UserPanel({ uid, close, openAction, onChanged }) {
         )}
         <div className="adm-actions">
           <button type="button" className="adm-btn primary" onClick={() => act({
-            action: 'adjust', target: uid, title: 'Ajuster le solde', intro: `Solde actuel de ${who} : ${caurisLabel(balance)}. L’opération est inscrite dans l’historique du solde et le journal admin.`,
+            action: 'adjust', target: uid, title: 'Ajuster le solde', intro: `Solde actuel de ${target} : ${caurisLabel(balance)}. L’opération est inscrite dans l’historique du solde et le journal admin.`,
             directions: true, amount: true, max: MAX_ADJUST, confirm: 'Enregistrer',
             run: ({ key, reason, amount, direction }) => api.adminAdjust(uid, { key, direction, amount, reason }).then((r) => ({ amount, ...r })),
           })}>Ajuster le solde</button>
           {blocked
             ? <button type="button" className="adm-btn" onClick={() => act({
-                action: 'unblock', target: uid, title: 'Débloquer le compte', intro: `${who} pourra de nouveau générer, recharger et importer des fichiers.`, confirm: 'Débloquer',
+                action: 'unblock', target: uid, title: 'Débloquer le compte', intro: `${target} pourra de nouveau générer, recharger et importer des fichiers.`, confirm: 'Débloquer',
                 run: ({ key, reason }) => api.adminBlock(uid, { key, blocked: false, reason }),
               })}>Débloquer</button>
             : <button type="button" className="adm-btn danger" onClick={() => act({
-                action: 'block', target: uid, title: 'Bloquer le compte', intro: `${who} ne pourra plus lancer de génération, de recharge ni d’import. Les générations en cours et les paiements déjà lancés continuent.`, confirm: 'Bloquer', danger: true,
+                action: 'block', target: uid, title: 'Bloquer le compte', intro: `${target} ne pourra plus lancer de génération, de recharge ni d’import. Les générations en cours et les paiements déjà lancés continuent.`, confirm: 'Bloquer', danger: true,
                 run: ({ key, reason }) => api.adminBlock(uid, { key, blocked: true, reason }),
               })}>Bloquer</button>}
         </div>
@@ -366,7 +408,7 @@ function JobsTab({ openAction }) {
                   const uid = pick(j, 'userId') ?? j.account
                   return (
                     <tr key={j.id}>
-                      <td><Link className="adm-link" to={`/admin?t=users&u=${encodeURIComponent(uid)}`}>{j.email || uid}</Link></td>
+                      <td><AccountCell row={{ ...j, userId: uid }} /></td>
                       <td>{pick(j, 'modelId') ?? j.kind}<br /><small className="adm-mono">{j.id}</small></td>
                       <td><JobStatus j={j} now={now} /></td>
                       <td className="adm-num">{formatAge(j.ageMin ?? ageMin(pick(j, 'createdAt'), now))}</td>
@@ -416,7 +458,7 @@ function TopupsTab({ openAction }) {
                 {topups.map((t) => (
                   <tr key={t.reference}>
                     <td>{formatDate(pick(t, 'createdAt'))}</td>
-                    <td><Link className="adm-link" to={`/admin?t=users&u=${encodeURIComponent(t.account)}`}>{t.email || t.account}</Link><br /><small>{t.operator ?? ''} {t.phone ?? ''}</small></td>
+                    <td><AccountCell row={t}><small>{t.operator ?? ''} {t.phone ?? ''}</small></AccountCell></td>
                     <td className="adm-mono">{t.reference}</td>
                     <td className="adm-num">{fcfaOf(t)}<br /><small>{caurisLabel(Number(t.jetons))}</small></td>
                     <td><TopupStatus t={t} now={now} /></td>

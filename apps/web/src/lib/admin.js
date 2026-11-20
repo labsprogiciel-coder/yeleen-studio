@@ -2,6 +2,7 @@
  * Administration côté interface : clés d'idempotence, contrôle des montants et des motifs, messages d'erreur, âges et libellés.
  * Sans React ni navigateur (testé par test/admin.test.js). La vraie garde est côté API : ces contrôles évitent seulement un aller-retour.
  */
+import { initials } from './accountMenu.js'
 
 /** Plafond d'un ajustement manuel, le même que `ADMIN_MAX_ADJUST` par défaut côté API. */
 export const MAX_ADJUST = 10000
@@ -217,4 +218,24 @@ export function resultText(action, r = {}) {
     return `Recharge revérifiée : ${TOPUP_STATUS[s] ?? s ?? 'statut inconnu'}${r.topup?.mismatch ? ' (montant différent : non créditée)' : ''}.${bal}`
   }
   return `Opération enregistrée.${bal}`
+}
+
+/** Photo de profil affichable : https seulement (l'API filtre déjà, on ne charge jamais autre chose), sinon null. */
+export function avatarSrc(url) {
+  if (typeof url !== 'string' || url.length > 500) return null
+  try { return new URL(url).protocol === 'https:' ? url : null } catch { return null }
+}
+
+/**
+ * Identité d'un compte pour les listes et la fiche : `title` (nom, sinon e-mail, sinon identifiant), `email` à montrer dessous (s'il
+ * n'est pas déjà le titre), `initials` (repli sans photo) et `avatar` (photo https ou null). Accepte une ligne d'utilisateur, de
+ * recharge ou de génération (`id`, `userId` ou `account`).
+ */
+export function identity(row = {}) {
+  const clean = (v) => String(v ?? '').replace(/\s+/g, ' ').trim()
+  const id = clean(pick(row, 'userId') ?? row.account ?? row.id)
+  const name = clean(row.name)
+  const email = clean(row.email)
+  const title = name || email || id || '—'
+  return { id, name, title, email: name ? email : '', initials: initials(name || email.split('@')[0] || id.replace(/^user_/, '')), avatar: avatarSrc(pick(row, 'avatarUrl')) }
 }
