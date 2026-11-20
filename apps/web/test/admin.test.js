@@ -122,3 +122,17 @@ test('revérification : paygate ne connaît pas le paiement (502 not_found) → 
   assert.equal(failureKind({ status: 502, body: { error: 'provider' } }), 'uncertain')
   assert.equal(failureKind({ status: 0 }), 'uncertain')
 })
+
+test('échec d’une action : 401 et 403 (avant la lecture de la clé) et 4xx inconnus restent incertains — même clé, champs figés', () => {
+  // Premier envoi resté sans réponse, puis la session expire : l’action a pu aboutir, une nouvelle clé la referait.
+  assert.equal(failureKind({ status: 401, body: { error: 'unauthorized' } }), 'uncertain')
+  assert.equal(failureKind({ status: 401 }), 'uncertain')
+  assert.equal(failureKind({ status: 403, body: { error: 'forbidden' } }), 'uncertain')
+  assert.equal(failureKind({ status: 429, body: { error: 'rate_limited' } }), 'uncertain')
+  assert.equal(failureKind({ status: 400 }), 'uncertain')
+  // Refus examinés par l’API après la clé : rien n’a bougé, nouvelle clé et saisie corrigeable.
+  for (const [status, error] of [[400, 'invalid_amount'], [400, 'invalid_reason'], [400, 'invalid_key'], [402, 'insufficient'], [409, 'key_conflict'],
+    [409, 'already_refunded'], [409, 'not_active'], [409, 'storing'], [409, 'no_debit'], [409, 'job_active'], [404, 'not_found'], [409, 'already_completed']]) {
+    assert.equal(failureKind({ status, body: { error } }), 'refused', error)
+  }
+})

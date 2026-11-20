@@ -543,3 +543,129 @@ test('administration : D1 en panne après l\'action → l\'argent reste, l\'erre
     t.db.prepare = prepare
   } finally { console.error = realError; t.restore() }
 })
+
+test('échec vu par un second suivi pendant la copie des fichiers : refusé (storing), le premier suivi termine avec les fichiers, rien n\'est rendu', async () => {
+  const t = setup()
+  try {
+    const job = await t.as('user_alice', '/jobs', post(image))
+    const id = job.body.jobId
+    const snapshot = t.stores.get('user_alice').get(`job:${id}`)
+    t.fal = 'COMPLETED'
+    let open
+    const gate = new Promise((r) => { open = r })
+    let resultDown = false
+    const fake = globalThis.fetch
+    globalThis.fetch = async (url, init) => {
+      const u = String(url)
+      if (u === 'https://fal.media/chat.png') { await gate; return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/png' } }) }
+      if (resultDown && u === 'https://queue.fal.run/x/requests/r1') return Response.json({ detail: 'panne passagère' }, { status: 500 })
+      return fake(url, init)
+    }
+    const files = new Map()
+    const env = { FAL_KEY: 'test', FILES: { put: async (k, body) => { files.set(k, await new Response(body).arrayBuffer()) } } }
+    const acct = async (path, body) => (await t.account('user_alice').fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))).json()
+    const storer = advanceJob({ env, acct, accountId: 'user_alice', origin: ORIGIN, job: snapshot })
+    while (!t.stores.get('user_alice').get(`job:${id}`).storingAt) await new Promise((r) => setTimeout(r, 1))
+    resultDown = true // le second suivi voit COMPLETED mais la lecture du résultat échoue : FAILED « provider »
+    const second = await advanceJob({ env, acct, accountId: 'user_alice', origin: ORIGIN, job: snapshot })
+    assert.equal(second.job.status, 'IN_PROGRESS')
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, 240 - job.body.cost)
+    resultDown = false
+    open()
+    const first = await storer
+    assert.deepEqual([first.job.status, first.job.outputs[0].stored, files.size], ['COMPLETED', true, 1])
+    assert.equal(t.stores.get('user_alice').get(`job:${id}`).status, 'COMPLETED')
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, 240 - job.body.cost)
+  } finally { t.restore() }
+})
+
+test('Durable Object : une copie plus ancienne (sans storingAt) ne retire pas la marque d\'enregistrement ; l\'annulation reste refusée et les fichiers arrivent', async () => {
+  const m = new Map()
+  const a = new Account({ storage: { get: async (k) => structuredClone(m.get(k)), put: async (k, v) => { m.set(k, structuredClone(v)) } } }, { ENV: 'dev' })
+  const call = async (path, body) => { const res = await a.fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) })); return { status: res.status, body: await res.json() } }
+  const balance = async () => (await call('/balance', {})).body.balance
+  await call('/debit', { jobId: 'j1', amount: 10 })
+  await call('/job/put', { id: 'j1', status: 'IN_QUEUE', cost: 10 })
+  const start = await balance()
+  const at = Date.now()
+  await call('/job/put', { id: 'j1', status: 'IN_PROGRESS', cost: 10, storingAt: at }) // le webhook copie les fichiers
+  await call('/job/put', { id: 'j1', status: 'IN_PROGRESS', cost: 10, startedAt: at }) // le suivi, d'une copie IN_QUEUE
+  assert.equal(m.get('job:j1').storingAt, at)
+  assert.equal(m.get('job:j1').startedAt, at)
+  const c = await call('/job/cancel', { jobId: 'j1', user: true })
+  assert.deepEqual([c.status, c.body.error], [409, 'storing'])
+  const done = await call('/job/put', { id: 'j1', status: 'COMPLETED', cost: 10, outputs: [{ url: 'a' }] })
+  assert.equal(done.status, 200)
+  assert.deepEqual([m.get('job:j1').status, m.get('job:j1').outputs[0].url, m.get('job:j1').storingAt, await balance()], ['COMPLETED', 'a', undefined, start])
+  // Marque ancienne (copie abandonnée) : elle n'est pas gardée.
+  await call('/debit', { jobId: 'j2', amount: 10 })
+  await call('/job/put', { id: 'j2', status: 'IN_PROGRESS', cost: 10, storingAt: Date.now() - 120_000 })
+  await call('/job/put', { id: 'j2', status: 'IN_PROGRESS', cost: 10 })
+  assert.equal(m.get('job:j2').storingAt, undefined)
+  // /job/fail pendant une copie récente : refusé, ni remboursement ni réécriture.
+  await call('/debit', { jobId: 'j3', amount: 10 })
+  await call('/job/put', { id: 'j3', status: 'IN_PROGRESS', cost: 10, storingAt: Date.now() })
+  const before = await balance()
+  const f = await call('/job/fail', { jobId: 'j3', failure: 'provider' })
+  assert.deepEqual([f.status, f.body.error, f.body.job.status, await balance()], [409, 'storing', 'IN_PROGRESS', before])
+})
+
+test('journal : le montant d\'un remboursement est ce qui a été rendu (plafonné, ou tout par défaut) ; celui d\'une annulation aussi ; la clé rejouée compare le montant demandé', async () => {
+  const t = setup()
+  try {
+    const done = async () => { t.fal = 'IN_QUEUE'; const j = await t.as('user_alice', '/jobs', post(image)); t.fal = 'COMPLETED'; await t.as('user_alice', `/jobs/${j.body.jobId}`); return j.body }
+    const amountOf = (k) => t.rows('SELECT amount FROM admin_actions WHERE id = ?', k)[0].amount
+    const a = await done()
+    const k1 = key()
+    assert.equal((await t.admin(`/admin/users/user_alice/jobs/${a.jobId}/refund`, post({ key: k1, amount: 999, reason: 'Résultat raté' }))).body.refunded, a.cost)
+    assert.equal(amountOf(k1), a.cost)
+    const again = await t.admin(`/admin/users/user_alice/jobs/${a.jobId}/refund`, post({ key: k1, amount: 999, reason: 'Résultat raté' }))
+    assert.deepEqual([again.status, again.body.replayed, again.body.refunded], [200, true, a.cost])
+    assert.equal((await t.admin(`/admin/users/user_alice/jobs/${a.jobId}/refund`, post({ key: k1, amount: a.cost, reason: 'Résultat raté' }))).body.error, 'key_conflict')
+    const b = await done()
+    const k2 = key()
+    await t.admin(`/admin/users/user_alice/jobs/${b.jobId}/refund`, post({ key: k2, reason: 'Résultat raté' })) // tout, par défaut
+    assert.equal(amountOf(k2), b.cost)
+    assert.equal((await t.admin(`/admin/users/user_alice/jobs/${b.jobId}/refund`, post({ key: k2, reason: 'Résultat raté' }))).body.replayed, true)
+    t.fal = 'IN_QUEUE'
+    const c = (await t.as('user_alice', '/jobs', post(image))).body
+    const k3 = key()
+    assert.equal((await t.admin(`/admin/users/user_alice/jobs/${c.jobId}/cancel`, post({ key: k3, reason: 'Bloquée chez fal' }))).body.refunded, c.cost)
+    assert.equal(amountOf(k3), c.cost)
+  } finally { t.restore() }
+})
+
+test('administration : journal D1 non écrit et réponse perdue → la même clé rend le premier résultat (remboursement, annulation, blocage), puis est notée', async () => {
+  const t = setup()
+  const realError = console.error
+  console.error = () => {}
+  try {
+    t.fal = 'IN_QUEUE'
+    const a = (await t.as('user_alice', '/jobs', post(image))).body
+    t.fal = 'COMPLETED'
+    await t.as('user_alice', `/jobs/${a.jobId}`)
+    t.fal = 'IN_QUEUE'
+    const c = (await t.as('user_alice', '/jobs', post(image))).body
+    const prepare = t.db.prepare
+    t.db.prepare = (sql) => (sql.startsWith('INSERT OR IGNORE INTO admin_actions') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
+    const kr = key(), kc = key(), kb = key()
+    const refund = () => t.admin(`/admin/users/user_alice/jobs/${a.jobId}/refund`, post({ key: kr, amount: 2, reason: 'Résultat raté' }))
+    const cancel = () => t.admin(`/admin/users/user_alice/jobs/${c.jobId}/cancel`, post({ key: kc, reason: 'Bloquée chez fal' }))
+    const block = () => t.admin('/admin/users/user_alice/block', post({ key: kb, blocked: true, reason: 'Fraude' }))
+    const first = [await refund(), await cancel(), await block()]
+    assert.deepEqual(first.map((r) => r.status), [200, 200, 200])
+    assert.equal(t.rows('SELECT * FROM admin_actions').length, 0)
+    t.db.prepare = prepare
+    const r = await refund()
+    assert.deepEqual([r.status, r.body.replayed, r.body.refunded], [200, true, 2])
+    const x = await cancel()
+    assert.deepEqual([x.status, x.body.replayed, x.body.outcome, x.body.refunded], [200, true, 'canceled', c.cost])
+    const bl = await block()
+    assert.deepEqual([bl.status, bl.body.replayed, bl.body.blocked.at], [200, true, first[2].body.blocked.at])
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, 240 - a.cost + 2) // rien n'est rendu deux fois
+    assert.deepEqual(t.rows('SELECT action, amount FROM admin_actions ORDER BY at').map((l) => [l.action, l.amount]), [['refund_job', 2], ['cancel_job', c.cost], ['block', null]])
+    // Même clé pour une autre action : conflit.
+    assert.equal((await t.admin(`/admin/users/user_alice/jobs/${c.jobId}/cancel`, post({ key: kr, reason: 'Bloquée chez fal' }))).body.error, 'key_conflict')
+    assert.equal((await t.admin('/admin/users/user_alice/block', post({ key: kc, blocked: false, reason: 'Fraude' }))).status, 409)
+  } finally { console.error = realError; t.restore() }
+})

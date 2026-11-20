@@ -74,7 +74,10 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     try {
       const prev = await c.env.DB.prepare('SELECT target, action, ref, amount, result FROM admin_actions WHERE id = ?1').bind(body.key).first()
       if (prev) {
-        const same = prev.target === uid && prev.action === action && (prev.ref ?? null) === ref && (amount === undefined || (prev.amount ?? null) === amount)
+        // Un remboursement note dans `amount` ce qui a été rendu ; le montant demandé (comparé ici) est gardé dans le résultat.
+        const kept = parse(prev.result)
+        const asked = kept && typeof kept === 'object' && 'requested' in kept ? kept.requested : prev.amount ?? null
+        const same = prev.target === uid && prev.action === action && (prev.ref ?? null) === ref && (amount === undefined || asked === amount)
         return { error: same ? c.json({ ...parse(prev.result), replayed: true }) : c.json({ error: 'key_conflict' }, 409) }
       }
     } catch (e) {
@@ -161,9 +164,12 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     if (b.amount != null && !validAmount(b.amount, maxAdjust(c.env))) return c.json({ error: 'invalid_amount', max: maxAdjust(c.env) }, 400)
     const s = await begin(c, t.uid, { action: 'refund_job', ref: jobId, amount: b.amount ?? null, body: b })
     if (s.error) return s.error
-    const r = await t.acct('/job/refund', { jobId, amount: b.amount ?? undefined, reason: s.reason, actor: c.get('uid') })
-    if (!r.body.ok) return c.json(r.body, r.status) // not_found, job_active, no_debit, already_refunded
-    await log(c, { key: s.key, uid: t.uid, action: 'refund_job', ref: jobId, amount: b.amount ?? null, reason: s.reason, result: r.body })
+    // La clé va au Durable Object : rejouée sans ligne dans D1 (panne du journal), il rend le premier résultat (`replayed`).
+    const r = await t.acct('/job/refund', { jobId, amount: b.amount ?? undefined, reason: s.reason, actor: c.get('uid'), key: s.key })
+    if (!r.body.ok) return c.json(r.body, r.status) // not_found, job_active, no_debit, already_refunded, key_conflict
+    const { replayed, ...result } = r.body
+    // `amount` : ce qui a vraiment été rendu (plafonné au débit) ; le montant demandé reste dans le résultat, pour la comparaison d'une clé rejouée.
+    await log(c, { key: s.key, uid: t.uid, action: 'refund_job', ref: jobId, amount: result.refunded, reason: s.reason, result: { ...result, requested: b.amount ?? null } })
     return c.json(r.body)
   })
 
@@ -180,6 +186,13 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     const b = await body(c)
     const s = await begin(c, t.uid, { action: 'cancel_job', ref: jobId, body: b })
     if (s.error) return s.error
+    // Clé déjà traitée mais absente de D1 (panne du journal) : le Durable Object a gardé le premier résultat.
+    const seen = (await t.acct('/admin/kept', { key: s.key })).body
+    if (seen) {
+      if (seen.action !== 'cancel_job' || seen.ref !== jobId) return c.json({ error: 'key_conflict' }, 409)
+      await log(c, { key: s.key, uid: t.uid, action: 'cancel_job', ref: jobId, amount: seen.result.outcome === 'canceled' ? seen.result.refunded : null, reason: s.reason, result: seen.result })
+      return c.json({ ...seen.result, replayed: true })
+    }
     const getJob = async () => (await t.acct(`/job/get?id=${encodeURIComponent(jobId)}`)).body
     let job = await getJob()
     if (!job) return c.json({ error: 'not_found' }, 404)
@@ -195,15 +208,17 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     if (job.status === 'COMPLETED' || job.status === 'FAILED') {
       // Terminée chez le fournisseur pendant ce suivi : rien à annuler (un échec a déjà été remboursé).
       result = { outcome: job.status === 'COMPLETED' ? 'completed' : 'failed', job, refunded: job.status === 'FAILED' ? job.refund ?? 0 : 0, balance: (await t.acct('/admin/state')).body.balance }
+      await t.acct('/admin/kept', { key: s.key, entry: { action: 'cancel_job', ref: jobId, result } })
     } else {
       // Terminée chez le fournisseur, ses fichiers sont en cours de copie ailleurs : elle va se terminer, on ne l'annule pas.
       if (job.storingAt && Date.now() - job.storingAt < STORING) return c.json({ error: 'storing', status: job.status }, 409)
       if (isActive(job)) await providerCancel(c.env, job)
-      const r = await t.acct('/job/cancel', { jobId, reason: s.reason, actor: c.get('uid') })
+      const r = await t.acct('/job/cancel', { jobId, reason: s.reason, actor: c.get('uid'), key: s.key })
       if (!r.body.ok) return c.json(r.body, r.status)
       result = { outcome: 'canceled', job: r.body.job, refunded: r.body.refunded, balance: r.body.balance }
     }
-    await log(c, { key: s.key, uid: t.uid, action: 'cancel_job', ref: jobId, reason: s.reason, result })
+    // `amount` : ce que l'annulation a rendu (un échec constaté pendant le suivi a été remboursé par le suivi, pas par l'annulation).
+    await log(c, { key: s.key, uid: t.uid, action: 'cancel_job', ref: jobId, amount: result.outcome === 'canceled' ? result.refunded : null, reason: s.reason, result })
     return c.json(result)
   })
 
@@ -216,7 +231,8 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     const action = b.blocked ? 'block' : 'unblock'
     const s = await begin(c, t.uid, { action, body: b })
     if (s.error) return s.error
-    const r = await t.acct('/admin/block', { blocked: b.blocked, reason: s.reason, actor: c.get('uid') })
+    const r = await t.acct('/admin/block', { blocked: b.blocked, reason: s.reason, actor: c.get('uid'), key: s.key })
+    if (!r.body.ok) return c.json(r.body, r.status) // key_conflict
     try {
       const db = c.env.DB
       await (r.body.blocked
@@ -226,7 +242,8 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
     } catch (e) {
       console.error('administration : blocage non copié (D1)', t.uid, e.message)
     }
-    await log(c, { key: s.key, uid: t.uid, action, reason: s.reason, result: r.body })
+    const { replayed, ...result } = r.body
+    await log(c, { key: s.key, uid: t.uid, action, reason: s.reason, result })
     return c.json(r.body)
   })
 

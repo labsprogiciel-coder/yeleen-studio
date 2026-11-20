@@ -77,12 +77,22 @@ const MESSAGES = {
 const paygateUnknown = (err) => err?.status === 502 && err?.body?.error === 'not_found'
 
 /**
- * Issue d'un échec dans la fenêtre d'action : `refused` (4xx, rien n'a bougé : nouvelle clé, saisie corrigeable), `final` (rien n'a
- * bougé et réessayer ne changerait rien : on ne propose que de fermer), sinon `uncertain` (réseau, 5xx : même clé, champs figés).
+ * Refus que l'API rend après avoir lu la clé et examiné l'action : rien n'a bougé sous cette clé. Un autre 4xx (401 de la connexion,
+ * 403 de la garde administrateur, code inconnu) arrive avant la lecture de la clé : il ne dit rien d'un premier envoi resté sans réponse.
+ */
+const REFUSALS = new Set([
+  'invalid_key', 'invalid_reason', 'invalid_amount', 'invalid_direction', 'invalid_blocked', 'invalid_user', 'insufficient', 'key_conflict',
+  'already_refunded', 'not_active', 'storing', 'no_debit', 'job_active', 'not_found', 'already_completed',
+])
+
+/**
+ * Issue d'un échec dans la fenêtre d'action : `refused` (4xx d'un refus examiné, rien n'a bougé : nouvelle clé, saisie corrigeable),
+ * `final` (rien n'a bougé et réessayer ne changerait rien : on ne propose que de fermer), sinon `uncertain` (réseau, 5xx, 401, 403,
+ * 4xx inconnu : même clé, champs figés ; un premier envoi peut avoir abouti, la même clé le rejoue sans le refaire).
  */
 export function failureKind(err) {
   if (paygateUnknown(err)) return 'final'
-  if (err?.status >= 400 && err.status < 500) return 'refused'
+  if (err?.status >= 400 && err.status < 500 && REFUSALS.has(err?.body?.error)) return 'refused'
   return 'uncertain'
 }
 
