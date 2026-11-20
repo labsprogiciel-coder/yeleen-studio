@@ -30,7 +30,7 @@
 .cx-new>svg,.cx-ri>svg{flex:none}
 .cx-new{margin-bottom:6px;background:var(--lime);color:var(--on-lime)}
 /* « Nouvelle création » 15 % plus petit en tout : 85 % de la largeur de la barre, 44 → 38 px de haut, texte 14,5 → 12,5 px ; réduite, carré de 38 px. */
-.cx-rail .cx-new{width:85%;height:38px;gap:10px;padding:0 10px;border-radius:10px;font-size:12.5px;align-self:flex-start}
+.cx-rail .cx-new{width:85%;height:38px;gap:10px;padding:0 10px;border-radius:10px;font-size:12.5px;align-self:center;justify-content:center}
 .cx-rail.is-collapsed .cx-new{width:38px;padding:0;justify-content:center;align-self:center}
 .cx-rail.is-collapsed .cx-new .cx-lbl{display:none}
 .cx-new:hover{filter:brightness(.92)}
