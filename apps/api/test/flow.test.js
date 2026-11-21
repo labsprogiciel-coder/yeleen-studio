@@ -93,7 +93,8 @@ test('refus de contenu et solde insuffisant ne contactent pas fal', async () => 
 })
 
 test('annulation en file : remboursement complet', async () => {
-  const t = setup((url) => (url.endsWith('/nano-banana-pro') ? { body: queued } : { body: {} }))
+  // L'annulation relit l'état chez fal avant de rembourser : encore en file, annulation acceptée.
+  const t = setup((url) => (url.endsWith('/nano-banana-pro') ? { body: queued } : url.includes('/status') ? { body: { status: 'IN_QUEUE', queue_position: 1 } } : { body: {} }))
   try {
     const start = (await (await t.req('/wallet')).json()).balance
     const { jobId } = await (await t.req('/jobs', post(image))).json()
@@ -461,5 +462,48 @@ test('sans taille d’image lisible, une vidéo est refusée par un outil limit�
     assert.equal((await (await t.req('/jobs', post({ kind: 'tool', modelId: 'voice-changer', inputs: { audio: up.url } }))).json()).error, 'media_too_long')
     assert.equal((await (await t.req('/wallet')).json()).balance, start)
     assert.equal(submitted, 0)
+  } finally { t.restore() }
+})
+
+test('audio vers vidéo : facturée sur la durée mesurée de l’audio, jamais sur celle qu’annonce l’application', async () => {
+  const { VIDEO_MODELS, findModel, videoCost } = await import('@studio/catalog')
+  const { frames } = await import('./media.test.js')
+  const fast = findModel(VIDEO_MODELS, 'ltx-2-5-fast-a2v')
+  let n = 0
+  const sent = []
+  const t = setup((url, init) => {
+    if (url.includes('storage/upload/initiate')) { n++; return { body: { file_url: `https://v3b.fal.media/files/a${n}.mp3`, upload_url: `https://v3b.fal.media/upload/${n}` } } }
+    if (url.startsWith('https://queue.fal.run/lightricks/ltx-2.5/audio-to-video/fast')) { sent.push(JSON.parse(init.body)); return { body: queued } }
+    return { body: {} }
+  })
+  const upload = async (secs) => { const mp3 = frames(128, Math.round((secs * 44100) / 1152)); return (await t.req('/uploads?name=voix.mp3', { method: 'POST', headers: { 'content-type': 'audio/mpeg', 'content-length': String(mp3.length) }, body: mp3 })).json() }
+  const job = (audioUrl, secs) => t.req('/jobs', post({ kind: 'video', modelId: fast.id, plans: [{ text: 'une chanteuse', dur: secs }], secs, ratio: 'auto', audioUrl }))
+  const balance = async () => (await (await t.req('/wallet')).json()).balance
+  try {
+    const start = await balance()
+    // 20 s d'audio annoncées comme 2 s : débitée pour 20 s.
+    const long = await upload(20)
+    assert.equal(long.secs, 20)
+    const lied = await job(long.url, 2)
+    const a = await lied.json()
+    assert.equal(lied.status, 202)
+    assert.equal(a.cost, videoCost(fast, 20))
+    assert.notEqual(a.cost, videoCost(fast, 2))
+    assert.equal(Math.round((start - a.balance) * 10) / 10, a.cost)
+    assert.equal(sent[0].audio_url, long.url)
+    // Demande honnête : même prix qu'avant.
+    const five = await upload(5)
+    assert.equal((await (await job(five.url, 5)).json()).cost, videoCost(fast, 5))
+    // Durée non entière : la seconde commencée est facturée, comme pour les outils facturés à la seconde.
+    const odd = await upload(7.3)
+    assert.equal(odd.secs, 7.3)
+    assert.equal((await (await job(odd.url, 7.3)).json()).cost, videoCost(fast, 8))
+    // Audio non mesuré par ce compte, trop long ou trop court : refusé avant le débit, quelle que soit la durée annoncée.
+    const before = await balance()
+    assert.deepEqual([(await job('https://v3b.fal.media/files/ailleurs.mp3', 5)).status, (await (await job('https://v3b.fal.media/files/ailleurs.mp3', 5)).json()).error], [400, 'unmeasured_media'])
+    assert.equal((await (await job((await upload(25)).url, 5)).json()).error, 'invalid_duration')
+    assert.equal((await (await job((await upload(1)).url, 5)).json()).error, 'invalid_duration')
+    assert.equal(await balance(), before)
+    assert.equal(sent.length, 3)
   } finally { t.restore() }
 })

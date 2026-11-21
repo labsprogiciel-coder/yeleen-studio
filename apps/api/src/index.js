@@ -6,6 +6,7 @@ import { falClient } from './fal.js'
 import { buildInput, endpointFor, runwareInput } from './inputs.js'
 import { STORING, advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
+import { VIDEO_MODELS, audioBilledSecs } from '@studio/catalog'
 import { findTool } from '@studio/catalog/tools'
 import { slotTokens } from '@studio/catalog/template-slots'
 import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource, videoTemplate } from './library.js'
@@ -102,13 +103,20 @@ const onRunware = (model) => model.provider === 'runware' // voir le catalogue :
 const higgsfield = (c) => higgsfieldClient({ key: c.env.HIGGSFIELD_KEY })
 const onHiggsfield = (model) => model.provider === 'higgsfield' // Soul 2, Genjutsu (outils)
 
-/** Annulation chez le fournisseur, sans garantie (une erreur est journalisée) ; Runware ne sait pas annuler. */
+/**
+ * Annulation chez le fournisseur, sans garantie (une erreur est journalisée) ; Runware ne sait pas annuler.
+ * Rend true seulement si le fournisseur a confirmé l'annulation : une erreur, Runware ou une demande déjà commencée ou finie
+ * (Higgsfield : 400, 409) rendent false, et l'annulation de l'utilisateur n'est alors pas remboursée.
+ */
 async function providerCancel(env, job) {
-  if (job.provider === 'runware') return
+  if (job.provider === 'runware') return false
   try {
-    await (job.provider === 'higgsfield' ? higgsfieldClient({ key: env.HIGGSFIELD_KEY }) : falClient({ key: env.FAL_KEY })).cancel(job.cancelUrl)
+    if (job.provider === 'higgsfield') return (await higgsfieldClient({ key: env.HIGGSFIELD_KEY }).cancel(job.cancelUrl)) === true
+    await falClient({ key: env.FAL_KEY }).cancel(job.cancelUrl)
+    return true
   } catch (e) {
     console.error(`annulation ${job.provider ?? 'fal'}`, e.message)
+    return false
   }
 }
 
@@ -393,6 +401,18 @@ app.post('/jobs', async (c) => {
     req = { ...rest, ...built.files }
     trusted = built.trusted
   }
+  // Vidéo dont la durée est celle de l'audio fourni : le prix suit la durée mesurée au téléversement (POST /uploads), jamais celle
+  // qu'annonce l'application. Audio fixe d'un modèle (fichier du serveur, non mesuré) : facturé pour la durée maximale.
+  const fromAudio = req.kind === 'video' ? VIDEO_MODELS.find((m) => m.id === req.modelId)?.caps.duration.fromAudio : null
+  if (fromAudio && typeof req.audioUrl === 'string') {
+    if (trusted.includes(req.audioUrl)) req = { ...req, secs: fromAudio.max }
+    else {
+      const m = await measured(c, req.audioUrl)
+      if (!(m?.secs > 0)) return c.json({ error: 'unmeasured_media' }, 400)
+      if (m.secs < fromAudio.min - 0.05 || m.secs > fromAudio.max + 0.05) return c.json({ error: 'invalid_duration' }, 400)
+      req = { ...req, secs: audioBilledSecs(fromAudio, m.secs) }
+    }
+  }
   // Outil facturé à la seconde de sa source (Genjutsu) : la durée mesurée au téléversement fixe le prix (sans mesure : la durée maximale).
   const bySecs = req.kind === 'tool' && !tpl ? findTool(req.modelId)?.bySecs : null
   const src = bySecs && typeof req.inputs?.[bySecs] === 'string' ? await measured(c, req.inputs[bySecs]) : null
@@ -472,16 +492,35 @@ app.get('/files/*', (c) => serveFile(c.env.FILES, c.req.path.slice('/files/'.len
 // Annulation : remboursement complet si la génération n'a pas commencé ; sinon le fournisseur la facture, rien n'est remboursé.
 // Runware ne sait pas annuler : la génération continue chez lui (et lui est payée), on cesse seulement de la suivre.
 app.post('/jobs/:id/cancel', async (c) => {
-  const job = await account(c).fetch(`https://account/job/get?id=${c.req.param('id')}`).then((r) => r.json())
+  const getJob = () => account(c).fetch(`https://account/job/get?id=${c.req.param('id')}`).then((r) => r.json())
+  let job = await getJob()
   if (!job) return c.json({ error: 'not_found' }, 404)
   if (job.status !== 'IN_QUEUE' && job.status !== 'IN_PROGRESS') return c.json(view(job))
   // Fichiers en cours de copie : terminée chez le fournisseur, elle va se terminer ; ni annulation chez lui ni ici (le Durable Object
   // refuse aussi, pour une copie commencée après cette lecture).
-  if (job.storingAt && Date.now() - job.storingAt < STORING) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { balance: (await call(c, '/balance')).balance }))
-  await providerCancel(c.env, job)
+  const storing = (j) => j.storingAt && Date.now() - j.storingAt < STORING
+  const balance = async () => (await call(c, '/balance')).balance
+  if (storing(job)) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { balance: await balance() }))
+  // L'état enregistré peut dater (il n'avance qu'au suivi, au webhook ou au réveil) : on relit d'abord l'état chez le fournisseur,
+  // comme l'annulation de l'administration. Runware : jamais remboursé ni annulé chez lui, rien à relire.
+  if (job.provider !== 'runware') {
+    try {
+      await advanceJob({ env: c.env, acct: (path, body) => call(c, path, body), accountId: accountId(c), origin: job.origin ?? new URL(c.req.url).origin, job })
+    } catch (e) {
+      console.error(`suivi avant annulation ${job.provider ?? 'fal'}`, e.message)
+      // Terminée chez le fournisseur mais résultat illisible pour l'instant : l'annuler perdrait ses fichiers, elle reste en cours.
+      if (e.completedAtProvider) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { balance: await balance() }))
+      // Autre erreur passagère : état inconnu. L'annulation continue ; elle n'est remboursée que si le fournisseur la confirme.
+    }
+    job = (await getJob()) ?? job
+    if (ended(job)) return c.json(view(job, { balance: await balance() })) // terminée pendant ce suivi : rendue telle quelle
+    if (storing(job)) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { balance: await balance() }))
+  }
+  const confirmed = await providerCancel(c.env, job)
   // Vérification, remboursement et CANCELED en une requête du compte : terminée entre-temps (webhook, suivi), elle reste telle quelle.
-  const r = await call(c, '/job/cancel', { jobId: job.id, user: true })
-  return c.json(view(r.job ?? job, { balance: r.balance ?? (await call(c, '/balance')).balance }))
+  // Remboursée seulement si elle est encore en file et que le fournisseur a confirmé l'annulation.
+  const r = await call(c, '/job/cancel', { jobId: job.id, user: true, refundable: job.status === 'IN_QUEUE' && confirmed })
+  return c.json(view(r.job ?? job, { balance: r.balance ?? (await balance()) }))
 })
 
 /** Adresse du webhook fal d'une génération, signée pour ce compte et cette génération ; sans WEBHOOK_SECRET, pas de webhook. */

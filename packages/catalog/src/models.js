@@ -623,6 +623,12 @@ export const videoCost = (model, seconds, res, { inputSecs = 0, sound = true } =
   return toJetons(usdPerSecond(model, res, { sound, video }) * seconds)
 }
 
+/**
+ * Secondes facturées d'une vidéo dont la durée est celle de l'audio (`range` : caps.duration.fromAudio) : la durée mesurée, arrondie
+ * à la seconde au-dessus (comme les outils facturés à la seconde), dans les limites du modèle.
+ */
+export const audioBilledSecs = (range, secs) => Math.min(Math.max(Math.ceil(secs - 0.05), range.min), range.max)
+
 // Mouvements de caméra (camera_motion) : « auto » n'envoie rien.
 export const CAMERA_MOTIONS = [
   { id: 'none', title: 'Caméra : auto' }, { id: 'dolly_in', title: 'Travelling avant' }, { id: 'dolly_out', title: 'Travelling arrière' },

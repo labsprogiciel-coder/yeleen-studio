@@ -328,15 +328,16 @@ export class Account {
     }
     // Annulation d'une génération encore active, vérifiée, remboursée et notée en une requête (jamais une génération déjà terminée).
     // Par l'administration (bloquée chez le fournisseur, oubliée) : ce qui reste du débit est rendu. Par l'utilisateur (`user: true`) :
-    // remboursée seulement si elle n'avait pas commencé. Elle passe CANCELED et libère sa place ; l'annulation chez le fournisseur
+    // remboursée seulement si elle n'avait pas commencé, ce que la route affirme (`refundable` : état relu chez le fournisseur, encore
+    // en file, annulation confirmée) ; l'état enregistré seul ne suffit pas, il peut dater. Elle passe CANCELED et libère sa place ; l'annulation chez le fournisseur
     // se fait avant, dans le Worker. Pendant la copie de ses fichiers dans R2 (`storingAt` récent), elle est en fait terminée : refusée.
     if (pathname === '/job/cancel') {
-      const { jobId, reason, actor, user = false, key } = input
+      const { jobId, reason, actor, user = false, refundable = false, key } = input
       const job = await this.state.storage.get(`job:${jobId}`)
       if (!job) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
       if (TERMINAL.includes(job.status)) return Response.json({ ok: false, error: 'not_active', status: job.status, job, balance: w.balance }, { status: 409 })
       if (job.storingAt && Date.now() - job.storingAt < STORING) return Response.json({ ok: false, error: 'storing', status: job.status, job, balance: w.balance }, { status: 409 })
-      const owed = !user || job.status === 'IN_QUEUE'
+      const owed = !user || (refundable === true && job.status === 'IN_QUEUE')
       const r = owed && w.ops[`debit:${jobId}`] && !w.ops[`refund:${jobId}`] ? refund(w, { jobId }) : null
       if (r) await this.state.storage.put('wallet', w)
       const refunded = r?.refunded ?? 0

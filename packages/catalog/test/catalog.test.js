@@ -164,3 +164,9 @@ test('LTX 2.5 : endpoints lightricks, prix fal, à côté des modèles 2.3 incha
   assert.equal(Math.max(...durationOptions(t2v, '1440p', 25)), 10)
   assert.equal(Math.max(...durationOptions(t2v, '1080p', 50)), 10)
 })
+
+test('audio vers vidéo : secondes facturées = durée mesurée arrondie à la seconde au-dessus, dans les limites du modèle', async () => {
+  const { audioBilledSecs } = await import('../src/models.js')
+  const range = { min: 2, max: 10 }
+  assert.deepEqual([5, 5.04, 7.3, 0, 1.9, 10.04, 30].map((s) => audioBilledSecs(range, s)), [5, 5, 8, 2, 2, 10, 10])
+})

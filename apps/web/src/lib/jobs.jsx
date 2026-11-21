@@ -75,6 +75,11 @@ export const FAILURES = {
     hint: 'Ce fichier est trop long ou trop court pour cet outil, de trop haute résolution, ou dans un format que le service ne sait pas mesurer (préférez MP4, MP3 ou WAV). Aucun cauri n’a été débité.',
     retry: false,
   },
+  duration: {
+    message: 'Durée refusée',
+    hint: 'La durée demandée, ou celle de votre fichier audio, n’est pas acceptée par ce modèle. Changez la durée ou le fichier, puis relancez. Aucun cauri n’a été débité.',
+    retry: false,
+  },
   blocked: {
     message: 'Votre compte est suspendu. Contactez le support.',
     hint: 'Les nouvelles générations sont bloquées sur ce compte. Rien n’a été débité.',
@@ -237,7 +242,7 @@ export function JobsProvider({ children }) {
   // Échec d'un appel à l'API (avant ou pendant l'envoi à fal) : la génération échoue, avec le remboursement que le serveur confirme.
   const failLive = useCallback((id, err) => {
     const code = err.body?.error
-    const failure = ['unmeasured_media', 'media_too_long', 'media_too_short', 'media_too_large'].includes(code) ? 'media' : code === 'account_blocked' ? 'blocked' : code === 'moderation' ? 'moderation' : code === 'insufficient' ? 'insufficient' : code === 'too_expensive' ? 'too_expensive' : code === 'too_many_active' ? 'busy' : err.status === 401 || code === 'unauthorized' ? 'auth' : err.status === 0 ? 'unreachable' : err.status === 400 ? 'rejected' : 'provider'
+    const failure = ['unmeasured_media', 'media_too_long', 'media_too_short', 'media_too_large'].includes(code) ? 'media' : code === 'invalid_duration' ? 'duration' : code === 'account_blocked' ? 'blocked' : code === 'moderation' ? 'moderation' : code === 'insufficient' ? 'insufficient' : code === 'too_expensive' ? 'too_expensive' : code === 'too_many_active' ? 'busy' : err.status === 401 || code === 'unauthorized' ? 'auth' : err.status === 0 ? 'unreachable' : err.status === 400 ? 'rejected' : 'provider'
     const job = ref.current.jobs.find((j) => j.id === id)
     dispatch({
       type: 'REMOTE', id, balance: err.body?.balance,

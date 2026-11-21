@@ -72,10 +72,14 @@ export function higgsfieldClient({ key, fetch: f = fetch }) {
         default: return { status: 'IN_PROGRESS' } // état inconnu : on continue d'attendre
       }
     },
-    /** Annule une demande encore en file (remboursée par Higgsfield) ; déjà commencée (400) ou finie (409) : rien à faire. */
+    /**
+     * Annule une demande encore en file (remboursée par Higgsfield) ; déjà commencée (400) ou finie (409) : rien à faire.
+     * Rend true si l'annulation est confirmée, false si la demande était déjà commencée ou finie (elle reste facturée).
+     */
     async cancel(cancelUrl) {
       const res = await f(cancelUrl, { method: 'POST', headers })
       if (!res.ok && res.status !== 400 && res.status !== 409) throw new HiggsfieldError(res.status, await parse(res), 'cancel')
+      return res.ok
     },
   }
 }

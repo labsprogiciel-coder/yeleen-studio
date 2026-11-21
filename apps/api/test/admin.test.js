@@ -56,7 +56,7 @@ function setup(vars = {}) {
     const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) : undefined
     if (u.endsWith('/.well-known/jwks.json')) return Response.json(K.jwks)
     if (u.endsWith('/nano-banana-pro')) return Response.json({ request_id: 'r1', status_url: 'https://queue.fal.run/x/requests/r1/status', response_url: 'https://queue.fal.run/x/requests/r1', cancel_url: 'https://queue.fal.run/x/requests/r1/cancel' })
-    if (u.includes('/status')) return Response.json({ status: t.fal, queue_position: 1 })
+    if (u.includes('/status')) return t.fal === 'DOWN' ? Response.json({ detail: 'panne' }, { status: 503 }) : Response.json({ status: t.fal, queue_position: 1 }) // 'DOWN' : état illisible
     if (u.endsWith('/cancel')) { t.cancels.push(u); await t.onCancel?.(); return Response.json({ status: 'CANCELLATION_REQUESTED' }) }
     if (u === 'https://queue.fal.run/x/requests/r1') return Response.json({ images: [{ url: 'https://fal.media/chat.png', content_type: 'image/png' }] })
     if (u.endsWith('/v1/collections')) return Response.json({ id: 'pg1', reference: body.reference, status: 'processing', amount: body.amount, currency: 'XOF', metadata: body.metadata }, { status: 201 })
@@ -905,5 +905,118 @@ test('deux suivis partis de la même copie voient fal terminé : un seul copie l
     assert.equal(a.job.status, 'COMPLETED')
     assert.equal(b.job.status, 'IN_PROGRESS') // refusé : l'autre suivi enregistre
     assert.equal(t.stores.get('user_alice').get(`job:${id}`).status, 'COMPLETED')
+  } finally { t.restore() }
+})
+
+test('annulation de l\'utilisateur : l\'état est relu chez fal ; déjà commencée là-bas (encore IN_QUEUE ici), elle n\'est pas remboursée', async () => {
+  const t = setup()
+  try {
+    const job = await t.as('user_alice', '/jobs', post(image))
+    const id = job.body.jobId
+    assert.equal(t.stores.get('user_alice').get(`job:${id}`).status, 'IN_QUEUE') // l'état enregistré date de l'envoi
+    t.fal = 'IN_PROGRESS'
+    const r = await t.as('user_alice', `/jobs/${id}/cancel`, { method: 'POST' })
+    assert.deepEqual([r.status, r.body.status, r.body.refund, r.body.balance], [200, 'CANCELED', 0, 240 - job.body.cost])
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, 240 - job.body.cost)
+    assert.equal(t.cancels.length, 1) // annulée chez fal quand même
+    assert.equal(t.rows("SELECT COUNT(*) AS n FROM ledger WHERE kind = 'refund'")[0].n, 0)
+  } finally { t.restore() }
+})
+
+test('annulation de l\'utilisateur : encore en file chez fal et annulation confirmée, remboursement complet', async () => {
+  const t = setup()
+  try {
+    const job = await t.as('user_alice', '/jobs', post(image))
+    const r = await t.as('user_alice', `/jobs/${job.body.jobId}/cancel`, { method: 'POST' })
+    assert.deepEqual([r.body.status, r.body.refund, r.body.balance, t.cancels.length], ['CANCELED', job.body.cost, 240, 1])
+  } finally { t.restore() }
+})
+
+test('annulation de l\'utilisateur : fal ne confirme pas l\'annulation (erreur), pas de remboursement, même en file ou d\'état inconnu', async () => {
+  const t = setup()
+  try {
+    const refused = () => { throw new Error('fal injoignable') }
+    // En file chez fal, mais l'annulation échoue : la génération peut encore s'y lancer.
+    const a = await t.as('user_alice', '/jobs', post(image))
+    t.onCancel = refused
+    const ra = await t.as('user_alice', `/jobs/${a.body.jobId}/cancel`, { method: 'POST' })
+    assert.deepEqual([ra.body.status, ra.body.refund], ['CANCELED', 0])
+    // État illisible et annulation en échec.
+    const b = await t.as('user_alice', '/jobs', post(image))
+    t.fal = 'DOWN'
+    const rb = await t.as('user_alice', `/jobs/${b.body.jobId}/cancel`, { method: 'POST' })
+    assert.deepEqual([rb.body.status, rb.body.refund], ['CANCELED', 0])
+    // État illisible, commencée d'après le dernier suivi : pas de remboursement même si fal accepte l'annulation.
+    t.fal = 'IN_PROGRESS'
+    t.onCancel = null
+    const c = await t.as('user_alice', '/jobs', post(image))
+    await t.as('user_alice', `/jobs/${c.body.jobId}`)
+    t.fal = 'DOWN'
+    const rc = await t.as('user_alice', `/jobs/${c.body.jobId}/cancel`, { method: 'POST' })
+    assert.deepEqual([rc.body.status, rc.body.refund], ['CANCELED', 0])
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, Math.round((240 - a.body.cost - b.body.cost - c.body.cost) * 10) / 10)
+    // État illisible, encore en file d'après le dernier suivi, annulation confirmée par fal : remboursée.
+    const d = await t.as('user_alice', '/jobs', post(image))
+    const rd = await t.as('user_alice', `/jobs/${d.body.jobId}/cancel`, { method: 'POST' })
+    assert.deepEqual([rd.body.status, rd.body.refund], ['CANCELED', d.body.cost])
+  } finally { t.restore() }
+})
+
+test('annulation de l\'utilisateur chez Higgsfield : « déjà commencée » (400) n\'est pas une annulation confirmée, pas de remboursement', async () => {
+  const t = setup({ HIGGSFIELD_KEY: 'id:secret' })
+  const inner = globalThis.fetch
+  let answer = 400
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    const u = String(url)
+    if (!u.startsWith('https://api.higgsfield.ai/')) return inner(url, init)
+    calls.push(u)
+    if (u.endsWith('/status')) return Response.json({ detail: 'surcharge' }, { status: 503 }) // état illisible
+    return answer === 200 ? Response.json({ status: 'canceled' }) : Response.json({ detail: 'already started' }, { status: answer })
+  }
+  const acct = async (path, body) => (await t.account('user_alice').fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))).json()
+  const queuedJob = async (id) => {
+    await acct('/debit', { jobId: id, amount: 10 })
+    await acct('/job/put', { id, kind: 'tool', provider: 'higgsfield', status: 'IN_QUEUE', cost: 10, requestId: id, cancelUrl: `https://api.higgsfield.ai/requests/${id}/cancel` })
+  }
+  try {
+    const start = (await t.as('user_alice', '/wallet')).body.balance
+    await queuedJob('h1')
+    const no = await t.as('user_alice', '/jobs/h1/cancel', { method: 'POST' })
+    assert.deepEqual([no.body.status, no.body.refund, no.body.balance], ['CANCELED', 0, start - 10])
+    answer = 409 // déjà finie
+    await queuedJob('h2')
+    assert.equal((await t.as('user_alice', '/jobs/h2/cancel', { method: 'POST' })).body.refund, 0)
+    answer = 200 // encore en file : annulée et remboursée par Higgsfield
+    await queuedJob('h3')
+    const yes = await t.as('user_alice', '/jobs/h3/cancel', { method: 'POST' })
+    assert.deepEqual([yes.body.status, yes.body.refund, yes.body.balance], ['CANCELED', 10, start - 20])
+    assert.equal(calls.filter((u) => u.endsWith('/cancel')).length, 3)
+  } finally { globalThis.fetch = inner; t.restore() }
+})
+
+test('Durable Object : l\'annulation de l\'utilisateur ne rembourse que sur `refundable` et en file ; celle de l\'administration, toujours', async () => {
+  const m = new Map()
+  const acct = new Account({ storage: { get: async (k) => structuredClone(m.get(k)), put: async (k, v) => { m.set(k, structuredClone(v)) } } }, { ENV: 'dev' })
+  const call = async (path, body) => (await acct.fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))).json()
+  const put = async (id, status) => { await call('/debit', { jobId: id, amount: 10 }); await call('/job/put', { id, status, cost: 10 }) }
+  await put('a', 'IN_QUEUE')
+  assert.equal((await call('/job/cancel', { jobId: 'a', user: true })).refunded, 0) // l'état enregistré seul ne suffit plus
+  await put('b', 'IN_QUEUE')
+  assert.equal((await call('/job/cancel', { jobId: 'b', user: true, refundable: true })).refunded, 10)
+  await put('c', 'IN_PROGRESS')
+  assert.equal((await call('/job/cancel', { jobId: 'c', user: true, refundable: true })).refunded, 0) // commencée entre-temps
+  await put('d', 'IN_PROGRESS')
+  assert.equal((await call('/job/cancel', { jobId: 'd', reason: 'x', actor: 'adm' })).refunded, 10)
+})
+
+test('annulation par l\'administration d\'une génération commencée chez fal : toujours remboursée (inchangé)', async () => {
+  const t = setup()
+  try {
+    const job = await t.as('user_alice', '/jobs', post(image))
+    t.fal = 'IN_PROGRESS'
+    const r = await t.admin(`/admin/users/user_alice/jobs/${job.body.jobId}/cancel`, post({ key: key(), reason: 'Bloquée chez fal' }))
+    assert.deepEqual([r.status, r.body.outcome, r.body.refunded, r.body.balance, r.body.job.status], [200, 'canceled', job.body.cost, 240, 'CANCELED'])
+    assert.equal(t.cancels.length, 1)
   } finally { t.restore() }
 })
