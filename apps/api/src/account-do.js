@@ -1,4 +1,4 @@
-import { STORING, advanceJob, isActive } from './jobs.js'
+import { STORING, SUBMIT_DEADLINE, advanceJob, deadlineOf, expireJob, isActive } from './jobs.js'
 import { assetItems, jobItem, ledgerItem, topupItem, walletHistory, write } from './mirror.js'
 import { applyPayment, isOpen } from './topups.js'
 import { credit, debit, emptyWallet, refund } from './wallet.js'
@@ -22,6 +22,8 @@ const BLOCKED = { ok: false, error: 'account_blocked' }
  *
  * Tant qu'une génération est active, une alarme réveille le compte toutes les minutes pour la faire avancer (voir jobs.js) :
  * elle se termine, est copiée dans R2 ou remboursée même si personne n'interroge l'API (page fermée, webhook perdu, Runware).
+ * Une génération est réservée (place, débit, enregistrement) par une seule requête (`/job/reserve`) : il n'y a jamais de débit sans
+ * génération. Le réveil fait échouer et rembourse celle qui n'a jamais été envoyée ou que le fournisseur ne termine pas (voir jobs.js).
  */
 export class Account {
   constructor(state, env) {
@@ -96,12 +98,13 @@ export class Account {
     return w
   }
 
-  /** Tient la liste des générations actives du compte ; une réservation oubliée depuis plus de 3 h est considérée comme perdue. */
+  /**
+   * Tient la liste des générations actives du compte. Une réservation ne quitte la liste que terminée, échouée, annulée ou rendue ;
+   * le réveil s'en charge (jamais d'oubli silencieux).
+   */
   async track(jobId, active) {
-    const now = Date.now()
     const map = (await this.state.storage.get('active')) ?? {}
-    for (const [id, at] of Object.entries(map)) if (now - at > 3 * 3600_000) delete map[id]
-    if (active) map[jobId] = map[jobId] ?? now
+    if (active) map[jobId] = map[jobId] ?? Date.now()
     else if (jobId) delete map[jobId]
     await this.state.storage.put('active', map)
     return Object.keys(map)
@@ -114,21 +117,50 @@ export class Account {
     await storage.setAlarm(Date.now() + WAKE_EVERY)
   }
 
-  /** Réveil : fait avancer chaque génération active, puis se reprogramme tant qu'il en reste. */
+  /**
+   * Réveil : fait avancer chaque génération active, fait échouer (et rembourse) celle qui a dépassé son délai, puis se reprogramme
+   * tant qu'il en reste. Chaque génération est traitée à part : une erreur sur l'une n'empêche ni les autres ni le prochain réveil.
+   */
   async alarm() {
-    const account = this.accountId ?? (this.accountId = (await this.state.storage.get('account')) ?? null)
+    const storage = this.state.storage
     const acct = async (path, body) => (await this.fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))).json()
-    for (const id of await this.track(null, false)) {
-      const job = await this.state.storage.get(`job:${id}`)
-      // Réservée mais pas encore envoyée, ou d'avant ce réveil (sans `origin` pour ses adresses /files) : l'interface s'en charge.
-      if (!account || !job || !isActive(job) || (!job.origin && this.env.FILES)) continue
-      try {
-        await advanceJob({ env: this.env, acct, accountId: account, origin: job.origin, job })
-      } catch (e) {
-        console.error('réveil du compte', job.provider ?? 'fal', e.message) // erreur passagère : au prochain réveil
+    try {
+      const account = this.accountId ?? (this.accountId = (await storage.get('account')) ?? null)
+      for (const [id, at] of Object.entries((await storage.get('active')) ?? {})) {
+        try {
+          const job = await storage.get(`job:${id}`)
+          const now = Date.now()
+          if (!job) {
+            // Place prise par l'ancien code (réservation puis débit, sans génération) : sa route a pu s'arrêter en chemin.
+            // Passé le délai d'envoi, le débit éventuel est rendu (sans débit : rien) et la place libérée.
+            if (now - at > SUBMIT_DEADLINE) { await acct('/refund', { jobId: id }); await acct('/job/release', { jobId: id }) }
+            continue
+          }
+          if (!isActive(job)) { await this.track(id, false); continue } // terminée mais encore listée
+          if (job.submitting) {
+            // En cours d'envoi par la route ; passé le délai, la route est morte : échec remboursé.
+            if (now > deadlineOf(job)) await expireJob({ env: this.env, acct, job })
+            continue
+          }
+          let seen = job
+          // Sans compte connu ou d'avant ce réveil (sans `origin` pour ses adresses /files) : on ne peut pas la suivre, seulement la borner.
+          if (account && (job.origin || !this.env.FILES)) {
+            try {
+              seen = (await advanceJob({ env: this.env, acct, accountId: account, origin: job.origin, job })).job
+            } catch (e) {
+              console.error('réveil du compte', job.provider ?? 'fal', e.message) // erreur passagère : au prochain réveil
+            }
+          }
+          // Jamais terminée chez le fournisseur : échec remboursé (`timeout`). Fichiers en cours de copie : refusé, au prochain réveil.
+          if (isActive(seen) && now > deadlineOf(job)) await expireJob({ env: this.env, acct, job })
+        } catch (e) {
+          console.error('réveil du compte', id, e.message)
+        }
       }
+    } finally {
+      // Toujours reprogrammé tant qu'il reste une génération : un réveil qui échoue à répétition serait abandonné par le runtime.
+      if (Object.keys((await storage.get('active')) ?? {}).length) await this.wake()
     }
-    if ((await this.track(null, false)).length) await this.wake()
   }
 
   async fetch(request) {
@@ -196,6 +228,7 @@ export class Account {
     }
     // Réservation d'une génération : même clé de demande → même génération (pas de second débit) ; sinon une place parmi
     // les générations actives du compte (au plus `max`), réservée tout de suite pour que deux envois simultanés ne la dépassent pas.
+    // (Ancien protocole, gardé pour les routes encore en cours au déploiement : voir `/job/reserve`.)
     if (pathname === '/job/claim') {
       const { key, jobId, max } = await request.json()
       if (await blocked()) return Response.json(BLOCKED, { status: 403 }) // avant le dédoublonnage : un compte bloqué ne relance rien
@@ -286,6 +319,39 @@ export class Account {
       return Response.json({ ok: true, topup: out.topup, credited, mismatch: out.mismatch ?? false, balance: w.balance })
     }
 
+    // Réservation d'une génération, en une requête : même clé de demande → même génération, rendue telle qu'elle est (pas de second
+    // débit, pas de second envoi) ; sinon une place parmi les générations actives (au plus `max`), le débit et la génération
+    // (`submitting` : pas encore envoyée au fournisseur) écrits ensemble. Toutes les lectures sont faites avant la première écriture, et
+    // les écritures se suivent sans rien entre elles (ni D1 ni réseau) : le runtime les valide d'un bloc. Le portefeuille est écrit en
+    // dernier : même coupée en route, la suite ne laisse jamais un débit sans génération.
+    if (pathname === '/job/reserve') {
+      const { key, max, job } = input
+      const storage = this.state.storage
+      if (await blocked()) return Response.json(BLOCKED, { status: 403 }) // avant le dédoublonnage : un compte bloqué ne relance rien
+      const active = (await storage.get('active')) ?? {}
+      const seen = key ? await storage.get(`idem:${key}`) : null
+      if (seen) {
+        const prev = await storage.get(`job:${seen}`)
+        if (prev) return Response.json({ ok: true, existing: seen, job: prev, balance: w.balance })
+        // Clé prise par l'ancien code, sans génération : sa route est peut-être encore en cours ; sinon la clé est reprise.
+        if (active[seen] && Date.now() - active[seen] < SUBMIT_DEADLINE) return Response.json({ ok: true, existing: seen, job: null, balance: w.balance })
+      }
+      if (Object.keys(active).length >= max) {
+        await this.wake() // les places perdues sont rendues par le réveil, même si une alarme s'était perdue
+        return Response.json({ ok: false, error: 'too_many_active', max }, { status: 429 })
+      }
+      const r = debit(w, { jobId: job.id, amount: job.cost })
+      if (!r.ok) return Response.json(r, { status: 402 }) // rien n'est écrit : pas de place à rendre
+      active[job.id] = Date.now()
+      await storage.put(`job:${job.id}`, job)
+      await storage.put('active', active)
+      if (key) await storage.put(`idem:${key}`, job.id)
+      await storage.put('wallet', w)
+      await this.wake()
+      await this.record(ledgerItem('debit', job.id, job.cost, w.balance), jobItem(job))
+      return Response.json({ ok: true, balance: w.balance })
+    }
+
     // ── Administration : chaque action d'argent se décide ici, en une requête (lecture, calcul, écriture) ──
     // Ajustement à la main : la clé de l'administrateur (« adm_… ») sert de référence au crédit ou au débit (types du grand livre
     // inchangés) ; le résultat est gardé sous `adm:<clé>`. Rejouée, la même clé rend ce résultat ; avec un autre montant : conflit.
@@ -354,10 +420,12 @@ export class Account {
     // Échec d'une génération constaté chez le fournisseur : remboursée et passée FAILED en une requête, seulement si elle est encore
     // active (une génération annulée ou terminée entre-temps n'est ni remboursée ni réécrite : 409 avec la génération enregistrée).
     if (pathname === '/job/fail') {
-      const { jobId, failure } = input
+      const { jobId, failure, submitting = false } = input
       const job = await this.state.storage.get(`job:${jobId}`)
       if (!job) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
       if (TERMINAL.includes(job.status)) return Response.json({ ok: false, error: 'terminal', status: job.status, job, balance: w.balance }, { status: 409 })
+      // Échec d'une réservation jamais envoyée (`submitting`, voir expireJob) : la route l'a envoyée et enregistrée entre-temps, elle continue.
+      if (submitting && !job.submitting) return Response.json({ ok: false, error: 'sent', status: job.status, job, balance: w.balance }, { status: 409 })
       // Fichiers en cours de copie (un autre suivi a vu la génération terminée) : c'est lui qui décide de l'issue.
       if (job.storingAt && Date.now() - job.storingAt < STORING) return Response.json({ ok: false, error: 'storing', status: job.status, job, balance: w.balance }, { status: 409 })
       const r = refund(w, { jobId })

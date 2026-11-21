@@ -71,7 +71,7 @@ test('D1 en panne : les requêtes réussissent, la file attend, puis tout est é
     t.db.failing = true
     const sub = await t.json('/jobs', post(image))
     assert.equal(sub.status, 202) // la génération part quand même
-    assert.equal(t.store.get('outbox').length, 2) // le débit et la génération
+    assert.equal(t.store.get('outbox').length, 3) // le débit, la réservation, puis la génération envoyée (même ligne de `jobs`)
     assert.equal(t.rows('SELECT * FROM ledger WHERE kind = \'debit\'').length, 0)
     t.db.failing = false
     await t.json(`/jobs/${sub.body.jobId}/cancel`, { method: 'POST' })

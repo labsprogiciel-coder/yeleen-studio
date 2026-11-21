@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { currentProject } from './projects.js'
 import { dueJobs } from './pollDelay.js'
-import { cancelPatch as cancelReply } from './jobReply.js'
+import { cancelPatch as cancelReply, createPatch, knownFailure, lostPatch } from './jobReply.js'
 import { useAuthState } from './auth.jsx'
 import { api, apiEnabled } from './api.js'
 import { track } from './posthog.js'
@@ -88,6 +88,11 @@ export const FAILURES = {
   provider: {
     message: 'Le fournisseur n’a pas répondu à temps',
     hint: 'Ce n’est pas lié à votre demande. Vos cauris ont été remboursés : vous pouvez relancer.',
+    retry: true,
+  },
+  lost: {
+    message: 'Génération introuvable',
+    hint: 'Le service n’a pas gardé trace de cette génération. Vérifiez votre solde et votre historique avant de relancer.',
     retry: true,
   },
 }
@@ -305,7 +310,14 @@ export function JobsProvider({ children }) {
     if (job.live) {
       startLive(job, spec.live)
         .then((r) => {
-          dispatch({ type: 'REMOTE', id: job.id, balance: r.balance, patch: { remoteId: r.jobId, logs: [{ msg: 'Demande acceptée' }] } })
+          // Le serveur peut rendre une génération déjà enregistrée (nouvel essai, même clé) : échouée et remboursée, elle s'arrête ici.
+          const patch = createPatch(r, FAILURES, Date.now())
+          if (patch.status === 'FAILED') {
+            dispatch({ type: 'REMOTE', id: job.id, balance: r.balance, patch: { ...patch, logs: [{ msg: `Erreur : ${FAILURES[patch.failure].message}`, error: true }] }, message: `Échec : ${job.title}.${patch.refund ? ` ${jetons(patch.refund)} cauris remboursés.` : ''}` })
+            track('generation_failed', { ...analytics.current.get(job.id), failure: patch.failure, stage: 'submit', refund: patch.refund })
+            return
+          }
+          dispatch({ type: 'REMOTE', id: job.id, balance: r.balance, patch: { ...patch, logs: [{ msg: 'Demande acceptée' }] } })
           // Annulée pendant l'envoi : on prévient le serveur dès qu'il a un identifiant.
           if (ref.current.jobs.find((j) => j.id === job.id)?.status === 'CANCELED') {
             api.cancelJob(r.jobId).then((c) => dispatch({ type: 'REMOTE', id: job.id, balance: c.balance, patch: cancelPatch(c) })).catch(() => {})
@@ -326,6 +338,7 @@ export function JobsProvider({ children }) {
   // Suivi des générations réelles : on interroge l'API tant qu'une génération est active.
   const polling = useRef(new Set())
   const last = useRef(new Map()) // dernier appel par génération : le rythme dépend de son âge et de la visibilité de l'onglet
+  const misses = useRef(new Map()) // réponses 404 de suite par génération : { n, since } (voir lostPatch)
   const liveActive = state.jobs.some((j) => j.live && j.remoteId && (j.status === 'IN_QUEUE' || j.status === 'IN_PROGRESS'))
   useEffect(() => {
     if (!liveActive) return
@@ -336,19 +349,31 @@ export function JobsProvider({ children }) {
       last.current.set(j.id, Date.now())
       try {
         const r = await api.job(j.remoteId)
+        misses.current.delete(j.id)
         if (!isActive(ref.current.jobs.find((x) => x.id === j.id))) return // annulée entre-temps : on ne la relance pas
         const now = Date.now()
         const logs = (r.logs ?? []).filter((m) => !j.logs.some((l) => l.msg === m)).map((msg) => ({ msg }))
         let patch
         let message
         if (r.status === 'COMPLETED') { patch = { status: 'COMPLETED', progress: 100, finishedAt: now, outputs: r.outputs, logs: logs.concat({ msg: 'Terminé' }) }; message = `Terminée : ${j.title}.`; track('generation_completed', { kind: j.kind, ...analytics.current.get(j.id), seconds: Math.round((now - j.createdAt) / 1000) }) }
-        else if (r.status === 'FAILED') { const failure = r.failure ?? 'provider'; track('generation_failed', { kind: j.kind, ...analytics.current.get(j.id), failure, stage: 'provider', refund: r.refund ?? 0 }); patch = { status: 'FAILED', failure, refund: r.refund ?? 0, finishedAt: now, logs: logs.concat({ msg: `Erreur : ${FAILURES[failure].message}`, error: true }) }; message = `Échec : ${j.title}. ${jetons(r.refund ?? 0)} cauris remboursés.` }
+        else if (r.status === 'FAILED') { const failure = knownFailure(r.failure, FAILURES); track('generation_failed', { kind: j.kind, ...analytics.current.get(j.id), failure, stage: 'provider', refund: r.refund ?? 0 }); patch = { status: 'FAILED', failure, refund: r.refund ?? 0, finishedAt: now, logs: logs.concat({ msg: `Erreur : ${FAILURES[failure].message}`, error: true }) }; message = `Échec : ${j.title}. ${jetons(r.refund ?? 0)} cauris remboursés.` }
         else if (r.status === 'IN_PROGRESS') patch = { status: 'IN_PROGRESS', startedAt: j.startedAt ?? now, queuePosition: 0, logs: logs.length || j.logs.some((l) => l.msg === 'Génération en cours') ? logs : [{ msg: 'Génération en cours' }] } // fal ne détaille pas toujours ses étapes
         // Annulée côté serveur (par le support) : remboursement affiché ; `failure` (« admin_cancel ») n'est pas repris, ce n'est pas un échec.
         else if (r.status === 'CANCELED') { patch = { status: 'CANCELED', refund: r.refund ?? 0, finishedAt: now, logs: logs.concat({ msg: 'Annulée par le support' }) }; message = `Annulée par le support : ${j.title}.${r.refund ? ` ${jetons(r.refund)} cauris remboursés.` : ''}` }
         else patch = { status: 'IN_QUEUE', queuePosition: r.queuePosition ?? 0, logs }
         dispatch({ type: 'REMOTE', id: j.id, balance: r.balance, patch, message })
-      } catch { /* erreur passagère : on réessaie au prochain tour */ } finally { polling.current.delete(j.id) }
+      } catch (e) {
+        // Le reste est passager : on réessaie au prochain tour. Introuvable plusieurs fois de suite : la génération est perdue, le suivi s'arrête.
+        if (e?.status !== 404) return
+        const seen = misses.current.get(j.id) ?? { n: 0, since: Date.now() }
+        seen.n++
+        misses.current.set(j.id, seen)
+        const patch = lostPatch(seen.n, seen.since, Date.now())
+        if (!patch || !isActive(ref.current.jobs.find((x) => x.id === j.id))) return
+        misses.current.delete(j.id)
+        dispatch({ type: 'REMOTE', id: j.id, patch: { ...patch, logs: [{ msg: `Erreur : ${FAILURES.lost.message}`, error: true }] }, message: `Échec : ${j.title}.` })
+        track('generation_failed', { kind: j.kind, ...analytics.current.get(j.id), failure: 'lost', stage: 'provider', refund: 0 })
+      } finally { polling.current.delete(j.id) }
     })
     poll()
     const id = setInterval(poll, 1000) // simple vérification locale : seules les générations dont le délai est écoulé appellent l'API
