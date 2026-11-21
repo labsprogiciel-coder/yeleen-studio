@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { VIDEO_MODELS } from '@studio/catalog'
 import { LIMITS, findVideoModel, inputIssues } from '@studio/catalog/template-slots'
-import { INPUT_COLS, TEMPLATE_COLS, inputRows, inputsOf, publicTemplate, templateRow, templateSnapshot } from './library.js'
+import { INPUT_COLS, TEMPLATE_COLS, inputsOf, publicTemplate, templateRow, templateSnapshot } from './library.js'
 import { mediaInfo } from './media.js'
 import { badDuration } from './pricing.js'
 import { templateKey } from './storage.js'
@@ -217,9 +217,13 @@ export function adminTemplatesApp() {
   // Tous les modèles, publiés ou non, dans l'ordre de la page Modèles.
   a.get('/', async (c) => {
     const db = c.env.DB
-    const { results } = await db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id ORDER BY t.sort, t.created_at`).bind().all()
+    // Une seule lecture (batch : même instantané), comme la liste publique.
+    const [{ results }, { results: all }] = await db.batch([
+      db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id ORDER BY t.sort, t.created_at`).bind(),
+      db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i ORDER BY i.template_id, i.idx`).bind(),
+    ])
     const rows = new Map()
-    for (const r of (await db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i ORDER BY i.template_id, i.idx`).bind().all()).results) rows.set(r.template_id, [...(rows.get(r.template_id) ?? []), r])
+    for (const r of all) rows.set(r.template_id, [...(rows.get(r.template_id) ?? []), r])
     return c.json({ templates: results.map((t) => adminView(t, rows.get(t.id) ?? [], origin(c))) })
   })
 
@@ -256,9 +260,9 @@ export function adminTemplatesApp() {
 
   // Tel que l'application le recevra (GET /templates), publié ou non : pour « Essayer sur mon compte » (Cinéma, ?tpl=<id>).
   a.get('/:id/preview', async (c) => {
-    const { t, error } = await load(c)
-    if (error) return error
-    const rows = await inputRows(c.env.DB, t.id)
+    const id = c.req.param('id')
+    const { t, rows } = ID.test(id ?? '') ? await templateSnapshot(c.env.DB, id) : { t: null }
+    if (!t) return gone(c)
     const out = publicTemplate(t, rows, origin(c))
     return out ? c.json({ template: out }) : c.json({ error: 'invalid_template', issues: adminView(t, rows, origin(c)).issues }, 422)
   })
