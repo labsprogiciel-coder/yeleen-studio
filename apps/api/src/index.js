@@ -7,7 +7,7 @@ import { buildInput, endpointFor, runwareInput } from './inputs.js'
 import { STORING, advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { findTool } from '@studio/catalog/tools'
-import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource } from './library.js'
+import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource, videoTemplate } from './library.js'
 import { mediaInfo } from './media.js'
 import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
@@ -316,23 +316,71 @@ app.post('/enhance', notBlocked, async (c) => {
   return c.json({ ...(kind === 'shots' ? { plans: out } : { text: out }), remaining: quota.remaining })
 })
 
+/**
+ * Fichiers d'une vidéo à refaire, dans l'ordre des entrées (la source d'une image créée ne va pas au modèle vidéo) : fixes → adresse
+ * du modèle (sûre), fournies ou créées → adresse envoyée par l'application pour cet `idx`. Rend { files, trusted } ou { error }
+ * (`template_input_missing` et son `idx` : entrée obligatoire absente).
+ */
+function templateFiles(inputs, given, origin) {
+  const sent = new Map((Array.isArray(given) ? given : []).filter((x) => Number.isInteger(x?.idx) && typeof x.url === 'string').map((x) => [x.idx, x.url]))
+  const files = {}
+  const trusted = []
+  const elements = []
+  const references = []
+  for (const i of [...inputs].sort((a, b) => a.idx - b.idx)) {
+    if (i.slot === 'source') continue
+    let url
+    if (i.mode === 'fixed') {
+      if (!i.file) return { error: { error: 'template_input_missing', idx: i.idx } }
+      url = `${origin}/files/${i.file}`
+      trusted.push(url)
+    } else {
+      url = sent.get(i.idx)
+      if (!url) { if (i.mode === 'user' && i.optional) continue; return { error: { error: 'template_input_missing', idx: i.idx } } }
+    }
+    if (i.slot === 'start') files.startImageUrl = url
+    else if (i.slot === 'end') files.endImageUrl = url
+    else if (i.slot === 'audio') files.audioUrl = url
+    else if (i.slot === 'element') elements.push({ kind: i.kind, url })
+    else if (i.slot === 'reference') references.push({ kind: i.kind, url })
+  }
+  if (elements.length) files.elements = elements
+  if (references.length) { files.references = references; files.task = 'reference' }
+  return { files, trusted }
+}
+
 app.post('/jobs', async (c) => {
-  const req = await c.req.json()
+  let req = await c.req.json()
   // Vidéo à refaire par Genjutsu : la source (la vidéo du modèle), sa durée et la consigne viennent de D1 ; l'application ne fournit
   // que les photos (une par rôle, dans l'ordre) et la résolution.
+  // Un administrateur essaie aussi les modèles non publiés (« Essayer sur mon compte »), facturés normalement.
   let tpl = null
   if (req.kind === 'tool' && req.template != null) {
     if (!c.env.DB) return c.json({ error: 'db_unavailable' }, 503)
-    tpl = await templateSource(c.env.DB, req.template)
+    tpl = await templateSource(c.env.DB, req.template, { unpublished: isAdmin(c) })
     if (!tpl || tpl.tool !== req.modelId) return c.json({ error: 'unknown_template' }, 400)
     const images = req.inputs?.images
     if (!Array.isArray(images) || images.length !== tpl.roles.length) return c.json({ error: 'invalid_file_url' }, 400)
     req.inputs = { images, resolution: req.inputs?.resolution, video: `${new URL(c.req.url).origin}/files/${tpl.sourceKey}`, prompt: tpl.prompt }
   }
+  // Vidéo à refaire par le générateur de vidéos : ses entrées font foi. Les fichiers fixes sont ceux du modèle (servis par /files, sûrs) ;
+  // l'application ne fournit que ses entrées à elle (`templateInputs`, adresses fal) ; tout autre fichier envoyé est ignoré.
+  let trusted = tpl ? [req.inputs.video] : []
+  if (req.kind === 'video' && req.template != null) {
+    if (!c.env.DB) return c.json({ error: 'db_unavailable' }, 503)
+    const vt = await videoTemplate(c.env.DB, req.template, { unpublished: isAdmin(c) })
+    if (!vt) return c.json({ error: 'unknown_template' }, 400)
+    if (req.modelId !== vt.modelId) return c.json({ error: 'template_model_mismatch' }, 400)
+    const built = templateFiles(vt.inputs, req.templateInputs, new URL(c.req.url).origin)
+    if (built.error) return c.json(built.error, 400)
+    const { templateInputs, startImageUrl, endImageUrl, audioUrl, elements, references, task, ...rest } = req
+    req = { ...rest, ...built.files }
+    trusted = built.trusted
+  }
   // Outil facturé à la seconde de sa source (Genjutsu) : la durée mesurée au téléversement fixe le prix (sans mesure : la durée maximale).
   const bySecs = req.kind === 'tool' && !tpl ? findTool(req.modelId)?.bySecs : null
   const src = bySecs && typeof req.inputs?.[bySecs] === 'string' ? await measured(c, req.inputs[bySecs]) : null
-  const price = priceJob(req, { secs: tpl ? tpl.secs : src?.secs, trusted: tpl ? req.inputs.video : undefined })
+  const price = priceJob(req, { secs: tpl ? tpl.secs : src?.secs, trusted })
   if (!price.ok) return c.json({ error: price.error }, 400)
   const texts = req.kind === 'video' ? req.plans.map((p) => p.text)
     : req.kind === 'tool' ? price.model.inputs.filter((f) => f.type === 'text').map((f) => req.inputs?.[f.key] ?? '')

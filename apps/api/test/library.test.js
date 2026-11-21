@@ -150,7 +150,8 @@ test('Vidéos à refaire : publiques, publiées seulement, dans l’ordre, fichi
     assert.deepEqual(res.body.templates.map((x) => x.id), ['fete', 'maquis'])
     assert.deepEqual(res.body.templates[1], {
       id: 'maquis', name: 'Pub de maquis', blurb: 'Le soir au maquis, puis le plat en gros plan', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4', image: null,
-      modelId: 'kling-4', plans: [{ text: 'Un maquis le soir', dur: 5 }, { text: 'Gros plan sur le plat', dur: 5 }], resolution: '1080p', ratio: '9:16', sound: true, photo: 'Une photo de votre plat',
+      modelId: 'kling-4', plans: [{ text: 'Un maquis le soir', dur: 5 }, { text: 'Gros plan sur le plat', dur: 5 }], resolution: '1080p', ratio: '9:16', sound: true, photo: 'Une photo de votre plat', // ancienne forme sans consigne d'image : la photo est l'image de début à fournir
+      inputs: [{ idx: 0, slot: 'start', kind: 'image', mode: 'user', label: 'Une photo de votre plat', optional: false }],
     })
 
     t.objects.set('templates/maquis/video.mp4', { buf: new Uint8Array([1, 2, 3]).buffer, type: 'video/mp4' })

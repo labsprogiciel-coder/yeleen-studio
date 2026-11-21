@@ -11,11 +11,13 @@ const EXT = {
 }
 const PREFIX = 'outputs/'
 const UPLOADS = 'uploads/'
-const TEMPLATES = 'templates/' // vidéos à refaire (Modèles) : déposées à la main, lues par tous
+const TEMPLATES = 'templates/' // vidéos à refaire (Modèles) : déposées par l'administration, lues par tous
 
 export const keyFor = (accountId, jobId, index, contentType) => `${PREFIX}${accountId}/${jobId}/${index}.${EXT[contentType] ?? 'bin'}`
 /** Clé d'un fichier importé : l'identifiant de l'asset est aléatoire, l'adresse n'est donc pas devinable. */
 export const uploadKey = (accountId, assetId, contentType) => `${UPLOADS}${accountId}/${assetId}.${EXT[contentType] ?? 'bin'}`
+/** Clé d'un fichier déposé par l'administration pour un modèle : une partie aléatoire, jamais réécrite (le fichier est gardé en cache un an). */
+export const templateKey = (templateId, rand, contentType) => `${TEMPLATES}${templateId}/${rand}.${EXT[contentType] ?? 'bin'}`
 
 /**
  * Copie les sorties dans le bucket. Si la copie d'un fichier échoue, il garde l'adresse de fal : la génération est payée,

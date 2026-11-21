@@ -9,9 +9,12 @@ const LANGS = ['auto', 'fr', 'en', 'es', 'pt', 'de', 'ar']
  * Le prix d'une génération, calculé ici à partir du catalogue : le prix envoyé par l'application n'est qu'un aperçu.
  * Valide aussi les options. Retourne { ok, cost, model, count } ou { ok: false, error }.
  * `secs` : durée mesurée du fichier d'un outil facturé à la seconde de sa source (`bySecs`, voir le catalogue des outils).
- * `trusted` : adresse d'un fichier fourni par le serveur lui-même (source d'une vidéo à refaire), acceptée comme un fichier déposé.
+ * `trusted` : adresses de fichiers fournis par le serveur lui-même (source ou fichiers fixes d'une vidéo à refaire), acceptées comme
+ * des fichiers déposés (une adresse ou une liste).
  */
 export function priceJob(req, { secs, trusted } = {}) {
+  const ok = [trusted ?? []].flat()
+  const isFile = (v) => typeof v === 'string' && (FAL_FILE.test(v) || ok.includes(v))
   if (req.kind === 'workflow') { // workflow fal : seulement ceux de la liste, entrées contrôlées, prix du catalogue
     const w = findWorkflow(req.modelId)
     if (!w) return { ok: false, error: 'unknown_model' }
@@ -23,7 +26,7 @@ export function priceJob(req, { secs, trusted } = {}) {
     const t = findTool(req.modelId)
     if (!t) return { ok: false, error: 'unknown_model' }
     const inputs = req.inputs ?? {}
-    const issue = toolInputIssue(t, inputs, (v) => typeof v === 'string' && (FAL_FILE.test(v) || (trusted != null && v === trusted)))
+    const issue = toolInputIssue(t, inputs, isFile)
     if (issue) {
       const f = t.inputs.find((x) => issue.endsWith(`_${x.key}`))
       return { ok: false, error: isFileField(f) ? 'invalid_file_url' : f.type === 'text' ? 'invalid_text' : 'invalid_option' }
@@ -49,7 +52,7 @@ export function priceJob(req, { secs, trusted } = {}) {
     const count = Math.min(Math.max(1, req.count ?? 1), model.caps.maxImages)
     return { ok: true, model, count, cost: imageCost(model, res, count) }
   }
-  if (req.kind === 'video') return priceVideo(req, model)
+  if (req.kind === 'video') return priceVideo(req, model, isFile)
   const chars = req.prompt?.trim().length ?? 0
   if (!(chars > 0)) return { ok: false, error: 'invalid_text' }
   if (req.voice && !VOICES.some((v) => v.id === req.voice)) return { ok: false, error: 'unknown_voice' }
@@ -59,7 +62,7 @@ export function priceJob(req, { secs, trusted } = {}) {
 
 const FAL_FILE = /^https:\/\/[a-z0-9.-]*fal\.media\//
 
-function priceVideo(req, model) {
+function priceVideo(req, model, isFile) {
   const c = model.caps
   const plans = Array.isArray(req.plans) ? req.plans : []
   if (!plans.length || plans.length > 4 || plans.some((p) => !(p.dur > 0))) return { ok: false, error: 'invalid_plans' }
@@ -72,7 +75,7 @@ function priceVideo(req, model) {
   const refs = Array.isArray(req.references) ? req.references : []
   if (refs.length && !c.references) return { ok: false, error: 'references_unsupported' }
   const count = (k) => refs.filter((r) => r.kind === k).length
-  if (refs.some((r) => !['image', 'video', 'audio'].includes(r.kind) || !FAL_FILE.test(r.url ?? ''))) return { ok: false, error: 'invalid_references' }
+  if (refs.some((r) => !['image', 'video', 'audio'].includes(r.kind) || !isFile(r.url))) return { ok: false, error: 'invalid_references' }
   if (c.references && (count('image') > c.references.images || count('video') > c.references.videos || count('audio') > c.references.audios)) return { ok: false, error: 'too_many_references' }
   const task = req.task ?? 'reference'
   if (task !== 'reference' && (!c.tasks?.includes(task) || !count('video'))) return { ok: false, error: 'task_needs_video' }
@@ -98,10 +101,10 @@ function priceVideo(req, model) {
   if (c.startFrame === 'required' && !files.start) return { ok: false, error: 'missing_start_image' }
   if (c.endFrame === 'withStart' && files.end && !files.start) return { ok: false, error: 'missing_start_image' } // sinon l'image de fin serait ignorée
   if (c.audioRef === 'required' && !files.audio) return { ok: false, error: 'missing_audio' }
-  if (Object.values(files).some((u) => u && !FAL_FILE.test(u))) return { ok: false, error: 'invalid_file_url' } // seulement des fichiers déposés chez fal via /uploads
+  if (Object.values(files).some((u) => u && !isFile(u))) return { ok: false, error: 'invalid_file_url' } // seulement des fichiers déposés chez fal via /uploads
   if (req.elements?.length) {
     if (!c.elements) return { ok: false, error: 'elements_unsupported' }
-    if (req.elements.length > (c.maxElements ?? 4) || req.elements.some((e) => !['image', 'video'].includes(e.kind) || !FAL_FILE.test(e.url ?? ''))) return { ok: false, error: 'invalid_elements' }
+    if (req.elements.length > (c.maxElements ?? 4) || req.elements.some((e) => !['image', 'video'].includes(e.kind) || !isFile(e.url))) return { ok: false, error: 'invalid_elements' }
   }
 
   // Vidéos de référence : elles changent le tarif (Runware : tarif « vidéo en entrée » ; fal : leur durée est aussi facturée), et une

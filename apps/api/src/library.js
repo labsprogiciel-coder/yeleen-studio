@@ -1,3 +1,5 @@
+import { legacyInputs } from '@studio/catalog/template-slots'
+
 /**
  * Lectures de D1 pour l'application : « Ma bibliothèque » (fichiers générés et importés, gardés dans R2), favoris des deux bibliothèques,
  * et Bibliothèque Yeleen (`catalog_items`), rendue au format de `public/catalog/yeleen.json` pour que le site n'ait qu'une adresse à changer.
@@ -67,42 +69,99 @@ export async function catalog(db) {
   }
 }
 
+/** Une ligne `template_inputs` dans la forme du catalogue (voir templateSlots.js) : seuls les champs renseignés. */
+export const inputOf = (r) => ({
+  idx: r.idx, slot: r.slot, kind: r.kind, mode: r.mode, ...(r.file_key != null ? { file: r.file_key } : {}), ...(r.label != null ? { label: r.label } : {}),
+  optional: Boolean(r.optional), ...(r.prompt != null ? { prompt: r.prompt } : {}), ...(r.from_idx != null ? { from: r.from_idx } : {}),
+})
+export const INPUT_COLS = 'i.template_id, i.idx, i.slot, i.kind, i.mode, i.file_key, i.label, i.optional, i.prompt, i.from_idx'
 /**
- * Vidéos à refaire publiées, dans l'ordre choisi : { templates: [{ id, name, blurb, category, video, image, modelId, plans, resolution,
- * ratio, sound, photo }] }. Les adresses sont celles de l'API (/files/templates/…). Une ligne aux plans illisibles est ignorée.
+ * Entrées de l'ancienne forme (colonnes `image` et `photo`). Une photo sans consigne d'image (`image` NULL) était l'image de début
+ * jointe par l'utilisateur (migration 0006) : elle devient une entrée `start` à fournir, pour que la photo aille encore au modèle vidéo
+ * et que l'administration ne perde pas l'exigence au premier enregistrement.
  */
-export async function listTemplates(db, origin) {
-  const { results } = await db.prepare(`SELECT t.id, t.name, t.blurb, t.category, t.video_key, t.image, t.model_id, t.plans, t.resolution, t.ratio, t.sound, t.photo,
-      g.tool AS g_tool, g.secs AS g_secs, g.roles AS g_roles
-    FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id WHERE t.published = 1 ORDER BY t.sort, t.created_at`).bind().all()
+const legacyOf = (t) => legacyInputs(t).map((i) => ({ ...i, optional: false }))
+/** Entrées d'un modèle : ses lignes `template_inputs`, sinon celles de l'ancienne forme (colonnes `image` et `photo`). */
+export const inputsOf = (t, rows) => (rows.length ? rows.map(inputOf) : legacyOf(t))
+/** Lignes `template_inputs` d'un modèle, dans l'ordre. */
+export const inputRows = async (db, id) => (await db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i WHERE i.template_id = ?1 ORDER BY i.idx`).bind(id).all()).results
+
+/**
+ * Entrées telles que l'application les reçoit : jamais la clé R2 d'un fichier fixe, mais son adresse (`url`) ; `optional` pour les
+ * entrées à fournir seulement ; la consigne de Krea 3 d'une entrée créée (comme `image` jusqu'ici).
+ */
+export const publicInputs = (inputs, origin) => inputs.map(({ file, optional, ...i }) => ({
+  ...i, ...(i.mode === 'user' ? { optional: Boolean(optional) } : {}), ...(i.mode === 'fixed' && file ? { url: `${origin}/files/${file}` } : {}),
+}))
+
+export const TEMPLATE_COLS = `t.id, t.name, t.blurb, t.category, t.video_key, t.image, t.model_id, t.plans, t.resolution, t.ratio, t.sound, t.photo, t.sort, t.published, t.created_at,
+  g.tool AS g_tool, g.source_key AS g_source_key, g.secs AS g_secs, g.prompt AS g_prompt, g.roles AS g_roles`
+/** Une ligne de `templates` (publiée ou non) avec sa source Genjutsu éventuelle (colonnes g_…), ou null. */
+export const templateRow = (db, id) => db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id WHERE t.id = ?1`).bind(id).first()
+
+/**
+ * Un modèle tel que l'application le reçoit (GET /templates, aperçu de l'administration), ou null si ses plans ou ses rôles sont
+ * illisibles. `inputs` : ses entrées ; `image` et `photo` restent pour les anciennes versions de l'application (déduites des entrées
+ * quand il en a : consigne de l'image de début créée, libellé de sa photo).
+ */
+export function publicTemplate(t, rows, origin) {
+  let plans
+  let roles = null
+  try { plans = JSON.parse(t.plans); if (t.g_tool) roles = JSON.parse(t.g_roles) } catch { return null }
+  // Genjutsu : la vidéo est la source, pas de plans ; il faut au moins un rôle (une photo) et une durée.
+  const genjutsu = t.g_tool ? { tool: t.g_tool, secs: t.g_secs, roles } : null
+  if (genjutsu && (!Array.isArray(roles) || !roles.length || roles.some((r) => typeof r !== 'string') || !(genjutsu.secs > 0))) return null
+  if (!genjutsu && (!Array.isArray(plans) || !plans.length || plans.some((p) => typeof p?.text !== 'string' || !(p.dur > 0)))) return null
+  const inputs = genjutsu ? [] : inputsOf(t, rows)
+  let image = t.image ?? null
+  let photo = t.photo ?? null
+  if (rows.length) {
+    const start = inputs.find((i) => i.slot === 'start' && i.mode === 'generated')
+    image = start?.prompt ?? null
+    photo = (start?.from != null ? inputs.find((i) => i.idx === start.from)?.label : null) ?? null
+  }
   return {
-    templates: results.flatMap((t) => {
-      let plans
-      let roles = null
-      try { plans = JSON.parse(t.plans); if (t.g_tool) roles = JSON.parse(t.g_roles) } catch { return [] }
-      // Genjutsu : la vidéo est la source, pas de plans ; il faut au moins un rôle (une photo) et une durée.
-      const genjutsu = t.g_tool ? { tool: t.g_tool, secs: t.g_secs, roles } : null
-      if (genjutsu && (!Array.isArray(roles) || !roles.length || roles.some((r) => typeof r !== 'string') || !(genjutsu.secs > 0))) return []
-      if (!genjutsu && (!Array.isArray(plans) || !plans.length || plans.some((p) => typeof p?.text !== 'string' || !(p.dur > 0)))) return []
-      return [{
-        id: t.id, name: t.name, blurb: t.blurb ?? null, category: t.category, video: `${origin}/files/${t.video_key}`, image: t.image ?? null, modelId: t.model_id,
-        plans: genjutsu ? [] : plans.map((p) => ({ text: p.text, dur: p.dur })), resolution: t.resolution ?? null, ratio: t.ratio ?? null,
-        sound: Boolean(t.sound), photo: t.photo ?? null, ...(genjutsu ? { genjutsu } : {}),
-      }]
-    }),
+    id: t.id, name: t.name, blurb: t.blurb ?? null, category: t.category, video: `${origin}/files/${t.video_key}`, image, modelId: t.model_id,
+    plans: genjutsu ? [] : plans.map((p) => ({ text: p.text, dur: p.dur })), resolution: t.resolution ?? null, ratio: t.ratio ?? null,
+    sound: Boolean(t.sound), photo, inputs: publicInputs(inputs, origin), ...(genjutsu ? { genjutsu } : {}),
   }
 }
 
 /**
- * Source Genjutsu d'une vidéo à refaire publiée : { tool, sourceKey, secs, prompt, roles }, ou null. Lue au lancement : la vidéo
- * source, sa durée (le prix) et la consigne viennent d'ici, jamais de l'application.
+ * Vidéos à refaire publiées, dans l'ordre choisi : { templates: [{ id, name, blurb, category, video, image, modelId, plans, resolution,
+ * ratio, sound, photo, inputs }] }. Les adresses sont celles de l'API (/files/templates/…). Une ligne aux plans illisibles est ignorée.
  */
-export async function templateSource(db, id) {
-  if (typeof id !== 'string' || !/^[\w-]{1,80}$/.test(id)) return null
+export async function listTemplates(db, origin) {
+  const { results } = await db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id
+    WHERE t.published = 1 ORDER BY t.sort, t.created_at`).bind().all()
+  const rows = new Map()
+  const all = (await db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i JOIN templates t ON t.id = i.template_id WHERE t.published = 1 ORDER BY i.template_id, i.idx`).bind().all()).results
+  for (const r of all) rows.set(r.template_id, [...(rows.get(r.template_id) ?? []), r])
+  return { templates: results.flatMap((t) => publicTemplate(t, rows.get(t.id) ?? [], origin) ?? []) }
+}
+
+const TEMPLATE_ID = /^[\w-]{1,80}$/
+/**
+ * Source Genjutsu d'une vidéo à refaire publiée (ou non, pour un administrateur : `unpublished`) : { tool, sourceKey, secs, prompt,
+ * roles }, ou null. Lue au lancement : la vidéo source, sa durée (le prix) et la consigne viennent d'ici, jamais de l'application.
+ */
+export async function templateSource(db, id, { unpublished = false } = {}) {
+  if (typeof id !== 'string' || !TEMPLATE_ID.test(id)) return null
   const g = await db.prepare(`SELECT g.tool, g.source_key, g.secs, g.prompt, g.roles FROM template_genjutsu g JOIN templates t ON t.id = g.template_id
-    WHERE g.template_id = ? AND t.published = 1`).bind(id).first()
-  if (!g) return null
+    WHERE g.template_id = ?1 AND (t.published = 1 OR ?2 = 1)`).bind(id, unpublished ? 1 : 0).first()
+  if (!g || !g.source_key || !(g.secs > 0)) return null // brouillon incomplet : pas de source ou pas de durée
   let roles
   try { roles = JSON.parse(g.roles) } catch { return null }
   return Array.isArray(roles) && roles.length ? { tool: g.tool, sourceKey: g.source_key, secs: g.secs, prompt: g.prompt, roles } : null
+}
+
+/**
+ * Vidéo à refaire par le générateur de vidéos, au lancement : { id, modelId, inputs }, ou null (inconnue, non publiée sauf pour un
+ * administrateur, ou faite par Genjutsu). Les entrées (fichiers fixes, ce que l'utilisateur fournit) font foi, pas l'application.
+ */
+export async function videoTemplate(db, id, { unpublished = false } = {}) {
+  if (typeof id !== 'string' || !TEMPLATE_ID.test(id)) return null
+  const t = await templateRow(db, id)
+  if (!t || t.g_tool || (!t.published && !unpublished)) return null
+  return { id: t.id, modelId: t.model_id, inputs: inputsOf(t, await inputRows(db, id)) }
 }

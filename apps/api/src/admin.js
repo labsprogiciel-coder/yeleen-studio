@@ -2,10 +2,11 @@ import { Hono } from 'hono'
 import { STORING, advanceJob, isActive } from './jobs.js'
 import { ledgerOf } from './mirror.js'
 import { OPEN_STATUSES, recheckTopup, topupView } from './topups.js'
+import { adminTemplatesApp } from './adminTemplates.js'
 
 /**
  * Administration du studio (`/admin/*`) : retrouver un utilisateur, corriger son solde, rembourser ou annuler une génération,
- * revérifier une recharge, bloquer un compte. Réservée aux comptes Clerk listés dans ADMIN_USER_IDS (variable réglée dans le tableau
+ * revérifier une recharge, bloquer un compte, gérer les vidéos à refaire (Modèles, adminTemplates.js). Réservée aux comptes Clerk listés dans ADMIN_USER_IDS (variable réglée dans le tableau
  * de bord Cloudflare, jamais dans wrangler.jsonc) ; vide ou absente : personne. La garde est dans index.js, après celle de la connexion.
  *
  * L'argent et le blocage se décident dans le Durable Object du compte VISÉ (jamais celui de l'administrateur), en une requête ; D1 sert
@@ -346,6 +347,9 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
       ORDER BY j.created_at DESC LIMIT 200`).bind(stuck ? 1 : 0, now - STUCK_JOB).all()
     return c.json({ jobs: results.map((j) => ({ ...j, ageMin: minutes(now - j.createdAt), stuck: now - j.createdAt > STUCK_JOB })) })
   })
+
+  // Vidéos à refaire (Modèles) : voir adminTemplates.js.
+  a.route('/templates', adminTemplatesApp())
 
   return a
 }

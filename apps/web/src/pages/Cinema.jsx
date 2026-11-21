@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Icon from '../lib/icons.jsx'
 import { IMAGE_MODELS, VIDEO_MODELS, findModel, imageCost, priceLabel, videoCost } from '@studio/catalog'
 import { recipeById, recipeCost } from '@studio/catalog/recipes'
-import { findTool, toolCost } from '@studio/catalog/tools'
+import { findTool } from '@studio/catalog/tools'
 import { SkipLink } from '../components/Headers.jsx'
 import Menu from '../components/Menu.jsx'
 import MentionTextarea from '../components/MentionTextarea.jsx'
@@ -36,7 +37,11 @@ import { modelItem } from '../lib/modelItem.js'
 import { useToast } from '../lib/toasts.jsx'
 import useDocumentTitle from '../lib/useDocumentTitle.js'
 import useGenSettings from '../lib/useGenSettings.js'
-import { useTemplates } from '../lib/templates.js'
+import { loadTemplates, useTemplates, withInputs } from '../lib/templates.js'
+import { TOKEN_PATTERN, blockerText, generatedCost, missingInputs, sentInputs, todoText, tokenItems, tplInputs, tplParam, tplRatio } from '../lib/templateRun.js'
+import TemplateInputs from '../components/cinema/TemplateInputs.jsx'
+import { api } from '../lib/api.js'
+import useIsAdmin from '../lib/useIsAdmin.jsx'
 import '../styles/shell.css'
 import { track } from '../lib/posthog.js'
 import '../styles/library.css'
@@ -92,20 +97,23 @@ export default function Cinema() {
   // fois le modèle en place (`tpl`), après que useGenSettings a ramené ses valeurs à celles du modèle (son effet passe avant).
   const templates = useTemplates(VIDEO_LIST)
   const [tpl, setTpl] = useState(null)
-  // Image de départ d'une vidéo à refaire (en deux temps, comme chez Krea) : Krea 3 la crée à partir de la photo jointe (ou du texte
-  // seul), puis elle remplace la photo dans Références et devient l'image de départ de la vidéo. `start` : { jobId, key, photoId }.
+  // La vidéo à refaire ouverte (tant que « Références et montage » l'est) et ses entrées (voir lib/templateRun.js) : `tin` les fichiers
+  // remplis { [idx]: asset } ; les images `generated` se font en deux temps, comme chez Krea : Krea 3 les crée (consigne `tprompts`,
+  // à partir de la photo de leur entrée `source` s'il y en a une), puis elles remplissent leur case. `tgens` : { [idx]: { jobId, key } }.
   const [startTpl, setStartTpl] = useState(null)
-  const [genTpl, setGenTpl] = useState(null) // vidéo à refaire par Genjutsu (Transfert de mouvement, Remplacer un objet) // la vidéo à refaire ouverte, tant que l'outil l'est
-  const [imgText, setImgText] = useState('')
-  const [start, setStart] = useState(null)
+  const [genTpl, setGenTpl] = useState(null) // vidéo à refaire par Genjutsu (Transfert de mouvement, Remplacer un objet), tant que son outil est ouvert
+  const [tin, setTin] = useState({})
+  const [tprompts, setTprompts] = useState({})
+  const [tgens, setTgens] = useState({})
   useEffect(() => {
     if (!tpl || vmodel.id !== tpl.modelId) return
     s.replacePlans((vmodel.caps.multiShot ? tpl.plans : tpl.plans.slice(0, 1)).map((p) => ({ text: p.text, dur: p.dur })))
     if (tpl.resolution && s.resolutions?.includes(tpl.resolution)) s.setRes(tpl.resolution)
     if (tpl.ratio && s.ratios?.includes(tpl.ratio)) s.setRatio(tpl.ratio)
     if (vmodel.caps.audio !== 'always') s.setSound(tpl.sound)
-    setStartTpl(tpl); setImgText(tpl.image ?? ''); setStart(null)
-    toast(tpl.image ? (tpl.photo ? `« ${tpl.name} » est prêt : ajoutez ${tpl.photo.charAt(0).toLowerCase()}${tpl.photo.slice(1)} dans Références, créez l’image de départ, puis générez.` : `« ${tpl.name} » est prêt : créez l’image de départ, puis générez.`) : tpl.photo ? `« ${tpl.name} » est prêt : ajoutez ${tpl.photo.charAt(0).toLowerCase()}${tpl.photo.slice(1)} dans Références, puis générez.` : `« ${tpl.name} » est prêt : changez le texte si vous voulez, puis générez.`)
+    setStartTpl(tpl); setTin({}); setTgens({})
+    setTprompts(Object.fromEntries(tplInputs(tpl).filter((i) => i.mode === 'generated').map((i) => [i.idx, i.prompt ?? ''])))
+    toast(`« ${tpl.name} » est prêt. ${todoText(tpl)}`)
     setTpl(null)
   }, [tpl, vmodel.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // Image
@@ -143,6 +151,33 @@ export default function Cinema() {
     if (t.genjutsu) { openTool(t.genjutsu.tool); setGenTpl(t); setView('creations'); return } // la vidéo est la source : seulement des photos
     openTool('video-refs'); setTask('refs'); setAtt([]); setStyleId(null); setVideoId(t.modelId); setTpl(t); setView('creations') // la vidéo à refaire a déjà son rendu
   }
+  // Lien direct `?tpl=<id>` (« Essayer sur mon compte » de l'administration) : la vidéo à refaire publiée, sinon, pour un compte
+  // administrateur, le modèle non publié tel que Cinéma le recevrait (marqué `preview`). Le paramètre est retiré une fois appliqué.
+  const [params, setParams] = useSearchParams()
+  const linkId = tplParam(params.toString())
+  const { ready: adminReady, admin } = useIsAdmin()
+  const linked = useRef(null)
+  useEffect(() => {
+    if (!linkId || linked.current === linkId) return
+    let alive = true
+    const usable = (t) => (t.genjutsu ? Boolean(findTool(t.genjutsu.tool)) : VIDEO_LIST.some((m) => m.id === t.modelId))
+    const done = () => setParams((p) => { const n = new URLSearchParams(p); n.delete('tpl'); return n }, { replace: true })
+    loadTemplates().then(async (all) => {
+      if (!alive) return
+      const found = all.find((t) => t.id === linkId && usable(t))
+      if (found) { linked.current = linkId; recreate(found); return done() }
+      if (!adminReady) return // on attend la réponse sur les droits avant de conclure
+      linked.current = linkId
+      if (!admin) { toast('Cette vidéo à refaire n’est pas disponible.'); return done() }
+      try {
+        const t = withInputs({ ...(await api.adminPreviewTemplate(linkId)).template, preview: true })
+        if (!usable(t)) toast('Le modèle de cette vidéo à refaire n’est plus au catalogue.')
+        else recreate(t)
+      } catch { toast('Impossible d’ouvrir l’aperçu de ce modèle.') }
+      done()
+    })
+    return () => { alive = false }
+  }, [linkId, adminReady, admin]) // eslint-disable-line react-hooks/exhaustive-deps
   // Changer d'onglet montre la liste de ses outils.
   const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null); setGenTpl(null) }
   useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ, même si Cinéma est déjà ouvert
@@ -161,24 +196,33 @@ export default function Cinema() {
   const styled = features.brand && kit.apply && Boolean(style) // sans l'écran Marque, personne ne peut régler (ni retirer) un style de marque
   const attached = useMemo(() => labelAttachments(att, pool), [att, pool])
   const ref = useMemo(() => resolveAttachments({ attached, texts: video ? s.plans.map((p) => p.text) : [itext], caps }), [attached, s.plans, itext, video, caps])
-  const roles = Object.fromEntries(ref.items.map((i) => [i.token, i.role]))
-  const items = attached.map((x) => ({ key: x.id, token: x.token, label: x.token, sub: x.asset.name, asset: x.asset }))
+  // Vidéo à refaire avec des entrées : elles remplacent les pièces jointes libres (la numérotation doit suivre le texte du modèle).
+  const tplIn = useMemo(() => tplInputs(startTpl), [startTpl])
+  const hasIn = video && tool === 'video-refs' && tplIn.length > 0 && vmodel.id === startTpl.modelId
+  const tplTokens = useMemo(() => tokenItems(tplIn), [tplIn])
+  const missing = hasIn ? missingInputs(tplIn, tin) : []
+  const roles = hasIn ? {} : Object.fromEntries(ref.items.map((i) => [i.token, i.role]))
+  const items = hasIn
+    ? tplTokens.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: tin[x.idx] }))
+    : attached.map((x) => ({ key: x.id, token: x.token, label: x.token, sub: x.asset.name, asset: x.asset }))
   const native = Boolean(caps.references) // le modèle prolonge ou modifie lui-même une vidéo jointe
-  const activeTask = native ? task : 'refs'
+  const activeTask = native && !hasIn ? task : 'refs' // une vidéo à refaire part de ses entrées
   // Suite, Avant et Modifier d'un modèle sans prise en charge native passent par l'écran Vidéo : sans lui, seul « Références » reste (et le menu disparaît).
   const modeItems = native ? MODES.filter((m) => m.id !== 'prev') : features.video ? MODES : MODES.filter((m) => m.id === 'refs')
-  const clipSecs = ref.references.filter((r) => r.kind === 'video').reduce((n, r) => n + (r.asset.secs || 0), 0) // durée des vidéos jointes : facturée en entrée
+  const clipSecs = hasIn // durée des vidéos jointes (ou fournies pour le modèle) : facturée en entrée
+    ? tplIn.filter((i) => i.slot === 'reference' && i.kind === 'video').reduce((n, i) => n + (tin[i.idx]?.secs || 0), 0)
+    : ref.references.filter((r) => r.kind === 'video').reduce((n, r) => n + (r.asset.secs || 0), 0)
   const secs = activeTask === 'edit' ? Math.max(4, Math.ceil(clipSecs)) : s.total // modifier : la sortie dure autant que la vidéo
   const cost = video ? (native ? videoCost(vmodel, secs, s.res, { inputSecs: clipSecs, sound: s.sound }) : s.cost) : imageCost(imodel, iRes2, iN)
 
   // Ce qui manque pour lancer, dit en clair sous le texte.
-  const needsStart = video && caps.startFrame === 'required' && !ref.slots.start
-  const needsClip = video && native && activeTask !== 'refs' && !attached.some((x) => x.asset.kind === 'video')
-  const needs = needsClip ? `Joignez une vidéo avec + : elle sera ${activeTask === 'next' ? 'prolongée' : 'modifiée'}.` : needsStart && text.trim() ? 'Ce modèle part d’une image : ajoutez-en une avec +.' : null // l'image est réclamée une fois que l'on a commencé à écrire
+  const needsStart = video && !hasIn && caps.startFrame === 'required' && !ref.slots.start // avec un modèle : ses entrées le disent
+  const needsClip = video && !hasIn && native && activeTask !== 'refs' && !attached.some((x) => x.asset.kind === 'video')
+  const needs = hasIn && missing.length ? blockerText(missing) : needsClip ? `Joignez une vidéo avec + : elle sera ${activeTask === 'next' ? 'prolongée' : 'modifiée'}.` : needsStart && text.trim() ? 'Ce modèle part d’une image : ajoutez-en une avec +.' : null // l'image est réclamée une fois que l'on a commencé à écrire
   const idle = video && attached.length > 0 && ref.items.every((i) => i.role === 'unused') ? 'Ce modèle n’utilise pas ces références.' : null
   const planHint = video && s.multi && s.plans.findIndex((p) => !p.text.trim()) >= 0 && s.current.text.trim() ? `Décrivez aussi le plan ${s.plans.findIndex((p) => !p.text.trim()) + 1}.` : null
   const emptyPlan = video ? s.plans.findIndex((p) => !p.text.trim()) : (itext.trim() ? -1 : 0) // premier plan sans texte
-  const blocked = emptyPlan >= 0 || needsStart || needsClip
+  const blocked = emptyPlan >= 0 || needsStart || needsClip || missing.length > 0
   const long = text.length > 600 ? `${text.length.toLocaleString('fr-FR')} caractères` : null // information : les modèles coupent ou ignorent les prompts très longs
 
   const attach = (list) => {
@@ -199,6 +243,7 @@ export default function Cinema() {
       const r = submit({ kind: 'image', title: imodel.name, prompt: text.trim(), count: iN, cost, live, brandStyle: styled ? style : undefined, meta: `${iN} × ${iRes2}${iRatio2 === 'Auto' ? '' : ` · ${iRatio2}`}${look ? ` · ${look.label}` : ''}${styled ? ' · style de la marque' : ''}` })
       return setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     }
+    if (hasIn) return generateTemplate()
     // Vidéo : les pièces jointes deviennent références (Seedance), image de départ, image de fin, audio ou éléments selon le modèle.
     let extra
     try {
@@ -227,56 +272,81 @@ export default function Cinema() {
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
   }
 
-  // Image de départ (vidéo à refaire) : Krea 3 retouche la photo jointe au format de la vidéo, ou crée l'image du texte seul.
-  const TPL_TOOL = findTool('template-image')
-  const KREA = findModel(IMAGE_MODELS, 'krea-3')
-  const tplPhoto = attached.find((x) => x.asset.kind === 'image')
-  const tplRatio = startTpl?.ratio && startTpl.ratio !== 'auto' ? startTpl.ratio : '16:9'
-  const startCost = startTpl?.photo
-    ? toolCost(TPL_TOOL, { model: 'krea-3', images: ['fichier'], prompt: imgText, ratio: tplRatio })
-    : imageCost(KREA, '2K', 1)
-  const startJob = start && jobs.find((j) => j.id === start.jobId)
-  const startBusy = useRef(false) // envoi en cours (lecture de la photo comprise) : un second clic ne lance pas une seconde image payante
-  const makeStart = async () => {
-    if (startBusy.current) return
-    startBusy.current = true
-    try { await sendStart() } finally { startBusy.current = false }
+  // Vidéo à refaire avec des entrées : le serveur place les fichiers selon le modèle (et ajoute ceux fournis par Qreativ) ; on n'envoie
+  // que ceux de l'utilisateur et les images créées, avec leur numéro. Plans, résolution, format, son et style restent ceux du panneau.
+  const generateTemplate = async () => {
+    let templateInputs
+    try {
+      templateInputs = await Promise.all(sentInputs(tplIn, tin).map(async ({ idx, value }) => ({ idx, file: await getFile(value) })))
+    } catch {
+      return setError('Un fichier de la vidéo à refaire est introuvable : choisissez-le de nouveau.')
+    }
+    const total = Math.round(secs * 10) / 10
+    const live = {
+      kind: 'video', modelId: vmodel.id, template: startTpl.id, templateInputs,
+      plans: s.plans.map((p) => ({ text: p.text, dur: p.dur })), secs: total,
+      resolution: s.resolutions ? s.res : undefined, ratio: s.ratios ? s.ratio : undefined, fps: caps.fps ? s.fps : undefined, sound: s.sound, camera: 'none',
+      style: look?.id,
+      brandStyle: styled ? style : undefined,
+      inputSecs: clipSecs || undefined,
+    }
+    const base = `${startTpl.name} · ${vmodel.name} · ${String(total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}${look ? ` · ${look.label}` : ''}`
+    const r = submit({ kind: 'video', title: startTpl.name, prompt: s.plans.map((p) => p.text.trim()).join(' / '), cost, secs: total, live, brandStyle: styled ? style : undefined, meta: styled ? `${base} · style de la marque` : base })
+    setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
   }
-  const sendStart = async () => {
+
+  // Images créées d'abord (entrées `generated`) : Krea 3 retouche la photo de leur entrée `source` au format de la vidéo, ou crée
+  // l'image du texte seul. Prête, l'image remplit sa case.
+  const kRatio = tplRatio(startTpl)
+  const tcosts = Object.fromEntries(tplIn.filter((i) => i.mode === 'generated').map((i) => [i.idx, generatedCost(i, kRatio)]))
+  const tbusy = Object.fromEntries(Object.keys(tgens).map((k) => [k, true]))
+  const sending = useRef(new Set()) // envois en cours (lecture de la photo comprise) : un second clic ne lance pas une seconde image payante
+  const makeImage = async (idx) => {
+    if (sending.current.has(idx) || tgens[idx]) return
+    sending.current.add(idx)
+    try { await sendImage(idx) } finally { sending.current.delete(idx) }
+  }
+  const sendImage = async (idx) => {
     setError('')
-    const prompt = imgText.trim()
-    if (!prompt) return setError('Décrivez l’image de départ.')
+    const i = tplIn.find((x) => x.idx === idx)
+    const what = i.slot === 'end' ? 'l’image de fin' : 'l’image de début'
+    const prompt = (tprompts[idx] ?? '').trim()
+    if (!prompt) return setError(`Décrivez ${what}.`)
+    const title = `${startTpl.name} · ${i.slot === 'end' ? 'image de fin' : 'image de début'}`
     let r
-    if (startTpl.photo) {
-      if (!tplPhoto) return setError(`Ajoutez d’abord ${startTpl.photo.charAt(0).toLowerCase()}${startTpl.photo.slice(1)} dans Références.`)
+    if (i.from != null) {
+      const photo = tin[i.from]
+      if (!photo) return setError('Ajoutez d’abord la photo demandée dans Références.')
       let file
-      try { file = await getFile(tplPhoto.asset) } catch { return setError('La photo est introuvable : choisissez-la de nouveau.') }
-      r = submit({ kind: 'image', title: `${startTpl.name} · image de départ`, prompt, cost: startCost, meta: `Krea 3 · ${tplRatio}`,
-        live: { kind: 'tool', modelId: 'template-image', inputs: { model: 'krea-3', prompt, ratio: tplRatio }, inputFiles: { images: [file] } } })
+      try { file = await getFile(photo) } catch { return setError('La photo est introuvable : choisissez-la de nouveau.') }
+      r = submit({ kind: 'image', title, prompt, cost: tcosts[idx], meta: `Krea 3 · ${kRatio}`,
+        live: { kind: 'tool', modelId: 'template-image', inputs: { model: 'krea-3', prompt, ratio: kRatio }, inputFiles: { images: [file] } } })
     } else {
-      r = submit({ kind: 'image', title: `${startTpl.name} · image de départ`, prompt, cost: startCost, count: 1, meta: `Krea 3 · ${tplRatio}`,
-        live: { kind: 'image', modelId: 'krea-3', prompt, resolution: '2K', ratio: tplRatio, count: 1 } })
+      r = submit({ kind: 'image', title, prompt, cost: tcosts[idx], count: 1, meta: `Krea 3 · ${kRatio}`,
+        live: { kind: 'image', modelId: 'krea-3', prompt, resolution: '2K', ratio: kRatio, count: 1 } })
     }
     if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
-    setStart({ jobId: r.job.id, key: r.job.key, photoId: tplPhoto?.id ?? null })
+    setTgens((g) => ({ ...g, [idx]: { jobId: r.job.id, key: r.job.key } }))
   }
-  // Image prête : elle prend la place de la photo dans Références (la première image jointe devient l'image de départ).
-  const startAsset = start && pool.find((a) => a.id === `${start.key}-0`)
+  // Image prête : elle remplit sa case. Vidéo à refaire quittée (ou changée) entre-temps : l'image reste dans Créations seulement.
+  const tready = Object.entries(tgens).map(([idx, g]) => [Number(idx), pool.find((a) => a.id === `${g.key}-0`)]).filter(([, a]) => a)
+  const treadyKey = tready.map(([idx, a]) => `${idx}:${a.id}`).join(',')
   useEffect(() => {
-    if (!startAsset) return
-    if (!startTpl) return setStart(null) // vidéo à refaire quittée entre-temps : l'image reste dans Créations, pas dans Références
-    setAtt((x) => [{ id: crypto.randomUUID(), assetId: startAsset.id }, ...x.filter((y) => y.id !== start.photoId)])
-    setStart(null)
-    toast('Image de départ prête : elle est dans Références. Générez la vidéo.')
-  }, [startAsset]) // eslint-disable-line react-hooks/exhaustive-deps
-  const startFailed = startJob && (startJob.status === 'FAILED' || startJob.status === 'CANCELED')
+    if (!tready.length) return
+    setTgens((g) => Object.fromEntries(Object.entries(g).filter(([k]) => !tready.some(([idx]) => idx === Number(k)))))
+    if (!startTpl) return
+    setTin((x) => ({ ...x, ...Object.fromEntries(tready) }))
+    toast(tready.some(([idx]) => tplIn.find((i) => i.idx === idx)?.slot === 'end') ? 'Image de fin prête : elle est dans Références.' : 'Image de début prête : elle est dans Références.')
+  }, [treadyKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tfailed = Object.entries(tgens).map(([idx, g]) => [Number(idx), jobs.find((j) => j.id === g.jobId)]).filter(([, j]) => j && (j.status === 'FAILED' || j.status === 'CANCELED'))
+  const tfailedKey = tfailed.map(([idx, j]) => `${idx}:${j.id}`).join(',')
   useEffect(() => { // échec (remboursé par le serveur) ou annulation : on peut relancer
-    if (!startFailed) return
-    setStart(null)
-    setError(startJob.status === 'FAILED'
-      ? 'L’image de départ n’a pas pu être créée (vous avez été remboursé) : réessayez ou changez la consigne.'
-      : 'L’image de départ a été annulée : relancez-la quand vous voulez.')
-  }, [startFailed]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!tfailed.length) return
+    setTgens((g) => Object.fromEntries(Object.entries(g).filter(([k]) => !tfailed.some(([idx]) => idx === Number(k)))))
+    setError(tfailed.some(([, j]) => j.status === 'FAILED')
+      ? 'L’image n’a pas pu être créée (vous avez été remboursé) : réessayez ou changez la consigne.'
+      : 'La création de l’image a été annulée : relancez-la quand vous voulez.')
+  }, [tfailedKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Suite, Avant, Modifier : ces gestes partent d'une vidéo, ils reprennent l'outil de l'écran Vidéo avec celle que vous avez jointe.
   const fromClip = (id) => {
@@ -306,7 +376,8 @@ export default function Cinema() {
 
   const modelItems = video ? VIDEO_ITEMS : IMAGE_ITEMS
   const modelValue = video ? videoId : imageId
-  const onModel = video ? setVideoId : setImageId
+  // Autre modèle vidéo : la vidéo à refaire (faite pour son modèle) n'est plus suivie, comme avec son ×.
+  const onModel = video ? (id) => { if (startTpl && id !== startTpl.modelId) setStartTpl(null); setVideoId(id) } : setImageId
   const logo = logoFor(model.id)
   const durations = s.picks.map((d) => ({ id: d, title: `${d} s` }))
 
@@ -320,7 +391,7 @@ export default function Cinema() {
         </Menu>
       </Section>
 
-      {video && modeItems.length > 1 && (
+      {video && !hasIn && modeItems.length > 1 && (
         <Section id="cn-mode" title="Mode">
           <Segmented items={modeItems} value={activeTask} onChange={native ? setTask : fromClip} label="Mode de création" />
         </Section>
@@ -328,7 +399,7 @@ export default function Cinema() {
 
       {video && (
         <Section id="cn-refs" title="Références">
-          {attached.length > 0 && (
+          {!hasIn && attached.length > 0 && (
             <div className="ep-tiles">
               {attached.map((x) => (
                 <RefTile key={x.id} asset={x.asset} token={x.token} off={roles[x.token] === 'unused'} onCite={() => area.current?.insertAt(x.token)} onRemove={() => detach(x.id)} />
@@ -338,35 +409,23 @@ export default function Cinema() {
           {startTpl && (
             <div className="ep-from">
               <video src={`${startTpl.video}#t=0.1`} muted loop playsInline preload="metadata" aria-hidden="true" onMouseEnter={(e) => e.currentTarget.play().catch(() => {})} onMouseLeave={(e) => e.currentTarget.pause()} />
-              <span><small>D’après la vidéo</small><b>{startTpl.name}</b></span>
+              <span><small>{startTpl.preview ? 'Aperçu : modèle non publié' : 'D’après la vidéo'}</small><b>{startTpl.name}</b></span>
               <button type="button" className="ep-x" aria-label={`Ne plus suivre « ${startTpl.name} »`} title="Continuer sans cette vidéo" onClick={() => setStartTpl(null)}><Icon name="close" size={12} /></button>
             </div>
           )}
+          {hasIn && (
+            <TemplateInputs inputs={tplIn} given={tin} onGiven={(idx, a) => { setTin((x) => ({ ...x, [idx]: a ?? undefined })); setError('') }}
+              prompts={tprompts} onPrompt={(idx, v) => { setTprompts((x) => ({ ...x, [idx]: v })); setError('') }}
+              busy={tbusy} costs={tcosts} onMake={makeImage} onCite={(tok) => area.current?.insertAt(tok)} />
+          )}
           {look && <StyleChip style={look} onOpen={() => setPicking('styles')} onClear={() => setStyleId(null)} />}
-          <AddMedia label={startTpl?.photo && !tplPhoto ? `Ajouter ${startTpl.photo.charAt(0).toLowerCase()}${startTpl.photo.slice(1)}` : 'Ajouter des références'} onAdd={attach} style={styleId} onStyle={setStyleId} />
+          {hasIn
+            ? !look && <button type="button" className="ep-add" aria-haspopup="dialog" onClick={() => setPicking('styles')}><span className="ep-chips" aria-hidden="true"><i><Icon name="palette" size={14} /></i></span><span>Choisir un style</span></button>
+            : <AddMedia label="Ajouter des références" onAdd={attach} style={styleId} onStyle={setStyleId} />}
         </Section>
       )}
 
       {!video && <StyleSection id="cn-style" value={styleId} onChange={setStyleId} />}
-
-      {video && startTpl?.image && (
-        <Section id="cn-start" title="Image de départ · Krea 3">
-          <p className="tf-hint">
-            {startTpl.photo
-              ? `Krea 3 crée l’image de départ de « ${startTpl.name} » à partir de ${tplPhoto ? 'votre photo' : startTpl.photo.charAt(0).toLowerCase() + startTpl.photo.slice(1) + ' (à ajouter dans Références)'} ; la vidéo l’anime ensuite.`
-              : `Krea 3 crée l’image de départ de « ${startTpl.name} » ; la vidéo l’anime ensuite.`}
-          </p>
-          <PromptBox canClear={Boolean(imgText)} onClear={() => setImgText('')} clearLabel="Effacer l’image de départ"
-            enhance={{ value: imgText, onChange: setImgText, ...(startTpl.photo ? { kind: 'edit', modelId: 'krea-3' } : { kind: 'image', modelId: 'krea-3' }) }}>
-            <MentionTextarea mentions={false} value={imgText} onChange={(t) => { setImgText(t); setError('') }} aria-label="Image de départ" rows={3} />
-          </PromptBox>
-          <button type="button" className="ep-chip ep-start" disabled={Boolean(start) || (startTpl.photo && !tplPhoto)} onClick={makeStart}>
-            <Icon name="sparkle" size={16} />
-            {start ? 'Création de l’image…' : 'Créer l’image de départ'}
-            <span className="ep-price">{jetons(startCost)} cauris</span>
-          </button>
-        </Section>
-      )}
 
       <section className="ep-sec" aria-labelledby="cn-plan-h">
         {video && caps.multiShot
@@ -385,10 +444,10 @@ export default function Cinema() {
             value={text}
             onChange={(t) => { setText(t); setError('') }}
             items={video ? items : []}
-            pattern={ATTACH_PATTERN}
-            isRef={(t) => attached.some((x) => x.token === t)}
+            pattern={hasIn ? TOKEN_PATTERN : ATTACH_PATTERN}
+            isRef={(t) => (hasIn ? tplTokens.some((x) => x.token === t) : attached.some((x) => x.token === t))}
             roles={roles}
-            emptyHint="Joignez des fichiers dans Références : vous pourrez les citer ici."
+            emptyHint={hasIn ? 'Cette vidéo à refaire n’a pas de fichier à citer.' : 'Joignez des fichiers dans Références : vous pourrez les citer ici.'}
             placeholder={video ? (s.multi ? `Décrivez le plan ${s.active + 1}. Tapez @ pour citer une référence jointe.` : 'Décrivez la scène. Tapez @ pour citer une référence jointe.') : 'Décrivez l’image que vous imaginez.'}
             aria-label={video && s.multi ? `Plan ${s.active + 1}` : 'Description'}
             rows={4}
@@ -431,7 +490,7 @@ export default function Cinema() {
       {video && s.multi && <p className="tf-hint">{Math.round(s.total * 10) / 10} s au total</p>}
 
       <GenerateButton price={cost} disabled={blocked} error={error} onClick={generate}
-        title={needs ?? (emptyPlan >= 0 ? (s.multi ? `Décrivez le plan ${emptyPlan + 1}` : 'Décrivez d’abord la scène') : (video && caps.startFrame === 'required' && !ref.slots.start ? 'Ajoutez une image dans Références' : undefined))} />
+        title={needs ?? (emptyPlan >= 0 ? (s.multi ? `Décrivez le plan ${emptyPlan + 1}` : 'Décrivez d’abord la scène') : (video && !hasIn && caps.startFrame === 'required' && !ref.slots.start ? 'Ajoutez une image dans Références' : undefined))} />
     </div>
   )
 

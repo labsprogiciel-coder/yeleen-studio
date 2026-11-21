@@ -13,7 +13,8 @@
     "./tools": "./src/tools.js",
     "./edit-models": "./src/editModels.js",
     "./packs": "./src/packs.js",
-    "./styles": "./src/styles.js"
+    "./styles": "./src/styles.js",
+    "./template-slots": "./src/templateSlots.js"
   },
   "scripts": {
     "test": "node --test"
