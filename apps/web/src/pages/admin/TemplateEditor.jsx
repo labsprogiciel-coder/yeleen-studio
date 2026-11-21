@@ -310,13 +310,16 @@ export default function TemplateEditor({ id, onBack }) {
  */
 const Stepper = forwardRef(function Stepper({ step, onStep, counts, children }, ref) {
   const onTabKeys = useTabKeys()
+  const tabs = useRef(null)
   const panels = Children.toArray(children)
   const last = EDITOR_STEPS.length - 1
+  // Précédent / Suivant disparaissent une fois l'étape changée : le focus passe à l'onglet de la nouvelle étape (sinon il tombe sur la page).
+  const go = (k) => { onStep(k); requestAnimationFrame(() => tabs.current?.querySelector(`#tm-wiz-tab-${EDITOR_STEPS[k].id}`)?.focus()) }
   return (
     <section ref={ref} className="adm-card tm-wiz" aria-label="Entrées et plans">
       <div className="tm-wiz-prog" aria-hidden="true"><i style={{ width: `${((step + 1) / EDITOR_STEPS.length) * 100}%` }} /></div>
       <div className="tm-wiz-top">
-        <div className="tm-wiz-tabs" role="tablist" aria-label="Étapes" onKeyDown={onTabKeys}>
+        <div ref={tabs} className="tm-wiz-tabs" role="tablist" aria-label="Étapes" onKeyDown={onTabKeys}>
           {EDITOR_STEPS.map((x, k) => {
             const n = counts?.[x.id] ?? 0
             return (
@@ -335,8 +338,8 @@ const Stepper = forwardRef(function Stepper({ step, onStep, counts, children }, 
         <div key={x.id} id={`tm-wiz-${x.id}`} role="tabpanel" aria-labelledby={`tm-wiz-tab-${x.id}`} hidden={k !== step} className="tm-wiz-panel">{panels[k]}</div>
       ))}
       <div className="tm-wiz-foot">
-        {step > 0 && <button type="button" className="adm-btn" onClick={() => onStep(step - 1)}><Icon name="chevL" size={14} />Précédent</button>}
-        {step < last && <button type="button" className="adm-btn primary" onClick={() => onStep(step + 1)}>Suivant<Icon name="chevR" size={14} /></button>}
+        {step > 0 && <button type="button" className="adm-btn" onClick={() => go(step - 1)}><Icon name="chevL" size={14} />Précédent</button>}
+        {step < last && <button type="button" className="adm-btn primary" onClick={() => go(step + 1)}>Suivant<Icon name="chevR" size={14} /></button>}
       </div>
     </section>
   )
