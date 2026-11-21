@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../lib/icons.jsx'
-import Segment from './Segment.jsx'
 import { api, apiEnabled } from '../lib/api.js'
 import { jetonLabel, jetons, useJobs } from '../lib/jobs.jsx'
 import { useToast } from '../lib/toasts.jsx'
 import {
-  COUNTRIES, OPERATORS, PACKS, STATUS, TOPUP_COUNTRIES, countdown, errorMessage, failureText, fcfa, isFinal, isOpen, limitError, lines,
+  COUNTRIES, OPERATORS, PACKS, STATUS, TOPUP_COUNTRIES, countdown, countryOfPhone, errorMessage, failureText, fcfa, isFinal, isOpen, limitError, lines,
   maskPhone, telHref, topupCountries, ussdCodes,
 } from '../lib/topups.js'
 import '../styles/recharge.css'
@@ -26,6 +25,9 @@ const POLL_MS = 3500
 const POLL_HIDDEN_MS = 20_000 // onglet caché : on s'en tient à un sondage espacé, et on se remet à jour dès le retour sur l'onglet
 const STEPS = ['Pack', 'Opérateur', 'Numéro', 'Paiement']
 const FORM = 'rc-form' // les boutons du pied de fenêtre soumettent le formulaire de l'étape
+// Opérateurs de tous les pays ouverts (sans doublon) ; le pays se choisit ensuite avec le numéro, parmi ceux où l'opérateur existe.
+const OPERATOR_LIST = [...new Set(COUNTRY_LIST.flatMap((k) => TOPUP_COUNTRIES[k].operators))]
+const countriesFor = (op) => COUNTRY_LIST.filter((k) => TOPUP_COUNTRIES[k].operators.includes(op))
 const perJeton = (p) => Math.round(p.fcfa / p.jetons)
 const BEST = PACKS.reduce((a, p) => (perJeton(p) < perJeton(a) ? p : a)).id
 // Ce que l'utilisateur aura à faire, pour choisir en connaissance de cause. Les consignes exactes viennent de paygate à l'étape 4.
@@ -48,42 +50,65 @@ function useCountdown(expiresAt) {
   return countdown(expiresAt, now)
 }
 
-function Stepper({ step, onGo }) {
+/** Avancée de la recharge : une barre fine en haut de la fenêtre ; le nom de l'étape est dit dans le sous-titre, revenir en arrière passe par « Modifier ». */
+function Progress({ step }) {
+  return <div className="rc-prog" aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
+}
+
+/** Rappel du pack choisi (et de l'opérateur, puis du numéro). « Modifier » (en haut à droite) repart du pack tant que le paiement n'est pas lancé ; les choix déjà faits restent sélectionnés. */
+function PackCard({ pack, operator, phone, country, step, onGo, busy }) {
+  const c = TOPUP_COUNTRIES[country]
+  const edit = step < 3
   return (
-    <ol className="rc-stepper" aria-label="Étapes de la recharge">
-      {STEPS.map((label, i) => {
-        const state = i < step ? 'done' : i === step ? 'on' : ''
-        const back = i < step && step < 3 // on ne revient pas en arrière une fois le paiement lancé
-        const inner = <><i>{i < step ? <Icon name="check" size={12} /> : i + 1}</i><span>{label}</span></>
-        return (
-          <li key={label} className={state} aria-current={i === step ? 'step' : undefined}>
-            {back ? <button type="button" onClick={() => onGo(i)}>{inner}</button> : <div>{inner}</div>}
-          </li>
-        )
-      })}
-    </ol>
+    <section className="rc-card" aria-label="Votre recharge">
+      <Cauri size={40} className="rc-card-cw" />
+      <div className="rc-card-main">
+        <p className="rc-card-qty"><b>{jetons(pack.jetons)}</b> cauris
+        </p>
+        {step > 1 && operator && (
+          <p className="rc-card-op">
+            <i className={`rc-logo rc-op-${operator}`} aria-hidden="true">{OPERATORS[operator].charAt(0)}</i>
+            <span>{OPERATORS[operator]}{step > 2 && phone ? ` · +${c.dial} ${localNumber(phone, c)}` : ''}</span>
+          </p>
+        )}
+      </div>
+      {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(0)} disabled={busy} aria-label="Modifier la recharge"><Icon name="pencil" size={14} />Modifier</button>}
+      <p className="rc-card-price"><b>{fcfa(pack.fcfa)}</b><small>≈ {perJeton(pack)} FCFA le cauri</small></p>
+    </section>
   )
 }
 
-/** Rappel des choix déjà faits, chacun modifiable tant que le paiement n'est pas lancé. */
-function Summary({ pack, operator, phone, country, step, onGo }) {
+/** Drapeaux dessinés (les drapeaux emoji ne s'affichent pas sous Windows). Décoratifs : le nom du pays est dans la liste. */
+const FLAGS = {
+  BF: <><rect width="24" height="8" fill="#ef2b2d" /><rect y="8" width="24" height="8" fill="#009e49" /><path d="M12 4.6l1 3h3.2l-2.6 1.9 1 3-2.6-1.9-2.6 1.9 1-3L7.8 7.6H11z" fill="#fcd116" /></>,
+  CI: <><rect width="8" height="16" fill="#f77f00" /><rect x="8" width="8" height="16" fill="#fff" /><rect x="16" width="8" height="16" fill="#009e60" /></>,
+  SN: <><rect width="8" height="16" fill="#00853f" /><rect x="8" width="8" height="16" fill="#fdef42" /><rect x="16" width="8" height="16" fill="#e31b23" /><path d="M12 5.2l.8 2.3h2.4l-2 1.4.8 2.3-2-1.4-2 1.4.8-2.3-2-1.4h2.4z" fill="#00853f" /></>,
+}
+const Flag = ({ k }) => <svg className="rc-flag" viewBox="0 0 24 16" aria-hidden="true">{FLAGS[k]}</svg>
+const PLACEHOLDER = { BF: '70 12 34 56', CI: '07 12 34 56 78', SN: '77 123 45 67' }
+
+/** Champ téléphone : pays (drapeau et indicatif) puis numéro local. Seuls les pays où l'opérateur est proposé sont listés. Figé pendant la vérification du numéro : la réponse correspond toujours au pays et au numéro affichés. */
+function PhoneField({ countries, country, onCountry, phone, onPhone, operator, amount, busy }) {
   const c = TOPUP_COUNTRIES[country]
-  const items = [
-    step > 0 && { k: 0, label: 'Pack', value: <><Amount n={pack.jetons} word /> · {fcfa(pack.fcfa)}</> },
-    step > 1 && operator && { k: 1, label: 'Opérateur', value: `${OPERATORS[operator]}${COUNTRY_LIST.length > 1 ? ` · ${COUNTRIES[country]}` : ''}` },
-    step > 2 && phone && { k: 2, label: 'Numéro', value: `+${c.dial} ${localNumber(phone, c)}` },
-  ].filter(Boolean)
-  if (!items.length) return null
+  const pick = countries.length > 1
   return (
-    <dl className="rc-sum">
-      {items.map((x) => (
-        <div key={x.k}>
-          <dt>{x.label}</dt>
-          <dd>{x.value}</dd>
-          {step < 3 && <button type="button" onClick={() => onGo(x.k)} aria-label={`Modifier : ${x.label}`}>Modifier</button>}
-        </div>
-      ))}
-    </dl>
+    <div className="rc-field">
+      <label htmlFor="rc-phone">Le paiement de {amount} sera demandé sur ce numéro.</label>
+      <div className="rc-tel">
+        <span className={`rc-cc${pick ? ' pick' : ''}`}>
+          <Flag k={country} /><span>+{c.dial}</span>
+          {pick && <Icon name="chevD" size={14} />}
+          {pick && (
+            <select value={country} onChange={(e) => onCountry(e.target.value)} aria-label="Pays du numéro" disabled={busy}>
+              {countries.map((k) => <option key={k} value={k}>{COUNTRIES[k]} (+{TOPUP_COUNTRIES[k].dial})</option>)}
+            </select>
+          )}
+        </span>
+        <input id="rc-phone" type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => onPhone(e.target.value)} readOnly={busy}
+          placeholder={PLACEHOLDER[country] ?? ''} aria-describedby="rc-phone-n" />
+      </div>
+      <small id="rc-phone-n">Numéro {OPERATORS[operator]} {pick ? '' : `au ${COUNTRIES[country]} `}: {c.digits} chiffres, sans l’indicatif +{c.dial}.</small>
+    </div>
   )
 }
 
@@ -180,15 +205,18 @@ export default function RechargeDialog({ open, request, onClose }) {
   const [history, setHistory] = useState(null)
   const shown = useRef(open) // fenêtre ouverte, lue par le suivi : le message bref ne sert que fenêtre fermée
   shown.current = open
+  // Jeton de la vérification ou du lancement en cours : changer d'étape (Modifier, Retour, nouvelle ouverture, reprise) l'invalide,
+  // et une réponse arrivée après coup est ignorée. Elle ne peut donc jamais s'appliquer à d'autres choix que ceux envoyés.
+  const pendingCall = useRef(0)
   const seen = useRef(false) // résultat déjà montré (fenêtre ouverte) : la prochaine ouverture repart d'un nouvel achat
 
   const selected = PACKS.find((p) => p.id === pack) ?? PACKS[0]
   const c = TOPUP_COUNTRIES[country]
   const loadHistory = useCallback(() => { if (apiEnabled) api.topups().then((r) => setHistory(r.topups)).catch(() => {}) }, [])
 
-  const go = (i) => { setError(null); setCodeSteps(null); setCode(''); setStep(i) }
-  const restart = (toStep) => { setTopup(null); setReference(null); setCode(''); setCodeSteps(null); setError(null); setStep(toStep) }
-  const follow = (t) => { setTopup(t); setPack(t.pack); setOperator(t.operator); setPhone(t.phone ?? ''); setCodeSteps(null); setError(null); setStep(3); setView('buy') }
+  const go = (i) => { pendingCall.current++; setBusy(false); setError(null); setCodeSteps(null); setCode(''); setStep(i) }
+  const restart = (toStep) => { pendingCall.current++; setBusy(false); setTopup(null); setReference(null); setCode(''); setCodeSteps(null); setError(null); setStep(toStep) }
+  const follow = (t) => { pendingCall.current++; setBusy(false); setTopup(t); setPack(t.pack); setOperator(t.operator); setCountry(countryOfPhone(t.phone, COUNTRY_LIST) ?? countriesFor(t.operator)[0] ?? COUNTRY_LIST[0]); setPhone(t.phone ?? ''); setCodeSteps(null); setError(null); setStep(3); setView('buy') }
 
   // Fenêtre native : ouverte en modale, fermée par Échap, par la croix ou d'un clic sur le fond.
   useEffect(() => {
@@ -255,20 +283,23 @@ export default function RechargeDialog({ open, request, onClose }) {
 
   /** Lance (ou relance avec `reference`) la recharge, puis passe à la suite selon la réponse. */
   const create = async (preAuthCode) => {
+    const ticket = ++pendingCall.current
     setBusy(true); setError(null)
     try {
       const r = await api.createTopup({ pack, country, operator, phone, ...(reference ? { reference } : {}), ...(preAuthCode ? { preAuthCode } : {}) })
       syncBalance(r.balance)
+      if (ticket !== pendingCall.current) { loadHistory(); return } // choix changés entre-temps : la recharge reste visible dans « Mes recharges »
       setReference(r.topup.reference)
       if (r.topup.status === 'awaiting_code') { setCodeSteps(lines(r.topup.codeInstructions)); setStep(3); return } // Orange Burkina sans code : paygate n'a rien créé
       setCodeSteps(null); setTopup(r.topup); setStep(3); loadHistory()
       if (r.topup.authType === 'REDIRECT_AUTH' && r.topup.authUrl) window.location.assign(r.topup.authUrl)
     } catch (e) {
+      if (ticket !== pendingCall.current) return
       const t = e.body?.topup
       if (t?.reference) setReference(t.reference)
       if ((e.body?.error === 'cannot_retry' && t) || (t && (t.status === 'failed' || t.status === 'expired'))) { setCodeSteps(null); setTopup(t); setStep(3); loadHistory(); return }
       setError(errorMessage(e, { country }))
-    } finally { setBusy(false) }
+    } finally { if (ticket === pendingCall.current) setBusy(false) }
   }
 
   /** Numéro saisi : on demande à paygate si ce moyen marche pour ce numéro et ce montant, et comment le valider. */
@@ -277,13 +308,16 @@ export default function RechargeDialog({ open, request, onClose }) {
     if (busy) return
     const digits = phone.replace(/\D/g, '')
     if (digits.length !== c.digits && digits.length !== c.digits + c.dial.length) { setError(errorMessage('invalid_phone', { country })); return }
+    const ticket = ++pendingCall.current
     setBusy(true); setError(null)
     let options
     try {
       options = await api.topupOptions({ country, operator, phone, pack })
     } catch (err) {
+      if (ticket !== pendingCall.current) return
       setBusy(false); setError(errorMessage(err, { country })); return
     }
+    if (ticket !== pendingCall.current) return // choix changés pendant la vérification : réponse périmée
     setBusy(false)
     const limit = limitError(options, selected.fcfa)
     if (limit) { setError(errorMessage(limit, { country, min: options.min, max: options.max })); return }
@@ -300,7 +334,7 @@ export default function RechargeDialog({ open, request, onClose }) {
 
   const err = error && <p className="rc-err" role="alert">{error}</p>
   const title = (text, hidden) => <h3 ref={panel} tabIndex={-1} className={hidden ? 'sr-only' : undefined}>{text}</h3>
-  const back = (i) => <button type="button" className="rc-ghost" onClick={() => go(i)}>Retour</button>
+  const back = (i) => <button type="button" className="rc-ghost" onClick={() => go(i)} disabled={busy}>Retour</button>
 
   let body
   let foot = null
@@ -311,7 +345,7 @@ export default function RechargeDialog({ open, request, onClose }) {
     foot = <button type="button" className="rc-ghost" onClick={() => setView('buy')}>Retour</button>
   } else if (step === 0) {
     body = (
-      <form id={FORM} className="rc-panel" onSubmit={(e) => { e.preventDefault(); go(operator ? 2 : 1) }}>
+      <form id={FORM} className="rc-panel" onSubmit={(e) => { e.preventDefault(); go(1) }}>
         {title('Combien de cauris ?')}
         <fieldset className="rc-packs">
           <legend className="sr-only">Pack de cauris</legend>
@@ -337,12 +371,9 @@ export default function RechargeDialog({ open, request, onClose }) {
     body = (
       <div className="rc-panel">
         {title('Avec quel opérateur ?')}
-        {COUNTRY_LIST.length > 1 && (
-          <Segment label="Pays" value={country} onChange={(k) => { setCountry(k); setOperator(null) }} options={COUNTRY_LIST.map((k) => ({ id: k, label: COUNTRIES[k] }))} />
-        )}
         <div className="rc-ops" role="group" aria-label="Opérateur Mobile Money">
-          {c.operators.map((o) => (
-            <button key={o} type="button" aria-pressed={operator === o} className={`rc-op rc-op-${o}${operator === o ? ' on' : ''}`} onClick={() => { setOperator(o); go(2) }}>
+          {OPERATOR_LIST.map((o) => (
+            <button key={o} type="button" aria-pressed={operator === o} className={`rc-op rc-op-${o}${operator === o ? ' on' : ''}`} onClick={() => { setOperator(o); if (!TOPUP_COUNTRIES[country].operators.includes(o)) setCountry(countriesFor(o)[0]); go(2) }}>
               <i aria-hidden="true">{OPERATORS[o].charAt(0)}</i>
               <span><b>{OPERATORS[o]}</b><small>{how(o, country)}</small></span>
             </button>
@@ -355,15 +386,8 @@ export default function RechargeDialog({ open, request, onClose }) {
     body = (
       <form id={FORM} className="rc-panel" onSubmit={checkNumber} noValidate>
         {title(`Votre numéro ${OPERATORS[operator]}`)}
-        <label className="rc-field">
-          <span>Le paiement de {fcfa(selected.fcfa)} sera demandé sur ce numéro.</span>
-          <div>
-            <em aria-hidden="true">+{c.dial}</em>
-            <input type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => { setPhone(e.target.value); setError(null) }}
-              placeholder={country === 'BF' ? '70 12 34 56' : ''} aria-describedby="rc-phone-n" aria-label={`Numéro ${OPERATORS[operator]}, sans l’indicatif +${c.dial}`} />
-          </div>
-          <small id="rc-phone-n">{c.digits} chiffres, sans l’indicatif.</small>
-        </label>
+        <PhoneField countries={countriesFor(operator)} country={country} onCountry={(k) => { setCountry(k); setError(null) }}
+          phone={phone} onPhone={(v) => { setPhone(v); setError(null) }} operator={operator} amount={fcfa(selected.fcfa)} busy={busy} />
         {err}
       </form>
     )
@@ -396,6 +420,7 @@ export default function RechargeDialog({ open, request, onClose }) {
     foot = back(2)
   }
 
+  const flow = apiEnabled && view === 'buy' // achat en cours : barre d'avancée et étape dans le sous-titre
   return (
     <dialog
       ref={dlg}
@@ -404,17 +429,21 @@ export default function RechargeDialog({ open, request, onClose }) {
       onCancel={(e) => { e.preventDefault(); onClose() }}
       onClick={(e) => { if (e.target === dlg.current) onClose() }}
     >
+      {flow && <Progress step={step} />}
       <header className="rc-top">
         <div>
           <h2 id="rc-title">Recharger</h2>
-          <p>Solde : <b><Amount n={balance} word /></b></p>
+          {flow ? (
+            <p><b className="rc-now">{STEPS[step]}</b> · étape {step + 1} sur {STEPS.length} · solde <b><Amount n={balance} word /></b></p>
+          ) : (
+            <p>Solde : <b><Amount n={balance} word /></b></p>
+          )}
         </div>
         <button type="button" className="rc-x" onClick={onClose} aria-label="Fermer"><Icon name="close" size={18} /></button>
       </header>
-      {apiEnabled && view === 'buy' && <Stepper step={step} onGo={go} />}
       <div className="rc-body">
         {view === 'buy' && step > 0 && (
-          <Summary pack={PACKS.find((p) => p.id === pack) ?? selected} operator={operator} phone={phone} country={country} step={step} onGo={go} />
+          <PackCard pack={PACKS.find((p) => p.id === pack) ?? selected} operator={operator} phone={phone} country={country} step={step} onGo={go} busy={busy} />
         )}
         {body}
       </div>

@@ -15,26 +15,34 @@ dialog.rc-dlg::backdrop{background:rgba(0,0,0,.66)}
 /* Une seule action : à droite, comme l'action principale des autres étapes ; « Retour » seul reste à gauche. */
 .rc-foot>:only-child.rc-pay{margin-left:auto}
 
-/* Étapes : pastille et libellé sur une même ligne, centrés verticalement ; la barre sous chaque étape marque l'avancée. */
-.rc-stepper{flex:none;list-style:none;margin:16px var(--rc-pad) 0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-.rc-stepper li>*{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:0 0 8px;border:0;border-bottom:3px solid var(--fill);background:none;color:var(--ink-4);font:inherit;font-size:13px;font-weight:600;line-height:1;text-align:left;box-sizing:border-box}
-.rc-stepper li>* span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rc-stepper i{flex:none;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--fill);color:var(--ink-3);font-style:normal;font-size:12px;font-variant-numeric:tabular-nums}
-.rc-stepper li.on>*{border-bottom-color:var(--lime);color:var(--ink)}
-.rc-stepper li.on i{background:var(--lime);color:var(--on-lime)}
-.rc-stepper li.done>*{border-bottom-color:var(--lime-edge);color:var(--ink-2)}
-.rc-stepper li.done i{background:var(--lime-tint);color:var(--lime-ink)}
-.rc-stepper button{cursor:pointer}
-.rc-stepper button:hover{color:var(--ink)}
+/* Avancée : barre fine collée au bord haut de la fenêtre ; l'étape en cours est nommée dans le sous-titre. */
+.rc-prog{flex:none;height:3px;background:var(--fill)}
+.rc-prog i{display:block;height:100%;background:var(--lime);border-radius:0 3px 3px 0;transition:width .25s ease}
+.rc-top b.rc-now{color:var(--lime-ink)}
+@media (prefers-reduced-motion:reduce){.rc-prog i{transition:none}}
 
-/* Rappel des choix */
-.rc-sum{margin:0;display:flex;flex-wrap:wrap;gap:8px}
-.rc-sum>div{display:flex;align-items:center;gap:10px;min-height:36px;padding:0 4px 0 12px;border-radius:10px;background:var(--field);border:1px solid var(--line-soft);box-sizing:border-box}
-.rc-sum>div:not(:has(button)){padding-right:12px}
-.rc-sum dt{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.04em}
-.rc-sum dd{margin:0;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
-.rc-sum button{margin-block:-4px;min-height:44px;border:0;border-radius:8px;padding:6px 8px;background:none;color:var(--ink-3);font:inherit;font-size:12px;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
-.rc-sum button:hover{color:var(--ink);background:var(--fill)}
+/* Rappel de la recharge : une carte (cauri, quantité, opérateur et numéro à gauche ; prix à droite), choix modifiables par « Changer ». */
+.rc-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--field)}
+.rc-card .rc-card-cw{width:44px;height:42px}
+.rc-card p{margin:0}
+.rc-card-main{min-width:0;display:flex;flex-direction:column;gap:6px}
+.rc-card-qty{display:flex;align-items:baseline;gap:6px;color:var(--ink-3);font-size:13px;font-weight:600}
+.rc-card-qty b{font-family:var(--font-display);font-size:24px;font-weight:800;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+.rc-card-op{display:flex;align-items:center;gap:8px;min-width:0;color:var(--ink-2);font-size:13px}
+.rc-card-op>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rc-logo{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;font-style:normal;font-weight:800;font-size:11px;color:#fff}
+.rc-logo.rc-op-orange{background:#ff7900;color:var(--on-light)}
+.rc-logo.rc-op-moov{background:#0060a9}
+.rc-logo.rc-op-wave{background:#1dc8f2;color:var(--on-light)}
+.rc-card{position:relative}
+.rc-card-edit{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-2);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.rc-card-edit::after{content:'';position:absolute;inset:-6px -2px} /* cible tactile de 44 px */
+.rc-card-edit:hover:not(:disabled){color:var(--ink);background:var(--fill)}
+.rc-card-edit:disabled{opacity:.5;cursor:default}
+.rc-card:has(.rc-card-edit) .rc-card-price{align-self:end;padding-top:34px} /* le prix passe sous le bouton, en bas à droite */
+.rc-card-price{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
+.rc-card-price b{font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rc-card-price small{font-size:12px;color:var(--ink-4);white-space:nowrap}
 
 .rc-panel{display:flex;flex-direction:column;gap:16px}
 .rc-panel h3{margin:0;font-size:20px;outline:none}
@@ -75,10 +83,16 @@ dialog.rc-dlg::backdrop{background:rgba(0,0,0,.66)}
 
 /* Étape 3 : numéro, et code d'Orange Burkina */
 .rc-field{display:flex;flex-direction:column;gap:8px}
-.rc-field>span{color:var(--ink-2);line-height:1.5}
+.rc-field>span,.rc-field>label{color:var(--ink-2);line-height:1.5}
 .rc-field>div{display:flex;align-items:center;border:1px solid var(--line);border-radius:12px;background:var(--field)}
 .rc-field>div:focus-within{border-color:var(--lime)}
-.rc-field em{flex:none;font-style:normal;padding:0 12px 0 14px;margin-right:2px;border-right:1px solid var(--line-soft);color:var(--ink-3);font-size:18px;line-height:28px;font-variant-numeric:tabular-nums}
+/* Numéro : pays (drapeau, indicatif ; liste native par-dessus quand plusieurs pays sont ouverts), puis le numéro local. */
+.rc-cc{position:relative;flex:none;align-self:stretch;display:flex;align-items:center;gap:8px;padding:0 12px 0 14px;border-right:1px solid var(--line-soft);color:var(--ink-2);font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.rc-cc.pick{cursor:pointer;border-radius:11px 0 0 11px}
+.rc-cc.pick:hover{background:var(--fill)}
+.rc-cc select{position:absolute;inset:0;width:100%;opacity:0;cursor:pointer;font-size:16px}
+.rc-cc:has(select:focus-visible){outline:2px solid var(--lime);outline-offset:-2px}
+.rc-flag{flex:none;width:24px;height:16px;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.12)}
 .rc-field input{flex:1;min-width:0;padding:14px;border:0;background:none;color:var(--ink);font:inherit;font-size:18px;letter-spacing:.02em;font-variant-numeric:tabular-nums;outline:none}
 .rc-field small{font-size:12px;color:var(--ink-4)}
 .rc-steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px;line-height:1.5;color:var(--ink)}
@@ -130,8 +144,8 @@ button.rc-st:hover{color:var(--ink)}
 @media (max-width:560px){
   dialog.rc-dlg{--rc-pad:16px;width:100%;max-width:100%;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0}
   .rc-top h2{font-size:22px}
-  .rc-stepper li>*{flex-direction:column;align-items:flex-start;gap:6px;font-size:11px}
-  .rc-stepper li>* span{max-width:100%}
+  .rc-card{grid-template-columns:auto minmax(0,1fr);column-gap:12px;row-gap:8px}
+  .rc-card .rc-card-price,.rc-card:has(.rc-card-edit) .rc-card-price{grid-column:2;align-self:auto;padding-top:0;flex-direction:row;align-items:baseline;gap:8px;text-align:left}
   .rc-packs{grid-template-columns:1fr}
   .rc-pack{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:14px;padding:14px 16px;text-align:left}
   .rc-pack::after{position:static;grid-column:1;grid-row:1}

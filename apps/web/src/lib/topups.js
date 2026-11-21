@@ -15,6 +15,12 @@ export const topupCountries = (value) => {
   return list.length ? list : ['BF']
 }
 
+/** Pays d'un numéro E.164 parmi `countries` (indicatif et nombre de chiffres), ou undefined. Sert à reprendre une recharge : l'API ne renvoie pas son pays. */
+export const countryOfPhone = (e164, countries) => {
+  const d = String(e164 ?? '').replace(/\D/g, '')
+  return countries.find((k) => TOPUP_COUNTRIES[k] && d.startsWith(TOPUP_COUNTRIES[k].dial) && d.length === TOPUP_COUNTRIES[k].dial.length + TOPUP_COUNTRIES[k].digits)
+}
+
 export const fcfa = (n) => `${n.toLocaleString('fr-FR')} FCFA`
 
 export const STATUS = {

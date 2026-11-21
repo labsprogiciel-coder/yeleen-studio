@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { countdown, errorMessage, expiryMs, failureText, isFinal, isOpen, limitError, lines, maskPhone, telHref, topupCountries, ussdCodes } from '../src/lib/topups.js'
+import { countdown, countryOfPhone, errorMessage, expiryMs, failureText, isFinal, isOpen, limitError, lines, maskPhone, telHref, topupCountries, ussdCodes } from '../src/lib/topups.js'
 
 test('consignes de paygate : français d’abord, liste ou texte', () => {
   assert.deepEqual(lines({ fr: ['Composez *144*4*6*5000#', ' '], en: ['Dial'] }), ['Composez *144*4*6*5000#'])
@@ -55,4 +55,13 @@ test('pays proposés et numéro masqué', () => {
   assert.deepEqual(topupCountries('bf, ci,XX'), ['BF', 'CI'])
   assert.deepEqual(topupCountries('XX'), ['BF'])
   assert.equal(maskPhone('+22670123456'), '+226 •• •• 34 56')
+})
+
+test('countryOfPhone : pays d’une recharge reprise d’après son numéro E.164', () => {
+  assert.equal(countryOfPhone('+22670123456', ['BF', 'CI', 'SN']), 'BF')
+  assert.equal(countryOfPhone('+2250712345678', ['BF', 'CI', 'SN']), 'CI')
+  assert.equal(countryOfPhone('+221771234567', ['BF', 'CI', 'SN']), 'SN')
+  assert.equal(countryOfPhone('+2250712345678', ['BF']), undefined) // pays non ouvert
+  assert.equal(countryOfPhone('+2267012345', ['BF']), undefined) // mauvais nombre de chiffres
+  assert.equal(countryOfPhone(null, ['BF']), undefined)
 })
