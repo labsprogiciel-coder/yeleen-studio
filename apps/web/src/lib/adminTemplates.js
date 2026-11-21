@@ -200,7 +200,7 @@ export function fabrication(t) {
   if (!m) return { kind: 'Générateur', detail: 'Modèle retiré du catalogue', error: true }
   const n = t.plans?.length ?? 0
   const res = m.caps.resolutions ? t.resolution ?? m.caps.resolutions[0] : null
-  return { kind: 'Générateur', detail: [m.name, `${n} plan${n > 1 ? 's' : ''}`, res].filter(Boolean).join(' · '), error: false }
+  return { kind: 'Générateur', modelId: m.id, detail: [m.name, `${n} plan${n > 1 ? 's' : ''}`, res].filter(Boolean).join(' · '), error: false }
 }
 
 /* ——— Prix ——— */

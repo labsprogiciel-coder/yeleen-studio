@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '../../lib/icons.jsx'
+import ModelLogo from '../../components/ModelLogo.jsx'
+import { logoFor } from '../../lib/modelLogos.js'
 import { api } from '../../lib/api.js'
 import { caurisLabel } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
@@ -133,7 +135,7 @@ function TemplatesList({ open }) {
                   </span>
                   <span className="tm-type">
                     <b>{f.kind}</b>
-                    <small className={f.error ? 'tm-warn' : ''}>{f.detail}</small>
+                    <small className={f.error ? 'tm-warn' : 'tm-model-d'}>{f.modelId && <ModelLogo logo={logoFor(f.modelId)} size={14} />}<span>{f.detail}</span></small>
                     {!f.error && t.issues?.length > 0 && <small className="tm-warn">{t.issues.length} point{t.issues.length > 1 ? 's' : ''} à corriger</small>}
                   </span>
                   <span className="tm-cat"><span className="tm-tag">{categoryLabel(t.category)}</span></span>

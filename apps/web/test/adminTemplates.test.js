@@ -52,8 +52,8 @@ test('ordre : glisser avant une ligne, monter et descendre parmi les lignes visi
 })
 
 test('fabrication : générateur (modèle, plans, résolution), Genjutsu (outil, photos), modèle retiré en erreur', () => {
-  assert.deepEqual(fabrication(gen()), { kind: 'Générateur', detail: 'Kling 3.0 Pro · 2 plans', error: false })
-  assert.deepEqual(fabrication(gen({ modelId: 'seedance-2-5', plans: [{ text: '', dur: 8 }], resolution: '720p' })), { kind: 'Générateur', detail: 'Seedance 2.5 · 1 plan · 720p', error: false })
+  assert.deepEqual(fabrication(gen()), { kind: 'Générateur', modelId: 'kling-3-pro', detail: 'Kling 3.0 Pro · 2 plans', error: false })
+  assert.deepEqual(fabrication(gen({ modelId: 'seedance-2-5', plans: [{ text: '', dur: 8 }], resolution: '720p' })), { kind: 'Générateur', modelId: 'seedance-2-5', detail: 'Seedance 2.5 · 1 plan · 720p', error: false })
   assert.deepEqual(fabrication(gj()), { kind: 'Genjutsu', detail: 'Transfert de mouvement · 2 photos', error: false })
   assert.equal(fabrication(gen({ modelId: 'disparu' })).error, true)
 })

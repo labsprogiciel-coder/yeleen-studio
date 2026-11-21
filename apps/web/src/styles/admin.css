@@ -201,6 +201,7 @@ dialog.adm-dlg::backdrop{background:color-mix(in srgb,var(--plum) 55%,transparen
 .tm-name small{max-width:100%;color:var(--ink-3);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tm-type{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:0}
 .tm-type small{color:var(--ink-3);font-size:12px}
+.tm-type small.tm-model-d{display:flex;align-items:flex-start;gap:5px}.tm-model-d>.ml{flex:none;margin-top:1px}
 .tm-warn,.tm-type small.tm-warn{color:var(--danger-ink);font-size:12px;font-weight:600}
 .tm-tag{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;background:var(--fill);color:var(--ink-2);font-size:12px;font-weight:600;width:max-content;white-space:nowrap}
 .tm-cost{font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;white-space:nowrap}.tm-cost small{display:block;color:var(--ink-3);font-weight:500}
