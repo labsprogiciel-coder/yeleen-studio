@@ -499,63 +499,48 @@ test('publication : fichiers absents de R2 ou de la mauvaise sorte refusés (pub
   } finally { t.restore() }
 })
 
-test('publication concurrente : relue après l’écriture, une version à problèmes n’est jamais publiée', async () => {
+test('publication et enregistrement concurrents : chacun n’écrit que sur la version qu’il a contrôlée (sinon 409, rien d’écrit)', async () => {
   const t = setup()
   try {
     const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Course' }))).body.template
     const videoKey = `templates/${id}/v.mp4`
     t.objects.set(videoKey, { buf: new ArrayBuffer(1), type: 'video/mp4' })
     t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'image/png' })
-    // Un autre administrateur publie pendant l'enregistrement d'une version à problèmes (vue non publiée) : elle est retirée.
-    const batch = t.db.batch
-    t.db.batch = async (stmts) => { t.db.raw.prepare('UPDATE templates SET published = 1 WHERE id = ?').run(id); t.db.batch = batch; return batch(stmts) }
-    const r = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey, plans: [{ text: '', dur: 5 }] })))
-    assert.equal(r.status, 200)
-    assert.equal(r.body.template.published, false)
-    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
-    // Une version à problèmes enregistrée entre le contrôle et l'écriture de la publication : publication annulée (422).
-    await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey })))
+    const body = seedance({ videoKey })
+    await t.admin(`/admin/templates/${id}`, json('PUT', body))
+    const published = () => t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published
+    const publish = () => t.admin(`/admin/templates/${id}/publish`, json('POST', { published: true }))
+    // 1. Un autre administrateur enregistre (version suivante, fichier absent) entre le contrôle et l'écriture de la publication.
     const prepare = t.db.prepare
     t.db.prepare = (sql) => {
-      if (sql.startsWith('UPDATE templates SET published = ?2')) { t.db.raw.prepare(`UPDATE templates SET plans = '[{"text":"","dur":5}]' WHERE id = ?`).run(id); t.db.prepare = prepare }
-      return prepare(sql)
-    }
-    const p = await t.admin(`/admin/templates/${id}/publish`, json('POST', { published: true }))
-    assert.equal(p.status, 422)
-    assert.deepEqual(p.body.issues, [{ code: 'empty_plan' }])
-    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
-  } finally { t.restore() }
-})
-
-test('publication concurrente : un fichier absent enregistré entre-temps est revérifié après l’écriture', async () => {
-  const t = setup()
-  try {
-    const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Course fichier' }))).body.template
-    const videoKey = `templates/${id}/v.mp4`
-    t.objects.set(videoKey, { buf: new ArrayBuffer(1), type: 'video/mp4' })
-    t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'image/png' })
-    await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey })))
-    // Publication : le brouillon est valide au contrôle, puis une version citant un fichier absent est enregistrée avant l'écriture.
-    const prepare = t.db.prepare
-    t.db.prepare = (sql) => {
-      if (sql.startsWith('UPDATE templates SET published = ?2')) {
+      if (sql.startsWith('UPDATE templates SET published = 1')) {
         t.db.raw.prepare("UPDATE template_inputs SET file_key = 'templates/x/absent.png' WHERE template_id = ? AND idx = 0").run(id)
+        t.db.raw.prepare('UPDATE template_revisions SET rev = rev + 1 WHERE template_id = ?').run(id)
         t.db.prepare = prepare
       }
       return prepare(sql)
     }
-    const p = await t.admin(`/admin/templates/${id}/publish`, json('POST', { published: true }))
-    assert.equal(p.status, 422)
-    assert.deepEqual(p.body.issues, [{ code: 'missing_file', key: 'templates/x/absent.png', idx: 0 }])
-    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
-    // Enregistrement vu non publié, publié entre-temps : la version qui cite un fichier absent est retirée.
-    const body = seedance({ videoKey })
+    const p = await publish()
+    assert.deepEqual([p.status, p.body.error], [409, 'conflict'])
+    assert.equal(published(), 0) // jamais publié, même un instant
+    assert.equal((await t.public('/templates')).body.templates.length, 0)
+    t.db.raw.prepare(`UPDATE template_inputs SET file_key = 'templates/x/decor.png' WHERE template_id = ?`).run(id)
+    assert.equal((await publish()).status, 200)
+    // 2. Enregistrement contrôlé comme brouillon, mais publié entre-temps : rien n'est écrit (la version publiée reste intacte).
+    await t.admin(`/admin/templates/${id}/publish`, json('POST', { published: false }))
+    const before = t.rows('SELECT plans FROM templates WHERE id = ?', id)[0].plans
     const batch = t.db.batch
     t.db.batch = async (stmts) => { t.db.raw.prepare('UPDATE templates SET published = 1 WHERE id = ?').run(id); t.db.batch = batch; return batch(stmts) }
-    const r = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey, inputs: [{ ...body.inputs[0], file: 'templates/x/absent.png' }, body.inputs[1]] })))
-    assert.equal(r.status, 200)
-    assert.equal(r.body.template.published, false)
-    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
+    const r = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey, plans: [{ text: '', dur: 5 }] })))
+    assert.deepEqual([r.status, r.body.error], [409, 'conflict'])
+    assert.equal(t.rows('SELECT plans FROM templates WHERE id = ?', id)[0].plans, before)
+    assert.equal(published(), 1)
+    // 3. Deux enregistrements partis de la même version : le second est refusé.
+    const rev = t.rows('SELECT rev FROM template_revisions WHERE template_id = ?', id)[0].rev
+    t.db.batch = async (stmts) => { t.db.raw.prepare('UPDATE template_revisions SET rev = rev + 1 WHERE template_id = ?').run(id); t.db.batch = batch; return batch(stmts) }
+    assert.equal((await t.admin(`/admin/templates/${id}`, json('PUT', body))).status, 409)
+    assert.equal(t.rows('SELECT rev FROM template_revisions WHERE template_id = ?', id)[0].rev, rev + 1)
+    assert.equal((await t.admin(`/admin/templates/${id}`, json('PUT', body))).status, 200)
   } finally { t.restore() }
 })
 
