@@ -288,9 +288,10 @@ export function adminTemplatesApp() {
     if (!v) return gone(c)
     await log(c, t.id, 'update', { issues: issues.length })
     // Publié entre notre lecture et notre écriture (autre administrateur) alors que cette version a des problèmes : on le retire.
-    if (v.published && v.issues.length) {
+    const after = v.published ? [...v.issues, ...await fileIssues(c.env.FILES, v)] : []
+    if (after.length) {
       await db.prepare('UPDATE templates SET published = 0 WHERE id = ?1').bind(t.id).run()
-      await log(c, t.id, 'unpublish', { issues: v.issues.length })
+      await log(c, t.id, 'unpublish', { issues: after.length })
       return reply(c, await view(c, t.id))
     }
     return c.json({ template: v })
@@ -313,9 +314,11 @@ export function adminTemplatesApp() {
     const v = await view(c, t.id)
     if (!v) return gone(c)
     // Relu après l'écriture : une version enregistrée entre-temps (autre administrateur) qui a des problèmes n'est pas publiée.
-    if (published && v.issues.length) {
+    // Les fichiers sont revérifiés aussi : la version enregistrée entre-temps peut citer un fichier absent ou d'une autre sorte.
+    const after = published ? [...v.issues, ...await fileIssues(c.env.FILES, v)] : []
+    if (after.length) {
       await db.prepare('UPDATE templates SET published = 0 WHERE id = ?1').bind(t.id).run()
-      return c.json({ error: 'invalid_template', issues: v.issues }, 422)
+      return c.json({ error: 'invalid_template', issues: after }, 422)
     }
     await log(c, t.id, published ? 'publish' : 'unpublish')
     return c.json({ template: v })

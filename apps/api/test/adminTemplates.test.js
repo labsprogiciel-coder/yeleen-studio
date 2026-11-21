@@ -527,6 +527,38 @@ test('publication concurrente : relue après l’écriture, une version à probl
   } finally { t.restore() }
 })
 
+test('publication concurrente : un fichier absent enregistré entre-temps est revérifié après l’écriture', async () => {
+  const t = setup()
+  try {
+    const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Course fichier' }))).body.template
+    const videoKey = `templates/${id}/v.mp4`
+    t.objects.set(videoKey, { buf: new ArrayBuffer(1), type: 'video/mp4' })
+    t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'image/png' })
+    await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey })))
+    // Publication : le brouillon est valide au contrôle, puis une version citant un fichier absent est enregistrée avant l'écriture.
+    const prepare = t.db.prepare
+    t.db.prepare = (sql) => {
+      if (sql.startsWith('UPDATE templates SET published = ?2')) {
+        t.db.raw.prepare("UPDATE template_inputs SET file_key = 'templates/x/absent.png' WHERE template_id = ? AND idx = 0").run(id)
+        t.db.prepare = prepare
+      }
+      return prepare(sql)
+    }
+    const p = await t.admin(`/admin/templates/${id}/publish`, json('POST', { published: true }))
+    assert.equal(p.status, 422)
+    assert.deepEqual(p.body.issues, [{ code: 'missing_file', key: 'templates/x/absent.png', idx: 0 }])
+    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
+    // Enregistrement vu non publié, publié entre-temps : la version qui cite un fichier absent est retirée.
+    const body = seedance({ videoKey })
+    const batch = t.db.batch
+    t.db.batch = async (stmts) => { t.db.raw.prepare('UPDATE templates SET published = 1 WHERE id = ?').run(id); t.db.batch = batch; return batch(stmts) }
+    const r = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey, inputs: [{ ...body.inputs[0], file: 'templates/x/absent.png' }, body.inputs[1]] })))
+    assert.equal(r.status, 200)
+    assert.equal(r.body.template.published, false)
+    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
+  } finally { t.restore() }
+})
+
 test('enregistrement et ordre atomiques : une requête refusée ne laisse rien à moitié écrit', async () => {
   const t = setup()
   try {
