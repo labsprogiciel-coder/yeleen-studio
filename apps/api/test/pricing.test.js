@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { AUDIO_MODELS, IMAGE_MODELS, imageCost, voiceCost } from '@studio/catalog'
-import { priceJob } from '../src/pricing.js'
+import { FAL_FILE, priceJob } from '../src/pricing.js'
 
 test('le prix serveur vient du catalogue', () => {
   const m = IMAGE_MODELS[0]
@@ -109,4 +109,11 @@ test('sortie d’un outil sans type ni nom de fichier : reconnue à l’extensio
   const { outputsOf } = await import('../src/inputs.js')
   assert.deepEqual(outputsOf('tool', { video: { url: 'https://v3.fal.media/files/out.mp4' } }).map((o) => o.contentType), ['video/mp4'])
   assert.deepEqual(outputsOf('tool', { video: { url: 'https://v3.fal.media/files/out' } }), [])
+})
+
+test('fichier déposé chez fal : seulement fal.media et ses sous-domaines', () => {
+  for (const ok of ['https://fal.media/files/a.png', 'https://v3.fal.media/files/a.png', 'https://v3b.fal.media/files/a/b.png', 'https://storage.eu-1.fal.media/x']) assert.equal(FAL_FILE.test(ok), true, ok)
+  for (const bad of ['https://evilfal.media/x', 'https://fal.media.evil.com/x', 'https://v3.fal.media@evil.com/x', 'https://evil.com/https://v3.fal.media/x', 'http://v3.fal.media/x', 'https://.fal.media/x', 'https://v3.fal.media']) assert.equal(FAL_FILE.test(bad), false, bad)
+  const tryon = (u) => priceJob({ kind: 'tryon', modelId: 'fashn-tryon-v1-6', modelImageUrl: u, garmentImageUrl: 'https://v3.fal.media/files/g.png' })
+  assert.equal(tryon('https://evilfal.media/p.png').error, 'invalid_file_url')
 })

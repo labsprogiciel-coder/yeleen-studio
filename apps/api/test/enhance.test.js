@@ -67,7 +67,7 @@ test('améliorer : texte trop court ou refusé par la modération, sans appel', 
   const t = setup(() => ({ body: { output: 'x' } }))
   try {
     assert.equal((await t.req({ text: 'ab' })).status, 400)
-    assert.equal((await t.req({ text: 'une scène de violence' })).status, 422)
+    assert.equal((await t.req({ text: 'une scène nsfw' })).status, 422)
     assert.equal(t.calls.length, 0)
   } finally { t.restore() }
 })

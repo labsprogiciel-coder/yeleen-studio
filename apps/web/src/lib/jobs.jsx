@@ -14,8 +14,8 @@ import { track } from './posthog.js'
  * Mode réel : une génération qui porte `spec.live` (modèle et options) part vers l'API (apps/api), qui appelle fal ;
  * le suivi se fait par interrogation et le solde vient du serveur. Sans `VITE_API_URL`, tout reste simulé.
  *
- * Pour tester les échecs (moteur simulé) : un prompt contenant « [echec] » échoue côté fournisseur ; « interdit », « violence »,
- * « nsfw » ou « sang » est refusé par la modération. Le reste échoue au hasard (8 %, 15 % en vidéo).
+ * Pour tester les échecs (moteur simulé) : un prompt contenant « [echec] » échoue côté fournisseur ; le mot « nsfw » est refusé
+ * par la modération (même règle que l'API, voir apps/api/src/moderation.js). Le reste échoue au hasard (8 %, 15 % en vidéo).
  */
 export const MAX_PARALLEL = 2
 const START_BALANCE = 240
@@ -209,7 +209,7 @@ export function JobsProvider({ children }) {
     const spec = raw.project ? raw : { ...raw, project: currentProject() } // la génération reste dans le projet où elle a été lancée
     const kind = spec.kind
     const count = spec.count ?? 1
-    const moderated = /interdit|violence|nsfw|sang/i.test(spec.prompt)
+    const moderated = /(?<![\p{L}\p{N}_])nsfw(?![\p{L}\p{N}_])/iu.test(spec.prompt)
     const live = Boolean(spec.live && apiEnabled)
     const failure = live ? null : moderated ? 'moderation' : /\[echec\]/i.test(spec.prompt) || Math.random() < (kind === 'video' ? 0.15 : 0.08) ? 'provider' : null
     const id = `job-${++seq.current}`

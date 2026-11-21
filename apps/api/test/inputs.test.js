@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { AUDIO_MODELS, IMAGE_MODELS } from '@studio/catalog'
 import { buildInput, outputsOf } from '../src/inputs.js'
-import { isBlocked } from '../src/moderation.js'
+import { checkedText, isBlocked } from '../src/moderation.js'
 
 const nano = IMAGE_MODELS.find((m) => m.id === 'nano-banana-pro')
 const flux = IMAGE_MODELS.find((m) => m.id === 'flux-3')
@@ -33,8 +33,23 @@ test('les sorties ont le même format quel que soit le média', () => {
 })
 
 test('la modération refuse les mots interdits', () => {
-  assert.equal(isBlocked('une scène de violence'), true)
+  assert.equal(isBlocked('une scène nsfw'), true)
+  assert.equal(isBlocked('Rendu NSFW.'), true)
   assert.equal(isBlocked('un chat'), false)
+  assert.equal(isBlocked(null), false)
+})
+
+test('la modération ne refuse ni un nom ni un mot courant (mot entier seulement)', () => {
+  for (const ok of ['Portrait de Mme Sangaré au marché', 'une sangsue', 'un pur-sang au galop', 'don du sang à Bamako', 'campagne contre la violence faite aux femmes', 'panneau stationnement interdit', 'la marque Unsfwear', 'nsfwé']) {
+    assert.equal(isBlocked(ok), false, ok)
+  }
+})
+
+test('le texte contrôlé contient le style choisi et le style de la marque', () => {
+  assert.equal(checkedText({ styleHint: 'aquarelle', brandStyle: 'tons ocre' }, ['un chat']), 'un chat aquarelle tons ocre')
+  assert.equal(isBlocked(checkedText({ brandStyle: 'nsfw' }, ['un chat'])), true)
+  assert.equal(isBlocked(checkedText({ styleHint: ['nsfw'] }, ['un chat'])), true)
+  assert.equal(checkedText({}, ['un chat']), 'un chat')
 })
 
 test('workflow : les textes sont nettoyés et les villes réparties sur prompt … prompt_7', async () => {

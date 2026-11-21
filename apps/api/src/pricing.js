@@ -60,7 +60,8 @@ export function priceJob(req, { secs, trusted } = {}) {
   return { ok: true, model, count: 1, cost: voiceCost(model, chars) }
 }
 
-const FAL_FILE = /^https:\/\/[a-z0-9.-]*fal\.media\//
+/** Fichier déposé chez fal : l'hôte est fal.media ou l'un de ses sous-domaines, rien d'autre (ni « evilfal.media », ni « fal.media@… »). */
+export const FAL_FILE = /^https:\/\/([a-z0-9-]+\.)*fal\.media\//
 
 /** Durée (en secondes) refusée par les capacités `caps` d'un modèle vidéo : la règle du prix, reprise par les vidéos à refaire. */
 export function badDuration(c, secs, task = 'reference') {

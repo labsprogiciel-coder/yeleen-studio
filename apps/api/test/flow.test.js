@@ -82,7 +82,12 @@ test('refus de contenu et solde insuffisant ne contactent pas fal', async () => 
   let calls = 0
   const t = setup(() => { calls++; return { body: queued } }, { MAX_JOB_COST: '100000' }) // plafond levé : on teste ici le solde, pas le plafond
   try {
-    assert.equal((await t.req('/jobs', post({ ...image, prompt: 'scène de violence' }))).status, 422)
+    assert.equal((await t.req('/jobs', post({ ...image, prompt: 'scène nsfw' }))).status, 422)
+    // Le style choisi et le style de la marque partent dans la consigne : contrôlés comme le prompt (une liste est lue comme son texte).
+    assert.equal((await t.req('/jobs', post({ ...image, styleHint: 'rendu nsfw' }))).status, 422)
+    assert.equal((await t.req('/jobs', post({ ...image, brandStyle: 'NSFW, couleurs vives' }))).status, 422)
+    assert.equal((await t.req('/jobs', post({ ...image, brandStyle: ['nsfw'] }))).status, 422)
+    assert.equal(calls, 0)
     const big = await t.req('/jobs', post({ ...image, resolution: '4K', count: 4 }))
     const small = await t.req('/jobs', post({ kind: 'audio', modelId: 'eleven-v3', prompt: 'x'.repeat(200000) }))
     assert.equal(small.status, 402)
