@@ -28,8 +28,8 @@ const fileName = (key) => (key ? key.split('/').pop() : '')
  */
 const LEAVE = 'Quitter sans enregistrer les changements ?'
 
-/** Modèles vidéo proposés dans l'éditeur, avec leur logo (comme le choix du modèle dans Cinéma). */
-const MODEL_ITEMS = VIDEO_MODELS.map((m) => ({ id: m.id, logo: logoFor(m.id), icon: 'video', title: m.name, desc: m.tagline }))
+/** Modèles vidéo proposés dans l'éditeur : logo et nom. */
+const MODEL_ITEMS = VIDEO_MODELS.map((m) => ({ id: m.id, logo: logoFor(m.id), icon: 'video', title: m.name }))
 
 export default function TemplateEditor({ id, onBack }) {
   const [t, setT] = useState(null) // le modèle tel que l'API l'a renvoyé
