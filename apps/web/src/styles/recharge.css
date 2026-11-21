@@ -37,7 +37,8 @@ dialog.rc-dlg::backdrop{background:rgba(0,0,0,.66)}
 .rc-card{position:relative}
 .rc-card-edit{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-2);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
 .rc-card-edit::after{content:'';position:absolute;inset:-6px -2px} /* cible tactile de 44 px */
-.rc-card-edit:hover{color:var(--ink);background:var(--fill)}
+.rc-card-edit:hover:not(:disabled){color:var(--ink);background:var(--fill)}
+.rc-card-edit:disabled{opacity:.5;cursor:default}
 .rc-card:has(.rc-card-edit) .rc-card-price{align-self:end;padding-top:34px} /* le prix passe sous le bouton, en bas à droite */
 .rc-card-price{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 .rc-card-price b{font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}

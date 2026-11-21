@@ -56,7 +56,7 @@ function Progress({ step }) {
 }
 
 /** Rappel du pack choisi (et de l'opérateur, puis du numéro). « Modifier » (en haut à droite) repart du pack tant que le paiement n'est pas lancé ; les choix déjà faits restent sélectionnés. */
-function PackCard({ pack, operator, phone, country, step, onGo }) {
+function PackCard({ pack, operator, phone, country, step, onGo, busy }) {
   const c = TOPUP_COUNTRIES[country]
   const edit = step < 3
   return (
@@ -72,7 +72,7 @@ function PackCard({ pack, operator, phone, country, step, onGo }) {
           </p>
         )}
       </div>
-      {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(0)} aria-label="Modifier la recharge"><Icon name="pencil" size={14} />Modifier</button>}
+      {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(0)} disabled={busy} aria-label="Modifier la recharge"><Icon name="pencil" size={14} />Modifier</button>}
       <p className="rc-card-price"><b>{fcfa(pack.fcfa)}</b><small>≈ {perJeton(pack)} FCFA le cauri</small></p>
     </section>
   )
@@ -434,7 +434,7 @@ export default function RechargeDialog({ open, request, onClose }) {
       </header>
       <div className="rc-body">
         {view === 'buy' && step > 0 && (
-          <PackCard pack={PACKS.find((p) => p.id === pack) ?? selected} operator={operator} phone={phone} country={country} step={step} onGo={go} />
+          <PackCard pack={PACKS.find((p) => p.id === pack) ?? selected} operator={operator} phone={phone} country={country} step={step} onGo={go} busy={busy} />
         )}
         {body}
       </div>
