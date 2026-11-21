@@ -5,13 +5,15 @@ import '../styles/plan-tabs.css'
 
 /**
  * Intitulé « Plan(s) », onglets numérotés (quand il y a plusieurs plans) et bouton d'ajout, pilotés par `useGenSettings`.
- * Partagé par l'éditeur Vidéo et l'écran Cinéma ; `controls` : id de la zone de texte du plan affiché.
+ * Partagé par l'éditeur Vidéo, l'écran Cinéma et l'éditeur de modèles ; `controls` : id de la zone de texte du plan affiché ;
+ * `level` : niveau du titre (3 dans l'éditeur de modèles, dont les sections ont des titres h3).
  */
-export default function PlanTabs({ s, single = false, singleReason, controls = 'plan-panel', headingId = 'ep-plan' }) {
+export default function PlanTabs({ s, single = false, singleReason, controls = 'plan-panel', headingId = 'ep-plan', level = 2 }) {
   const onTabKeys = useTabKeys()
+  const H = `h${level}`
   return (
     <div className="ep-plans">
-      <h2 id={headingId}>{s.multi ? 'Plans' : 'Plan'}</h2>
+      <H id={headingId}>{s.multi ? 'Plans' : 'Plan'}</H>
       {s.multi && (
         <div className="ep-ptabs" role="tablist" aria-label="Plans" onKeyDown={onTabKeys}>
           {s.plans.map((_, i) => (

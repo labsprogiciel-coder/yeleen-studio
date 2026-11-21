@@ -2,6 +2,7 @@ import { IMAGE_MODELS, VIDEO_MODELS, durationOptions, findModel, imageCost, vide
 import { findTool, toolCost } from '@studio/catalog/tools'
 import { KINDS, LIMITS, findVideoModel, inputIssues, slotRules, slotTokens, userInputs } from '@studio/catalog/template-slots'
 import { adminError } from './admin.js'
+import { TOKEN_PATTERN } from './templateRun.js'
 
 /**
  * Administration des vidéos à refaire (onglet « Modèles ») : logique pure de l'éditeur et de la liste, sans React ni navigateur
@@ -344,6 +345,44 @@ export function draftIssues(d) {
   return out
 }
 
+/* ——— Étapes « Entrées » puis « Plans » de l'éditeur (générateur vidéo) ——— */
+
+export const EDITOR_STEPS = [{ id: 'inputs', label: 'Entrées' }, { id: 'plans', label: 'Plans' }]
+
+const PLAN_CODES = new Set(['bad_plans', 'plan_empty', 'blank_plan', 'empty_plan', 'bad_duration', 'bad_dur', 'too_many_plans', 'unknown_token', 'unknown_tokens'])
+const INPUT_CODES = new Set([
+  'bad_inputs', 'too_many_inputs', 'bad_idx', 'bad_input', 'bad_kind', 'fixed_needs_file', 'user_needs_label', 'generated_only_frames', 'generated_needs_prompt',
+  'bad_from', 'source_is_user', 'source_unused', 'one_start', 'one_end', 'start_unsupported', 'start_required', 'end_unsupported', 'end_needs_start',
+  'too_many_elements', 'elements_unsupported', 'references_unsupported', 'too_many_references', 'frames_with_references', 'one_audio', 'audio_unsupported',
+  'audio_required', 'kind_mismatch', 'optional_not_last', 'cannot_be_optional', 'missing_file',
+])
+
+/** Étape de l'éditeur concernée par un problème : 'inputs', 'plans' ou null (vidéo d'exemple, modèle, Genjutsu…). */
+export function issueStep(issue) {
+  const code = issue?.code
+  if (PLAN_CODES.has(code) || (code === 'invalid_field' && issue.field === 'plans')) return 'plans'
+  if (issue?.idx != null || INPUT_CODES.has(code) || (code === 'invalid_field' && issue.field === 'inputs.file')) return 'inputs'
+  return null
+}
+
+/** Jetons cités dans les plans (« @Image2 ») qu'aucune entrée ne porte : ['Image2', …], sans doublon, dans l'ordre d'apparition. */
+export function unknownTokens(plans, inputs) {
+  const known = new Set(Object.values(slotTokens(Array.isArray(inputs) ? inputs : [])).map((t) => t.slice(1)))
+  const re = new RegExp(`@(${TOKEN_PATTERN})(?!\\d)`, 'g')
+  const out = []
+  for (const p of Array.isArray(plans) ? plans : []) {
+    for (const m of String(p?.text ?? '').matchAll(re)) if (!known.has(m[1]) && !out.includes(m[1])) out.push(m[1])
+  }
+  return out
+}
+
+/** Nombre de problèmes par étape : { inputs, plans } (les jetons inconnus comptent chacun pour les plans). */
+export function stepIssueCounts(issues, plans = [], inputs = []) {
+  const n = { inputs: 0, plans: unknownTokens(plans, inputs).length }
+  for (const i of Array.isArray(issues) ? issues : []) { const s = issueStep(i); if (s) n[s] += 1 }
+  return n
+}
+
 /* ——— Réglages du modèle vidéo ——— */
 
 /** Le son se choisit-il ? (non quand le modèle le génère toujours ou qu'il vient de l'utilisateur) */
@@ -460,22 +499,6 @@ export function toggleSource(inputs, idx, on, label = 'Votre photo') {
   return renumber(inputs.filter((i) => i.idx !== from).map((i) => (i.idx === idx ? rest : i)))
 }
 
-/** Insère `token` dans `text` à la place de la sélection [start, end) : { text, caret }. Ajoute des espaces au besoin. */
-export function insertToken(text, token, start = text.length, end = start) {
-  const before = text.slice(0, start)
-  const after = text.slice(end)
-  const pre = before && !/\s$/.test(before) ? ' ' : ''
-  const post = after && !/^\s/.test(after) ? ' ' : ''
-  const out = `${before}${pre}${token}${post}${after}`
-  return { text: out, caret: before.length + pre.length + token.length + post.length }
-}
-
-/** Jetons à proposer dans « Insérer : », dans l'ordre des entrées. */
-export function tokenList(inputs) {
-  const t = slotTokens(inputs)
-  return [...inputs].sort((a, b) => a.idx - b.idx).map((i) => t[i.idx]).filter(Boolean)
-}
-
 /** « Ce que l'utilisateur fournit » : [{ label, value }] par sorte de fichier ; texte libre non demandé. */
 export function userNeeds(d) {
   if (d.kind === 'genjutsu') {
@@ -525,4 +548,29 @@ export function serialLatest(run, onError = () => {}) {
     })()
     return running
   }
+}
+
+/**
+ * État lu par PlanTabs (onglets des plans, voir components/PlanTabs.jsx), bâti sur les plans du brouillon. `active` (le plan
+ * affiché) reste un état d'écran : il n'entre pas dans le brouillon, qui ne change que par `onChange(plans)`.
+ */
+export function planTabsState(plans, active, { max, onChange, setActive, newDur = 5 }) {
+  return {
+    plans,
+    active,
+    multi: plans.length > 1,
+    multiAllowed: max > 1,
+    setActive,
+    addPlan: () => { onChange([...plans, { text: '', dur: newDur }]); setActive(plans.length) },
+    removePlan: (i) => {
+      if (plans.length < 2) return
+      onChange(plans.filter((_, k) => k !== i))
+      setActive(Math.max(0, active >= i ? active - 1 : active))
+    },
+  }
+}
+
+/** Une entrée vue comme un asset de la bibliothèque (pour AssetThumb, DropTile et RefTile) : { id, kind, name, url }. */
+export function pseudoAsset(i, title = inputTitle(i)) {
+  return { id: `tpl-${i.idx}`, kind: i.kind ?? 'image', name: i.file ? i.file.split('/').pop() : title, url: i.url ?? null }
 }

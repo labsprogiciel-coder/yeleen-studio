@@ -1,19 +1,20 @@
 import { LIMITS, slotTokens } from '@studio/catalog/template-slots'
 import Icon from '../../lib/icons.jsx'
-import { acceptFor, addInput, allowedAdds, inputTitle, patchInput, removeInput, setMode, toggleSource } from '../../lib/adminTemplates.js'
+import { DropTile } from '../../components/GenPanel.jsx'
+import { acceptFor, addInput, allowedAdds, inputTitle, patchInput, pseudoAsset, removeInput, setMode, toggleSource } from '../../lib/adminTemplates.js'
 
 /**
  * Section « Entrées » de l'éditeur (générateur vidéo) : une carte par entrée, dans l'ordre (les photos de départ `source` sont
  * montrées dans la carte de l'image créée qui s'en sert), et les boutons d'ajout de ce que le modèle accepte.
  */
-export default function TemplateInputs({ model, inputs, onChange, onPatch, upload, uploading }) {
+export default function TemplateInputs({ model, inputs, onChange, onPatch, upload, uploading, bare = false }) {
   const tokens = slotTokens(inputs)
   const cards = [...inputs].filter((i) => i.slot !== 'source').sort((a, b) => a.idx - b.idx)
   const adds = allowedAdds(model, inputs)
   // Pendant l'envoi d'un fichier d'entrée, les entrées ne sont ni retirées ni changées de mode : leurs numéros restent ceux de l'envoi.
   const locked = Object.keys(uploading ?? {}).some((k) => k.startsWith('input-'))
   return (
-    <section className="adm-card tm-sec" aria-labelledby="tm-in-t">
+    <section className={`${bare ? '' : 'adm-card '}tm-sec`} aria-labelledby="tm-in-t">
       <h3 id="tm-in-t">Entrées <small>{model ? `selon ${model.name}` : ''}</small></h3>
       {!cards.length && <p className="tm-note">Aucune entrée : le modèle vidéo ne reçoit que le texte des plans.</p>}
       {cards.map((i) => (
@@ -31,6 +32,7 @@ export default function TemplateInputs({ model, inputs, onChange, onPatch, uploa
 }
 
 const MODE_LABEL = { fixed: 'Fixe', user: 'À fournir', generated: 'Créée (Krea 3)' }
+const KIND_ICON = { image: 'img', video: 'vid', audio: 'mus' }
 const ASK = { image: 'Photo de l’utilisateur', video: 'Vidéo de l’utilisateur', audio: 'Audio de l’utilisateur' }
 
 function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploading, locked }) {
@@ -41,7 +43,20 @@ function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploadi
   const title = inputTitle(i)
   return (
     <div className="tm-slot">
-      <InputThumb input={i} />
+      {i.mode === 'fixed' ? (
+        // La case de dépôt de l'éditeur (components/GenPanel.jsx), branchée sur l'envoi au serveur plutôt que sur la bibliothèque.
+        <DropTile icon={KIND_ICON[i.kind] ?? 'img'} label={title} accept={i.slot === 'element' ? `${acceptFor('image')},${acceptFor('video')}` : acceptFor(i.kind)}
+          asset={i.file ? pseudoAsset(i, title) : null} disabled={locked && !uploading} reason="Attendez la fin de l’envoi du fichier"
+          onFile={(f) => { if (!f) onPatch(i.idx, { file: null, url: null }) }}
+          upload={{
+            busy: uploading,
+            onFile: (f) => upload('input', f, `input-${i.idx}`, (r) => {
+              // Un élément peut être une image ou une vidéo : la sorte suit le fichier déposé.
+              const kind = i.slot === 'element' ? (f.type.startsWith('video/') ? 'video' : 'image') : i.kind
+              onPatch(i.idx, { file: r.key, url: r.url, kind }) // sur l'état du moment ; numéros et modes sont bloqués pendant l'envoi
+            }),
+          }} />
+      ) : <InputThumb input={i} />}
       <div className="tm-slot-b">
         <div className="tm-slot-t">
           <b>{title}</b>
@@ -54,23 +69,7 @@ function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploadi
           ))}
         </div>
         {i.mode === 'fixed' && (
-          <div className="tm-file">
-            <span className="tm-note">{i.file ? `Fournie par Qreativ, la même pour tous : ${i.file.split('/').pop()}` : 'Déposez le fichier, le même pour tous les utilisateurs.'}</span>
-            <label className={`adm-btn sm tm-up${uploading ? ' busy' : ''}`}>
-              <Icon name="upload" size={14} />{uploading ? 'Envoi…' : i.file ? 'Remplacer' : 'Déposer'}
-              <input type="file" className="sr" accept={i.slot === 'element' ? `${acceptFor('image')},${acceptFor('video')}` : acceptFor(i.kind)} disabled={uploading}
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  e.target.value = ''
-                  if (!f) return
-                  upload('input', f, `input-${i.idx}`, (r) => {
-                    // Un élément peut être une image ou une vidéo : la sorte suit le fichier déposé.
-                    const kind = i.slot === 'element' ? (f.type.startsWith('video/') ? 'video' : 'image') : i.kind
-                    onPatch(i.idx, { file: r.key, url: r.url, kind }) // sur l'état du moment ; numéros et modes sont bloqués pendant l'envoi
-                  })
-                }} />
-            </label>
-          </div>
+          <p className="tm-note tm-file">{i.file ? `Fournie par Qreativ, la même pour tous : ${i.file.split('/').pop()}. Touchez la case pour la remplacer.` : 'Touchez la case pour déposer le fichier, le même pour tous les utilisateurs.'}</p>
         )}
         {i.mode === 'user' && (
           <>

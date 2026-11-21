@@ -1,11 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  addInput, allowedAdds, capChips, draftIssues, durationsFor, fabrication, filterTemplates, framesRefsWarning, fromTemplate, insertToken, isDirty,
+  addInput, allowedAdds, capChips, draftIssues, durationsFor, fabrication, filterTemplates, framesRefsWarning, fromTemplate, isDirty,
   issueText, moveBefore, moveStep, planIssues, removeInput, setMode, soundChoice, summarize, templateError, templatePrice, toPayload, toggleSource,
-  isLeavingClick, tokenList, userNeeds,
+  isLeavingClick, planTabsState, pseudoAsset, userNeeds, EDITOR_STEPS, issueStep, stepIssueCounts, unknownTokens,
 } from '../src/lib/adminTemplates.js'
 import { findVideoModel } from '@studio/catalog/template-slots'
+import { TOKEN_PATTERN, tokenItems } from '../src/lib/templateRun.js'
 
 const KLING = findVideoModel('kling-3-pro')
 const SEED = findVideoModel('seedance-2-5')
@@ -203,17 +204,48 @@ test('entrées : ajout à la fin, retrait avec renumérotation, photo de départ
   assert.deepEqual(setMode(after, 0, 'fixed'), [{ idx: 0, slot: 'start', kind: 'image', mode: 'fixed', file: '' }])
 })
 
-test('plans : jetons dans l’ordre des entrées, insertion au curseur avec espaces', () => {
+test('plans : jetons cités dans l’ordre des entrées (sans « @ »), comme dans Cinéma', () => {
   const inputs = [
     { idx: 0, slot: 'reference', kind: 'video', mode: 'fixed', file: 'templates/a.mp4' },
     { idx: 1, slot: 'reference', kind: 'image', mode: 'user', label: 'plat' },
     { idx: 2, slot: 'reference', kind: 'image', mode: 'user', label: 'logo' },
     { idx: 3, slot: 'start', kind: 'image', mode: 'user', label: 'x' },
   ]
-  assert.deepEqual(tokenList(inputs), ['@Video1', '@Image1', '@Image2'])
-  assert.deepEqual(insertToken('Gros plan de', '@Image1'), { text: 'Gros plan de @Image1', caret: 20 })
-  assert.deepEqual(insertToken('ab', '@X', 1, 1), { text: 'a @X b', caret: 5 })
-  assert.deepEqual(insertToken('', '@X'), { text: '@X', caret: 2 })
+  assert.deepEqual(tokenItems(inputs).map((x) => x.token), ['Video1', 'Image1', 'Image2'])
+  assert.ok(tokenItems(inputs).every((x) => new RegExp(`^${TOKEN_PATTERN}$`).test(x.token)))
+})
+
+test('onglets des plans : ajout, retrait et plan affiché', () => {
+  const calls = []
+  const plans = [{ text: 'a', dur: 5 }, { text: 'b', dur: 10 }, { text: 'c', dur: 5 }]
+  const mk = (ps, active, max = 4) => planTabsState(ps, active, { max, newDur: 3, onChange: (p) => calls.push(['plans', p]), setActive: (i) => calls.push(['active', i]) })
+  let s = mk(plans, 1)
+  assert.equal(s.multi, true)
+  assert.equal(s.multiAllowed, true)
+  assert.equal(mk(plans, 0, 1).multiAllowed, false)
+  assert.equal(mk([plans[0]], 0).multi, false)
+  // Ajouter : un plan vide à la durée proposée, qui devient le plan affiché.
+  s.addPlan()
+  assert.deepEqual(calls.splice(0), [['plans', [...plans, { text: '', dur: 3 }]], ['active', 3]])
+  // Retirer le plan affiché : celui d'avant s'affiche.
+  s.removePlan(1)
+  assert.deepEqual(calls.splice(0), [['plans', [plans[0], plans[2]]], ['active', 0]])
+  // Retirer un plan d'avant : le même plan reste affiché (son numéro baisse).
+  mk(plans, 2).removePlan(0)
+  assert.deepEqual(calls.splice(0), [['plans', [plans[1], plans[2]]], ['active', 1]])
+  // Retirer un plan d'après : rien ne bouge à l'écran.
+  mk(plans, 0).removePlan(2)
+  assert.deepEqual(calls.splice(0), [['plans', [plans[0], plans[1]]], ['active', 0]])
+  // Le dernier plan ne se retire pas.
+  mk([plans[0]], 0).removePlan(0)
+  assert.deepEqual(calls, [])
+})
+
+test('entrée vue comme un asset : nom du fichier, sinon le titre ; adresse du fichier', () => {
+  assert.deepEqual(pseudoAsset({ idx: 2, slot: 'reference', kind: 'video', mode: 'fixed', file: 'templates/t/in-1.mp4', url: 'https://r2/x.mp4' }),
+    { id: 'tpl-2', kind: 'video', name: 'in-1.mp4', url: 'https://r2/x.mp4' })
+  assert.deepEqual(pseudoAsset({ idx: 0, slot: 'start', kind: 'image', mode: 'user' }), { id: 'tpl-0', kind: 'image', name: 'Image de début', url: null })
+  assert.equal(pseudoAsset({ idx: 0, slot: 'reference', kind: 'image', mode: 'fixed', file: '' }, 'Réf.').name, 'Réf.')
 })
 
 test('ce que l’utilisateur fournit : par sorte, facultatifs signalés ; Genjutsu : ses rôles', () => {
@@ -279,4 +311,36 @@ test('ordre : envois en série, le dernier ordre part en dernier', async () => {
   assert.deepEqual(errs, ['boom'])
   await failing(['y']) // de nouveau utilisable après une erreur
   assert.deepEqual(errs, ['boom', 'boom'])
+})
+
+test('issueStep : les problèmes des entrées vont à « Entrées », ceux des plans à « Plans », le reste à aucune étape', () => {
+  assert.deepEqual(EDITOR_STEPS.map((s) => s.id), ['inputs', 'plans'])
+  assert.equal(issueStep({ code: 'fixed_needs_file', idx: 2 }), 'inputs')
+  assert.equal(issueStep({ code: 'start_required' }), 'inputs')
+  assert.equal(issueStep({ code: 'frames_with_references' }), 'inputs')
+  assert.equal(issueStep({ code: 'something_new', idx: 0 }), 'inputs') // toute entrée désignée
+  assert.equal(issueStep({ code: 'invalid_field', field: 'inputs.file' }), 'inputs')
+  for (const code of ['bad_plans', 'empty_plan', 'plan_empty', 'blank_plan', 'bad_duration', 'bad_dur', 'too_many_plans', 'unknown_token']) assert.equal(issueStep({ code }), 'plans', code)
+  assert.equal(issueStep({ code: 'invalid_field', field: 'plans' }), 'plans')
+  for (const code of ['no_video', 'model_removed', 'genjutsu_incomplete', 'invalid_field', 'nope']) assert.equal(issueStep({ code }), null, code)
+  assert.equal(issueStep(null), null)
+})
+
+test('unknownTokens : jetons cités sans entrée, sans doublon ; @Image12 ne passe pas pour @Image1', () => {
+  const inputs = [{ idx: 0, slot: 'element', kind: 'image', mode: 'fixed' }, { idx: 1, slot: 'reference', kind: 'image', mode: 'user', label: 'x' }]
+  const known = tokenItems(inputs).map((x) => x.token)
+  assert.deepEqual(unknownTokens([{ text: known.map((t) => `@${t}`).join(' ') }], inputs), [])
+  assert.deepEqual(unknownTokens([{ text: '@Video3 et @Audio1' }, { text: '@Video3 encore, @Element9' }], inputs), ['Video3', 'Audio1', 'Element9'])
+  assert.deepEqual(unknownTokens([{ text: `@${known[0]}2` }], inputs), [`${known[0]}2`])
+  assert.deepEqual(unknownTokens(null, null), [])
+  assert.deepEqual(unknownTokens([{ text: '@Video1' }], []), ['Video1'])
+})
+
+test('stepIssueCounts : pastilles des étapes, à partir de draftIssues et des jetons inconnus', () => {
+  const d = gen()
+  assert.deepEqual(stepIssueCounts(draftIssues(d), d.plans, d.inputs), { inputs: 0, plans: 0 })
+  const broken = gen({ videoKey: null, plans: [{ text: '@Video7', dur: 0 }], inputs: d.inputs.map((i) => (i.idx === 2 ? { ...i, file: null, url: null } : i)) })
+  assert.deepEqual(stepIssueCounts(draftIssues(broken), broken.plans, broken.inputs), { inputs: 1, plans: 2 })
+  assert.deepEqual(stepIssueCounts([{ code: 'no_video' }, { code: 'model_removed' }]), { inputs: 0, plans: 0 })
+  assert.deepEqual(stepIssueCounts(undefined), { inputs: 0, plans: 0 })
 })
