@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '../../lib/icons.jsx'
+import ModelLogo from '../../components/ModelLogo.jsx'
+import { logoFor } from '../../lib/modelLogos.js'
 import { api } from '../../lib/api.js'
 import { caurisLabel } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
@@ -16,6 +18,9 @@ export default function TemplatesTab({ id, open }) {
   return <TemplatesList open={open} />
 }
 
+/** Modèles par page de la liste. */
+const PAGE = 20
+
 const FILTERS = [['all', 'Tous'], ['published', 'Publiés'], ['draft', 'Brouillons'], ['fix', 'À corriger']]
 
 function TemplatesList({ open }) {
@@ -27,6 +32,7 @@ function TemplatesList({ open }) {
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(null) // id en cours de publication
   const [drag, setDrag] = useState(null)
+  const [page, setPage] = useState(0)
   const seq = useRef(0)
 
   const load = useCallback(() => {
@@ -39,6 +45,9 @@ function TemplatesList({ open }) {
 
   const all = list ?? []
   const shown = filterTemplates(all, { q, filter })
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE))
+  const at = Math.min(page, pages - 1) // une recherche ou un filtre peut raccourcir la liste
+  const slice = shown.slice(at * PAGE, (at + 1) * PAGE)
   const sum = summarize(all)
 
   // Nouvel ordre : affiché tout de suite, envoyé en entier ; un envoi à la fois, le dernier ordre demandé partant en dernier.
@@ -74,10 +83,10 @@ function TemplatesList({ open }) {
         <label className="adm-field adm-q tm-q">
           <span className="sr">Rechercher un modèle</span>
           <Icon name="search" size={16} />
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nom, catégorie ou modèle" />
+          <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(0) }} placeholder="Nom, catégorie ou modèle" />
         </label>
         <div className="adm-seg" role="group" aria-label="Modèles montrés">
-          {FILTERS.map(([v, label]) => <button key={v} type="button" aria-pressed={filter === v} onClick={() => setFilter(v)}>{label}</button>)}
+          {FILTERS.map(([v, label]) => <button key={v} type="button" aria-pressed={filter === v} onClick={() => { setFilter(v); setPage(0) }}>{label}</button>)}
         </div>
         <button type="button" className="adm-btn primary" onClick={() => setCreating(true)}><Icon name="plus" size={16} />Nouveau modèle</button>
       </div>
@@ -102,7 +111,8 @@ function TemplatesList({ open }) {
         {shown.length > 0 && (
           <ul className="tm-list" aria-label="Modèles, dans l’ordre affiché aux utilisateurs">
             <li className="tm-row head" aria-hidden="true"><span /><span>Vidéo</span><span>Modèle</span><span>Fabrication</span><span>Catégorie</span><span>Prix</span><span>État</span><span /></li>
-            {shown.map((t, n) => {
+            {slice.map((t, k) => {
+              const n = at * PAGE + k // rang dans la liste filtrée (↑ ↓ passent d'une page à l'autre)
               const f = fabrication(t)
               const price = templatePrice(t)
               return (
@@ -125,7 +135,7 @@ function TemplatesList({ open }) {
                   </span>
                   <span className="tm-type">
                     <b>{f.kind}</b>
-                    <small className={f.error ? 'tm-warn' : ''}>{f.detail}</small>
+                    <small className={f.error ? 'tm-warn' : 'tm-model-d'}>{f.modelId && <ModelLogo logo={logoFor(f.modelId)} size={14} />}<span>{f.detail}</span></small>
                     {!f.error && t.issues?.length > 0 && <small className="tm-warn">{t.issues.length} point{t.issues.length > 1 ? 's' : ''} à corriger</small>}
                   </span>
                   <span className="tm-cat"><span className="tm-tag">{categoryLabel(t.category)}</span></span>
@@ -136,6 +146,16 @@ function TemplatesList({ open }) {
               )
             })}
           </ul>
+        )}
+        {pages > 1 && (
+          <nav className="tm-pages" aria-label="Pages de la liste">
+            <span>{at * PAGE + 1}–{Math.min((at + 1) * PAGE, shown.length)} sur {shown.length}</span>
+            <div>
+              <button type="button" className="adm-btn sm" disabled={at === 0} onClick={() => setPage(at - 1)}>Précédente</button>
+              <span aria-live="polite">Page {at + 1} / {pages}</span>
+              <button type="button" className="adm-btn sm" disabled={at >= pages - 1} onClick={() => setPage(at + 1)}>Suivante</button>
+            </div>
+          </nav>
         )}
       </div>
       {creating && <NewTemplateDialog onClose={() => setCreating(false)} onCreated={(t) => open(t.id)} />}

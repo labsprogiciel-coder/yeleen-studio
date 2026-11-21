@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { VIDEO_MODELS } from '@studio/catalog'
 import { LIMITS, findVideoModel, inputIssues } from '@studio/catalog/template-slots'
-import { INPUT_COLS, TEMPLATE_COLS, inputRows, inputsOf, publicTemplate, templateRow, templateSnapshot } from './library.js'
+import { INPUT_COLS, TEMPLATE_COLS, inputsOf, publicTemplate, templateRow, templateSnapshot } from './library.js'
 import { mediaInfo } from './media.js'
 import { badDuration } from './pricing.js'
 import { templateKey } from './storage.js'
@@ -206,14 +206,24 @@ export function adminTemplatesApp() {
   /** Le modèle `id` tel que l'administration le reçoit, ou null s'il a été supprimé entre-temps. */
   const view = async (c, id) => { const { t, rows } = await templateSnapshot(c.env.DB, id); return t ? adminView(t, rows, origin(c)) : null }
   const gone = (c) => c.json({ error: 'not_found' }, 404)
+  const conflict = (c) => c.json({ error: 'conflict' }, 409)
+  /** Version actuelle du modèle (créée à 0 au premier besoin). */
+  const revision = async (db, id) => {
+    await db.prepare('INSERT OR IGNORE INTO template_revisions (template_id, rev) VALUES (?1, 0)').bind(id).run()
+    return (await db.prepare('SELECT rev FROM template_revisions WHERE template_id = ?1').bind(id).first())?.rev ?? 0
+  }
   const reply = (c, v, status = 200) => (v ? c.json({ template: v }, status) : gone(c))
 
   // Tous les modèles, publiés ou non, dans l'ordre de la page Modèles.
   a.get('/', async (c) => {
     const db = c.env.DB
-    const { results } = await db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id ORDER BY t.sort, t.created_at`).bind().all()
+    // Une seule lecture (batch : même instantané), comme la liste publique.
+    const [{ results }, { results: all }] = await db.batch([
+      db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id ORDER BY t.sort, t.created_at`).bind(),
+      db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i ORDER BY i.template_id, i.idx`).bind(),
+    ])
     const rows = new Map()
-    for (const r of (await db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i ORDER BY i.template_id, i.idx`).bind().all()).results) rows.set(r.template_id, [...(rows.get(r.template_id) ?? []), r])
+    for (const r of all) rows.set(r.template_id, [...(rows.get(r.template_id) ?? []), r])
     return c.json({ templates: results.map((t) => adminView(t, rows.get(t.id) ?? [], origin(c))) })
   })
 
@@ -250,9 +260,9 @@ export function adminTemplatesApp() {
 
   // Tel que l'application le recevra (GET /templates), publié ou non : pour « Essayer sur mon compte » (Cinéma, ?tpl=<id>).
   a.get('/:id/preview', async (c) => {
-    const { t, error } = await load(c)
-    if (error) return error
-    const rows = await inputRows(c.env.DB, t.id)
+    const id = c.req.param('id')
+    const { t, rows } = ID.test(id ?? '') ? await templateSnapshot(c.env.DB, id) : { t: null }
+    if (!t) return gone(c)
     const out = publicTemplate(t, rows, origin(c))
     return out ? c.json({ template: out }) : c.json({ error: 'invalid_template', issues: adminView(t, rows, origin(c)).issues }, 422)
   })
@@ -260,6 +270,9 @@ export function adminTemplatesApp() {
   // Enregistrement complet. Les entrées sont remplacées (elles font foi : `image` et `photo` sont vidées) ; passer de l'un à l'autre
   // (générateur ↔ Genjutsu) retire les données de l'autre forme.
   a.put('/:id', async (c) => {
+    const db = c.env.DB
+    const id = c.req.param('id')
+    const rev = ID.test(id ?? '') ? await revision(db, id) : 0 // lue avant le modèle : une version plus récente fait échouer l'écriture
     const { t, error } = await load(c)
     if (error) return error
     const { data, bad } = readTemplate(await body(c))
@@ -267,61 +280,52 @@ export function adminTemplatesApp() {
     const issues = templateIssues(data)
     if (t.published) issues.push(...await fileIssues(c.env.FILES, data))
     if (t.published && issues.length) return c.json({ error: 'invalid_template', issues }, 422) // publié : il doit rester utilisable
-    const db = c.env.DB
-    // Une seule transaction (batch) : le modèle, ses entrées et sa source Genjutsu changent ensemble ou pas du tout. Les ajouts n'ont
-    // lieu que si le modèle existe encore (supprimé entre-temps : rien n'est recréé, réponse 404).
-    const alive = 'WHERE EXISTS (SELECT 1 FROM templates WHERE id = ?1)'
+    // Une seule transaction (batch). La première requête passe à la version suivante si la version et l'état publié sont encore ceux
+    // qui ont été contrôlés ; toutes les autres n'agissent qu'à cette version-là. Sinon rien n'est écrit (409 : modifié entre-temps,
+    // publié ou supprimé par un autre administrateur).
+    const mine = `EXISTS (SELECT 1 FROM template_revisions WHERE template_id = ?1 AND rev = ${rev + 1})`
+    const alive = `WHERE EXISTS (SELECT 1 FROM templates WHERE id = ?1) AND ${mine}`
     const g = data.genjutsu
-    await db.batch([
+    const [bump] = await db.batch([
+      db.prepare(`UPDATE template_revisions SET rev = rev + 1 WHERE template_id = ?1 AND rev = ?2
+        AND EXISTS (SELECT 1 FROM templates WHERE id = ?1 AND published = ?3)`).bind(t.id, rev, t.published ? 1 : 0),
       db.prepare(`UPDATE templates SET name = ?2, blurb = ?3, category = ?4, video_key = ?5, image = NULL, model_id = ?6, plans = ?7, resolution = ?8, ratio = ?9,
-        sound = ?10, photo = NULL WHERE id = ?1`).bind(t.id, data.name, data.blurb, data.category, data.videoKey, data.modelId, JSON.stringify(data.plans),
+        sound = ?10, photo = NULL WHERE id = ?1 AND ${mine}`).bind(t.id, data.name, data.blurb, data.category, data.videoKey, data.modelId, JSON.stringify(data.plans),
         data.resolution, data.ratio, data.sound ? 1 : 0),
-      db.prepare('DELETE FROM template_inputs WHERE template_id = ?1').bind(t.id),
+      db.prepare(`DELETE FROM template_inputs WHERE template_id = ?1 AND ${mine}`).bind(t.id),
       ...data.inputs.map((i) => db.prepare(`INSERT INTO template_inputs (template_id, idx, slot, kind, mode, file_key, label, optional, prompt, from_idx)
         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 ${alive}`).bind(t.id, i.idx, i.slot, i.kind, i.mode, i.file ?? null, i.label ?? null, i.optional ? 1 : 0, i.prompt ?? null, i.from ?? null)),
       g ? db.prepare(`INSERT INTO template_genjutsu (template_id, tool, source_key, secs, prompt, roles) SELECT ?1, ?2, ?3, ?4, ?5, ?6 ${alive}
         ON CONFLICT (template_id) DO UPDATE SET tool = excluded.tool, source_key = excluded.source_key, secs = excluded.secs, prompt = excluded.prompt, roles = excluded.roles`)
         .bind(t.id, g.tool, g.sourceKey, g.secs, g.prompt, JSON.stringify(g.roles))
-        : db.prepare('DELETE FROM template_genjutsu WHERE template_id = ?1').bind(t.id),
+        : db.prepare(`DELETE FROM template_genjutsu WHERE template_id = ?1 AND ${mine}`).bind(t.id),
     ])
-    const v = await view(c, t.id)
-    if (!v) return gone(c)
+    if (!bump?.meta?.changes) return (await templateRow(db, t.id)) ? conflict(c) : gone(c)
     await log(c, t.id, 'update', { issues: issues.length })
-    // Publié entre notre lecture et notre écriture (autre administrateur) alors que cette version a des problèmes : on le retire.
-    const after = v.published ? [...v.issues, ...await fileIssues(c.env.FILES, v)] : []
-    if (after.length) {
-      await db.prepare('UPDATE templates SET published = 0 WHERE id = ?1').bind(t.id).run()
-      await log(c, t.id, 'unpublish', { issues: after.length })
-      return reply(c, await view(c, t.id))
-    }
-    return c.json({ template: v })
+    return reply(c, await view(c, t.id))
   })
 
   // Publier (zéro problème, une vidéo d'exemple) ou retirer de la page Modèles (toujours permis).
   a.post('/:id/publish', async (c) => {
+    const db = c.env.DB
+    const id = c.req.param('id')
+    const rev = ID.test(id ?? '') ? await revision(db, id) : 0 // lue avant le contrôle : un enregistrement entre-temps fait échouer l'écriture
     const { t, error } = await load(c)
     if (error) return error
     const { published } = await body(c)
     if (typeof published !== 'boolean') return c.json({ error: 'invalid_published' }, 400)
-    const db = c.env.DB
     if (published) {
       const v = await view(c, t.id)
       if (!v) return gone(c)
       const issues = [...v.issues, ...await fileIssues(c.env.FILES, v)]
       if (issues.length) return c.json({ error: 'invalid_template', issues }, 422)
-    }
-    await db.prepare('UPDATE templates SET published = ?2 WHERE id = ?1').bind(t.id, published ? 1 : 0).run()
-    const v = await view(c, t.id)
-    if (!v) return gone(c)
-    // Relu après l'écriture : une version enregistrée entre-temps (autre administrateur) qui a des problèmes n'est pas publiée.
-    // Les fichiers sont revérifiés aussi : la version enregistrée entre-temps peut citer un fichier absent ou d'une autre sorte.
-    const after = published ? [...v.issues, ...await fileIssues(c.env.FILES, v)] : []
-    if (after.length) {
-      await db.prepare('UPDATE templates SET published = 0 WHERE id = ?1').bind(t.id).run()
-      return c.json({ error: 'invalid_template', issues: after }, 422)
-    }
+      // Publié seulement si la version contrôlée est toujours la dernière (rien n'est publié, même un instant, sinon).
+      const r = await db.prepare(`UPDATE templates SET published = 1 WHERE id = ?1
+        AND EXISTS (SELECT 1 FROM template_revisions WHERE template_id = ?1 AND rev = ?2)`).bind(t.id, rev).run()
+      if (!r.meta?.changes) return (await templateRow(db, t.id)) ? conflict(c) : gone(c)
+    } else await db.prepare('UPDATE templates SET published = 0 WHERE id = ?1').bind(t.id).run() // retrait : toujours permis
     await log(c, t.id, published ? 'publish' : 'unpublish')
-    return c.json({ template: v })
+    return reply(c, await view(c, t.id))
   })
 
   // Suppression définitive : fichiers R2 du dossier du modèle seulement (une autre clé peut être partagée), puis lignes D1 (une panne
@@ -347,7 +351,7 @@ export function adminTemplatesApp() {
       } while (cursor)
       for (const k of keys) await bucket.delete(k)
     }
-    await db.batch(['template_inputs', 'template_genjutsu'].map((table) => db.prepare(`DELETE FROM ${table} WHERE template_id = ?1`).bind(t.id))
+    await db.batch(['template_inputs', 'template_genjutsu', 'template_revisions'].map((table) => db.prepare(`DELETE FROM ${table} WHERE template_id = ?1`).bind(t.id))
       .concat(db.prepare('DELETE FROM templates WHERE id = ?1').bind(t.id)))
     await log(c, t.id, 'delete', { name: t.name, files: keys.length })
     return c.json({ ok: true })

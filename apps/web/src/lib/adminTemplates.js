@@ -78,6 +78,7 @@ const ISSUES = {
   unsupported_type: 'Format de fichier refusé pour cet emplacement (ou contenu qui ne correspond pas à son type).',
   length_required: 'Taille du fichier inconnue : réessayez le dépôt.',
   not_found: 'Ce modèle n’existe plus.',
+  conflict: 'Ce modèle a été modifié entre-temps (autre administrateur) : rechargez-le, puis recommencez.',
   unknown_template: 'Ce modèle n’existe plus.',
   files_in_use: 'Fichier encore utilisé par d’autres modèles{templates} : retirez-le d’abord de ceux-ci.',
   missing_file: 'Fichier introuvable dans le stockage{key} : déposez-le à nouveau.',
@@ -199,7 +200,7 @@ export function fabrication(t) {
   if (!m) return { kind: 'Générateur', detail: 'Modèle retiré du catalogue', error: true }
   const n = t.plans?.length ?? 0
   const res = m.caps.resolutions ? t.resolution ?? m.caps.resolutions[0] : null
-  return { kind: 'Générateur', detail: [m.name, `${n} plan${n > 1 ? 's' : ''}`, res].filter(Boolean).join(' · '), error: false }
+  return { kind: 'Générateur', modelId: m.id, detail: [m.name, `${n} plan${n > 1 ? 's' : ''}`, res].filter(Boolean).join(' · '), error: false }
 }
 
 /* ——— Prix ——— */
