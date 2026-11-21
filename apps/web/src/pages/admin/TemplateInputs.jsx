@@ -7,14 +7,14 @@ import { acceptFor, addInput, allowedAdds, inputTitle, patchInput, pseudoAsset, 
  * Section « Entrées » de l'éditeur (générateur vidéo) : une carte par entrée, dans l'ordre (les photos de départ `source` sont
  * montrées dans la carte de l'image créée qui s'en sert), et les boutons d'ajout de ce que le modèle accepte.
  */
-export default function TemplateInputs({ model, inputs, onChange, onPatch, upload, uploading }) {
+export default function TemplateInputs({ model, inputs, onChange, onPatch, upload, uploading, bare = false }) {
   const tokens = slotTokens(inputs)
   const cards = [...inputs].filter((i) => i.slot !== 'source').sort((a, b) => a.idx - b.idx)
   const adds = allowedAdds(model, inputs)
   // Pendant l'envoi d'un fichier d'entrée, les entrées ne sont ni retirées ni changées de mode : leurs numéros restent ceux de l'envoi.
   const locked = Object.keys(uploading ?? {}).some((k) => k.startsWith('input-'))
   return (
-    <section className="adm-card tm-sec" aria-labelledby="tm-in-t">
+    <section className={`${bare ? '' : 'adm-card '}tm-sec`} aria-labelledby="tm-in-t">
       <h3 id="tm-in-t">Entrées <small>{model ? `selon ${model.name}` : ''}</small></h3>
       {!cards.length && <p className="tm-note">Aucune entrée : le modèle vidéo ne reçoit que le texte des plans.</p>}
       {cards.map((i) => (

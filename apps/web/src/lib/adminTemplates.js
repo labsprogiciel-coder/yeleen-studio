@@ -2,6 +2,7 @@ import { IMAGE_MODELS, VIDEO_MODELS, durationOptions, findModel, imageCost, vide
 import { findTool, toolCost } from '@studio/catalog/tools'
 import { KINDS, LIMITS, findVideoModel, inputIssues, slotRules, slotTokens, userInputs } from '@studio/catalog/template-slots'
 import { adminError } from './admin.js'
+import { TOKEN_PATTERN } from './templateRun.js'
 
 /**
  * Administration des vidéos à refaire (onglet « Modèles ») : logique pure de l'éditeur et de la liste, sans React ni navigateur
@@ -342,6 +343,44 @@ export function draftIssues(d) {
   }
   if (!d.videoKey) out.push({ code: 'no_video' })
   return out
+}
+
+/* ——— Étapes « Entrées » puis « Plans » de l'éditeur (générateur vidéo) ——— */
+
+export const EDITOR_STEPS = [{ id: 'inputs', label: 'Entrées' }, { id: 'plans', label: 'Plans' }]
+
+const PLAN_CODES = new Set(['bad_plans', 'plan_empty', 'blank_plan', 'empty_plan', 'bad_duration', 'bad_dur', 'too_many_plans', 'unknown_token', 'unknown_tokens'])
+const INPUT_CODES = new Set([
+  'bad_inputs', 'too_many_inputs', 'bad_idx', 'bad_input', 'bad_kind', 'fixed_needs_file', 'user_needs_label', 'generated_only_frames', 'generated_needs_prompt',
+  'bad_from', 'source_is_user', 'source_unused', 'one_start', 'one_end', 'start_unsupported', 'start_required', 'end_unsupported', 'end_needs_start',
+  'too_many_elements', 'elements_unsupported', 'references_unsupported', 'too_many_references', 'frames_with_references', 'one_audio', 'audio_unsupported',
+  'audio_required', 'kind_mismatch', 'optional_not_last', 'cannot_be_optional', 'missing_file',
+])
+
+/** Étape de l'éditeur concernée par un problème : 'inputs', 'plans' ou null (vidéo d'exemple, modèle, Genjutsu…). */
+export function issueStep(issue) {
+  const code = issue?.code
+  if (PLAN_CODES.has(code) || (code === 'invalid_field' && issue.field === 'plans')) return 'plans'
+  if (issue?.idx != null || INPUT_CODES.has(code) || (code === 'invalid_field' && issue.field === 'inputs.file')) return 'inputs'
+  return null
+}
+
+/** Jetons cités dans les plans (« @Image2 ») qu'aucune entrée ne porte : ['Image2', …], sans doublon, dans l'ordre d'apparition. */
+export function unknownTokens(plans, inputs) {
+  const known = new Set(Object.values(slotTokens(Array.isArray(inputs) ? inputs : [])).map((t) => t.slice(1)))
+  const re = new RegExp(`@(${TOKEN_PATTERN})(?!\\d)`, 'g')
+  const out = []
+  for (const p of Array.isArray(plans) ? plans : []) {
+    for (const m of String(p?.text ?? '').matchAll(re)) if (!known.has(m[1]) && !out.includes(m[1])) out.push(m[1])
+  }
+  return out
+}
+
+/** Nombre de problèmes par étape : { inputs, plans } (les jetons inconnus comptent chacun pour les plans). */
+export function stepIssueCounts(issues, plans = [], inputs = []) {
+  const n = { inputs: 0, plans: unknownTokens(plans, inputs).length }
+  for (const i of Array.isArray(issues) ? issues : []) { const s = issueStep(i); if (s) n[s] += 1 }
+  return n
 }
 
 /* ——— Réglages du modèle vidéo ——— */

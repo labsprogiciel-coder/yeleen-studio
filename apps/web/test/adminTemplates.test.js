@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   addInput, allowedAdds, capChips, draftIssues, durationsFor, fabrication, filterTemplates, framesRefsWarning, fromTemplate, isDirty,
   issueText, moveBefore, moveStep, planIssues, removeInput, setMode, soundChoice, summarize, templateError, templatePrice, toPayload, toggleSource,
-  isLeavingClick, planTabsState, pseudoAsset, userNeeds,
+  isLeavingClick, planTabsState, pseudoAsset, userNeeds, EDITOR_STEPS, issueStep, stepIssueCounts, unknownTokens,
 } from '../src/lib/adminTemplates.js'
 import { findVideoModel } from '@studio/catalog/template-slots'
 import { TOKEN_PATTERN, tokenItems } from '../src/lib/templateRun.js'
@@ -311,4 +311,36 @@ test('ordre : envois en série, le dernier ordre part en dernier', async () => {
   assert.deepEqual(errs, ['boom'])
   await failing(['y']) // de nouveau utilisable après une erreur
   assert.deepEqual(errs, ['boom', 'boom'])
+})
+
+test('issueStep : les problèmes des entrées vont à « Entrées », ceux des plans à « Plans », le reste à aucune étape', () => {
+  assert.deepEqual(EDITOR_STEPS.map((s) => s.id), ['inputs', 'plans'])
+  assert.equal(issueStep({ code: 'fixed_needs_file', idx: 2 }), 'inputs')
+  assert.equal(issueStep({ code: 'start_required' }), 'inputs')
+  assert.equal(issueStep({ code: 'frames_with_references' }), 'inputs')
+  assert.equal(issueStep({ code: 'something_new', idx: 0 }), 'inputs') // toute entrée désignée
+  assert.equal(issueStep({ code: 'invalid_field', field: 'inputs.file' }), 'inputs')
+  for (const code of ['bad_plans', 'empty_plan', 'plan_empty', 'blank_plan', 'bad_duration', 'bad_dur', 'too_many_plans', 'unknown_token']) assert.equal(issueStep({ code }), 'plans', code)
+  assert.equal(issueStep({ code: 'invalid_field', field: 'plans' }), 'plans')
+  for (const code of ['no_video', 'model_removed', 'genjutsu_incomplete', 'invalid_field', 'nope']) assert.equal(issueStep({ code }), null, code)
+  assert.equal(issueStep(null), null)
+})
+
+test('unknownTokens : jetons cités sans entrée, sans doublon ; @Image12 ne passe pas pour @Image1', () => {
+  const inputs = [{ idx: 0, slot: 'element', kind: 'image', mode: 'fixed' }, { idx: 1, slot: 'reference', kind: 'image', mode: 'user', label: 'x' }]
+  const known = tokenItems(inputs).map((x) => x.token)
+  assert.deepEqual(unknownTokens([{ text: known.map((t) => `@${t}`).join(' ') }], inputs), [])
+  assert.deepEqual(unknownTokens([{ text: '@Video3 et @Audio1' }, { text: '@Video3 encore, @Element9' }], inputs), ['Video3', 'Audio1', 'Element9'])
+  assert.deepEqual(unknownTokens([{ text: `@${known[0]}2` }], inputs), [`${known[0]}2`])
+  assert.deepEqual(unknownTokens(null, null), [])
+  assert.deepEqual(unknownTokens([{ text: '@Video1' }], []), ['Video1'])
+})
+
+test('stepIssueCounts : pastilles des étapes, à partir de draftIssues et des jetons inconnus', () => {
+  const d = gen()
+  assert.deepEqual(stepIssueCounts(draftIssues(d), d.plans, d.inputs), { inputs: 0, plans: 0 })
+  const broken = gen({ videoKey: null, plans: [{ text: '@Video7', dur: 0 }], inputs: d.inputs.map((i) => (i.idx === 2 ? { ...i, file: null, url: null } : i)) })
+  assert.deepEqual(stepIssueCounts(draftIssues(broken), broken.plans, broken.inputs), { inputs: 1, plans: 2 })
+  assert.deepEqual(stepIssueCounts([{ code: 'no_video' }, { code: 'model_removed' }]), { inputs: 0, plans: 0 })
+  assert.deepEqual(stepIssueCounts(undefined), { inputs: 0, plans: 0 })
 })

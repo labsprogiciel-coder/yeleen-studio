@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Children, forwardRef, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import useLeaveGuard from './useLeaveGuard.js'
 import { VIDEO_MODELS } from '@studio/catalog'
@@ -13,13 +13,14 @@ import { caurisLabel, cauris } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
 import {
   ACCEPT, BLURB_MAX, CATEGORIES, GENJUTSU_LIMITS, GENJUTSU_RATIOS, GENJUTSU_TOOLS, NAME_MAX, capChips, draftIssues, durationsFor, framesRefsWarning, fromTemplate, planTabsState, pseudoAsset,
-  draftAfterSave, isCategory, isDirty, issueText, patchInput, soundChoice, templateError, templatePrice, toPayload, userNeeds,
+  EDITOR_STEPS, draftAfterSave, isCategory, isDirty, issueStep, issueText, patchInput, soundChoice, stepIssueCounts, templateError, templatePrice, toPayload, unknownTokens, userNeeds,
 } from '../../lib/adminTemplates.js'
 import PlanTabs from '../../components/PlanTabs.jsx'
 import MentionTextarea from '../../components/MentionTextarea.jsx'
 import { PromptBox, RefTile } from '../../components/GenPanel.jsx'
 import { MAX_PLANS } from '../../lib/useGenSettings.js'
 import { TOKEN_PATTERN, tokenItems } from '../../lib/templateRun.js'
+import useTabKeys from '../../lib/useTabKeys.js'
 import '../../styles/library.css' // aperçus AssetThumb (.at) des cases reprises du panneau de l'éditeur
 import TemplateInputs from './TemplateInputs.jsx'
 import Switch from './Switch.jsx'
@@ -50,6 +51,8 @@ export default function TemplateEditor({ id, onBack }) {
   const [videoInfo, setVideoInfo] = useState(null) // { name, size } du dernier dépôt de la vidéo d'exemple
   const [sourceInfo, setSourceInfo] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [step, setStep] = useState(0) // étape affichée (Entrées, Plans) : état d'écran, hors brouillon
+  const stepper = useRef(null)
 
   const apply = (tpl) => { const d = fromTemplate(tpl); setT(tpl); setSaved(d); setDraft(d) }
   const load = () => {
@@ -80,6 +83,9 @@ export default function TemplateEditor({ id, onBack }) {
   const issues = draftIssues(draft)
   const price = templatePrice({ ...draft, genjutsu: gen ? null : draft.genjutsu })
   const shownInputs = gen ? draft.inputs : []
+  const counts = gen ? stepIssueCounts(issues, draft.plans, draft.inputs) : null
+  // Un problème de la publication qui relève d'une étape : on l'affiche (et on ramène l'étape à l'écran).
+  const goStep = (k) => { setStep(k); stepper.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }) }
 
   const upload = async (role, file, slot, done) => {
     setUploading((u) => ({ ...u, [slot]: true }))
@@ -232,9 +238,13 @@ export default function TemplateEditor({ id, onBack }) {
             )}
           </section>
 
-          {gen && <TemplateInputs model={model} inputs={draft.inputs} onChange={(inputs) => set({ inputs })}
-            onPatch={(idx, patch) => setDraft((d) => ({ ...d, inputs: patchInput(d.inputs, idx, patch) }))} upload={upload} uploading={uploading} />}
-          {gen && <Plans model={model} plans={draft.plans} inputs={draft.inputs} onChange={(plans) => set({ plans })} />}
+          {gen && (
+            <Stepper ref={stepper} step={step} onStep={setStep} counts={counts}>
+              <TemplateInputs bare model={model} inputs={draft.inputs} onChange={(inputs) => set({ inputs })}
+                onPatch={(idx, patch) => setDraft((d) => ({ ...d, inputs: patchInput(d.inputs, idx, patch) }))} upload={upload} uploading={uploading} />
+              <Plans bare model={model} plans={draft.plans} inputs={draft.inputs} onChange={(plans) => set({ plans })} />
+            </Stepper>
+          )}
           {!gen && <Roles roles={draft.genjutsu.roles} onChange={(roles) => setG({ roles })} />}
         </div>
 
@@ -270,7 +280,11 @@ export default function TemplateEditor({ id, onBack }) {
             <Switch on={t.published} busy={publishing} disabled={dirty || (!t.published && issues.length > 0)} onToggle={() => publish(!t.published)} label={draft.name} />
             {dirty && <p className="tm-note">Enregistrez d’abord vos changements pour publier ou retirer le modèle.</p>}
             {issues.length > 0
-              ? <ul className="tm-issues" aria-label="À corriger avant de publier">{issues.map((i, n) => <li key={n}>{issueText(i, shownInputs)}</li>)}</ul>
+              ? <ul className="tm-issues" aria-label="À corriger avant de publier">{issues.map((i, n) => {
+                const k = gen ? EDITOR_STEPS.findIndex((x) => x.id === issueStep(i)) : -1
+                return <li key={n}>{k < 0 ? issueText(i, shownInputs)
+                  : <button type="button" className="tm-issue-go" onClick={() => goStep(k)} title={`Aller à l’étape ${EDITOR_STEPS[k].label}`}>{issueText(i, shownInputs)}</button>}</li>
+              })}</ul>
               : <p className="tm-note">Rien à corriger.</p>}
             <Link className="adm-btn" to={`/cinema?tpl=${encodeURIComponent(id)}`}>Essayer sur mon compte</Link>
             {dirty && <p className="tm-note">L’essai utilise la version enregistrée.</p>}
@@ -288,6 +302,45 @@ export default function TemplateEditor({ id, onBack }) {
     </div>
   )
 }
+
+/**
+ * Entrées puis Plans, une étape à la fois (comme la fenêtre de recharge) : barre de progression, onglets d'étapes libres (une pastille
+ * compte les problèmes de chaque étape), « étape N sur 2 », et Précédent / Suivant au pied. Les deux étapes restent montées (l'une
+ * cachée) : le plan affiché, le texte en cours et les envois ne se perdent pas en changeant d'étape.
+ */
+const Stepper = forwardRef(function Stepper({ step, onStep, counts, children }, ref) {
+  const onTabKeys = useTabKeys()
+  const panels = Children.toArray(children)
+  const last = EDITOR_STEPS.length - 1
+  return (
+    <section ref={ref} className="adm-card tm-wiz" aria-label="Entrées et plans">
+      <div className="tm-wiz-prog" aria-hidden="true"><i style={{ width: `${((step + 1) / EDITOR_STEPS.length) * 100}%` }} /></div>
+      <div className="tm-wiz-top">
+        <div className="tm-wiz-tabs" role="tablist" aria-label="Étapes" onKeyDown={onTabKeys}>
+          {EDITOR_STEPS.map((x, k) => {
+            const n = counts?.[x.id] ?? 0
+            return (
+              <button key={x.id} type="button" role="tab" id={`tm-wiz-tab-${x.id}`} aria-controls={`tm-wiz-${x.id}`} aria-selected={k === step} tabIndex={k === step ? 0 : -1}
+                className={`tm-wiz-tab${k === step ? ' on' : ''}${k < step ? ' done' : ''}`} onClick={() => onStep(k)}>
+                <span className="tm-wiz-n" aria-hidden="true">{k + 1}</span>
+                <span className="tm-wiz-l">{x.label}</span>
+                {n > 0 && <span className="tm-wiz-badge"><span aria-hidden="true">{n}</span><span className="sr">, {n} problème{n > 1 ? 's' : ''} à corriger</span></span>}
+              </button>
+            )
+          })}
+        </div>
+        <small className="tm-wiz-of" aria-live="polite">étape {step + 1} sur {EDITOR_STEPS.length}</small>
+      </div>
+      {EDITOR_STEPS.map((x, k) => (
+        <div key={x.id} id={`tm-wiz-${x.id}`} role="tabpanel" aria-labelledby={`tm-wiz-tab-${x.id}`} hidden={k !== step} className="tm-wiz-panel">{panels[k]}</div>
+      ))}
+      <div className="tm-wiz-foot">
+        {step > 0 && <button type="button" className="adm-btn" onClick={() => onStep(step - 1)}><Icon name="chevL" size={14} />Précédent</button>}
+        {step < last && <button type="button" className="adm-btn primary" onClick={() => onStep(step + 1)}>Suivant<Icon name="chevR" size={14} /></button>}
+      </div>
+    </section>
+  )
+})
 
 /** Bouton de dépôt d'un fichier (un champ fichier caché dans un libellé). */
 function FileButton({ accept, busy, label, onFile }) {
@@ -328,7 +381,7 @@ function CategoryField({ value, onChange }) {
  * texte (PromptBox) où « @ » cite une entrée (MentionTextarea), durée du plan au pied ; les cases des entrées citables, au-dessus,
  * insèrent leur jeton au curseur. Le plan affiché reste un état d'écran : le brouillon ne change que par `onChange(plans)`.
  */
-function Plans({ model, plans, inputs, onChange }) {
+function Plans({ model, plans, inputs, onChange, bare = false }) {
   const area = useRef(null)
   const [shown, setShown] = useState(0)
   const max = model?.caps.multiShot ? MAX_PLANS : 1
@@ -339,11 +392,11 @@ function Plans({ model, plans, inputs, onChange }) {
   const cites = tokenItems(inputs).map((x) => ({ ...x, input: inputs.find((i) => i.idx === x.idx) }))
   const known = new Set(cites.map((x) => x.token))
   const items = cites.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: x.input.url ? pseudoAsset(x.input, x.title) : null }))
-  const stale = [...new Set((cur.text.match(new RegExp(`@${TOKEN_PATTERN}(?!\\d)`, 'g')) ?? []).map((t) => t.slice(1)).filter((t) => !known.has(t)))]
+  const stale = unknownTokens([cur], inputs)
   const setText = (text) => onChange(plans.map((p, k) => (k === active ? { ...p, text } : p)))
   const durs = durationsFor(model, cur.dur)
   return (
-    <section className="adm-card tm-sec tm-plans" aria-labelledby="tm-pl-t">
+    <section className={`${bare ? '' : 'adm-card '}tm-sec tm-plans`} aria-labelledby="tm-pl-t">
       <div className="ep-row">
         <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" level={3} />
         <small className="tm-total">{total} s au total</small>

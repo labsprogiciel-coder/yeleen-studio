@@ -278,6 +278,34 @@ dialog.adm-dlg::backdrop{background:color-mix(in srgb,var(--plum) 55%,transparen
 .tm-cites{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
 .tm-cites .ep-tile{height:72px}
 .tm-plans .ep-prompt textarea{min-height:96px}
+/* Entrées puis Plans, une étape à la fois : barre de 3 px en haut de la carte (comme .rc-prog de la recharge), onglets d'étapes, pied Précédent / Suivant. */
+.tm-wiz{display:flex;flex-direction:column;gap:14px;overflow:hidden;padding-top:0}
+.tm-wiz-prog{flex:none;height:3px;margin:0 -16px;background:var(--fill)}
+.tm-wiz-prog i{display:block;height:100%;background:var(--lime);border-radius:0 3px 3px 0;transition:width .25s ease}
+.tm-wiz-top{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.tm-wiz-tabs{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--fill);min-width:0}
+.tm-wiz-tab{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px 0 6px;border:0;border-radius:9px;background:none;color:var(--ink-3);font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.tm-wiz-tab:hover{color:var(--ink)}
+.tm-wiz-tab.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px var(--wash-2)}
+.tm-wiz-tab:focus-visible,.tm-issue-go:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.tm-wiz-n{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:var(--surface);color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+.tm-wiz-tab.on .tm-wiz-n,.tm-wiz-tab.done .tm-wiz-n{background:var(--lime);color:var(--on-lime)}
+.tm-wiz-badge{flex:none;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:var(--danger-bg);color:var(--danger-ink);font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+.tm-wiz-of{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
+.tm-wiz-panel{min-width:0}
+.tm-wiz-panel[hidden]{display:none}
+.tm-wiz-foot{display:flex;gap:8px;padding-top:14px;border-top:1px solid var(--line-soft)}
+.tm-wiz-foot>.primary{margin-left:auto}
+.tm-issue-go{padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:2px;cursor:pointer}
+.tm-issue-go:hover{text-decoration-color:currentColor}
+@media (prefers-reduced-motion:reduce){.tm-wiz-prog i{transition:none}}
+@media (max-width:560px){
+  .tm-wiz-prog{margin:0 -14px}
+  .tm-wiz-tabs{flex:1 1 auto}
+  .tm-wiz-tab{flex:1 1 0;justify-content:center;padding:0 8px 0 4px;gap:6px}
+  .tm-wiz-foot>.adm-btn{flex:1}
+}
+@media (pointer:coarse){.tm-wiz-tab{min-height:40px}}
 .tm-role{display:grid;grid-template-columns:minmax(0,1fr) 32px;gap:8px;align-items:start}
 .tm-side{position:sticky;top:16px;display:flex;flex-direction:column;gap:16px;min-width:0}
 .tm-side .adm-btn{width:100%;box-sizing:border-box;text-decoration:none}
