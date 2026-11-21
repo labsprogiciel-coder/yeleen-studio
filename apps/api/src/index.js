@@ -198,9 +198,20 @@ app.post('/assets', notBlocked, withDb(async (c, db) => {
   if (!bytes || bytes > MAX_IMPORT[kind]) { await bucket.delete(key); return c.json({ error: bytes ? 'too_large' : 'empty' }, bytes ? 413 : 400) }
   const upload = { id, kind, name, key, contentType: type, bytes, secs: num(q.secs, 6 * 3600), width: num(q.width, 20000), height: num(q.height, 20000) }
   if (known) {
-    // L'ancien fichier (autre type, donc autre clé) est effacé s'il traînait encore.
-    if (known.r2_key !== key) await bucket.delete(known.r2_key).catch((e) => console.error('import refait : ancien fichier resté dans R2', known.r2_key, e.message))
-    return c.json({ asset: assetView(await reviveUpload(db, accountId(c), upload), origin) }, 201)
+    try {
+      // L'ancien fichier (autre type, donc autre clé) est effacé s'il traînait encore, sauf si une autre ligne visible l'utilise.
+      if (known.r2_key !== key) await deleteAsset(db, accountId(c), id, { bucket })
+      const row = await reviveUpload(db, accountId(c), upload)
+      // Une suppression en cours a pu effacer le fichier juste après son écriture : la ligne ne reste pas visible sans fichier.
+      if (await bucket.head(key)) return c.json({ asset: assetView(row, origin) }, 201)
+      await deleteAsset(db, accountId(c), id, { bucket })
+      return c.json({ error: 'storage_unavailable' }, 503)
+    } catch (e) {
+      // D1 refuse : le fichier réécrit ne reste pas dans R2 tant que la ligne est marquée supprimée.
+      const now = await getAsset(db, accountId(c), id).catch(() => null)
+      if (!now || now.deleted_at) await bucket.delete(key).catch(() => {})
+      throw e
+    }
   }
   try {
     const row = await insertUpload(db, accountId(c), upload)

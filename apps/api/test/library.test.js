@@ -22,6 +22,7 @@ function setup({ files = true, vars = {} } = {}) {
       return { size: buf?.byteLength ?? 0 }
     },
     get: async (key) => { const o = objects.get(key); return o && { body: new Uint8Array(o.buf), size: o.buf.byteLength, httpMetadata: { contentType: o.type } } },
+    head: async (key) => { const o = objects.get(key); return o ? { size: o.buf.byteLength } : null },
     delete: async (key) => { objects.delete(key) },
   }
   const env = {
@@ -447,4 +448,50 @@ test('import rejoué après suppression : jamais l’ancienne ligne sans fichier
     // Le même contenu sans clé : un nouvel asset, comme avant.
     assert.equal((await send(t, png, 'image/png')).status, 201)
   } finally { t.restore() }
+})
+
+test('import rejoué après suppression : si une suppression en cours efface le fichier juste après son écriture, la ligne ne reste pas visible sans fichier', async () => {
+  const t = setup()
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?key=a-lz3k9-course')
+    const key = `uploads/demo/${first.body.asset.id}.png`
+    assert.equal((await t.json(`/assets/${first.body.asset.id}`, { method: 'DELETE' })).status, 200)
+    // La fin d'une suppression (effacement dans R2) tombe entre l'écriture du fichier et le retour de la ligne.
+    const put = t.env.FILES.put
+    t.env.FILES.put = async (...a) => { const r = await put(...a); t.objects.delete(key); return r }
+    const lost = await send(t, png, 'image/png', '?key=a-lz3k9-course')
+    t.env.FILES.put = put
+    assert.equal(lost.status, 503)
+    assert.equal((await t.json('/assets')).body.assets.length, 0)
+    assert.ok(t.rows('SELECT deleted_at FROM assets')[0].deleted_at)
+    // Le nouvel essai refait l'import en entier.
+    const again = await send(t, png, 'image/png', '?key=a-lz3k9-course')
+    assert.equal(again.status, 201)
+    assert.equal((await app.fetch(new Request(again.body.asset.url), t.env)).status, 200)
+  } finally { t.restore() }
+})
+
+test('import rejoué après suppression : si D1 refuse, le fichier réécrit ne reste pas dans R2 ; l’ancienne clé encore utilisée ailleurs est gardée', async () => {
+  const t = setup()
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?key=a-lz3k9-refus')
+    const id = first.body.asset.id
+    assert.equal((await t.json(`/assets/${id}`, { method: 'DELETE' })).status, 200)
+    const prepare = t.env.DB.prepare
+    t.env.DB.prepare = (sql) => { if (/UPDATE assets SET deleted_at = NULL/.test(sql)) throw new Error('D1 indisponible'); return prepare(sql) }
+    assert.equal((await send(t, png, 'image/png', '?key=a-lz3k9-refus')).status, 503)
+    t.env.DB.prepare = prepare
+    assert.equal(t.objects.size, 0) // supprimé par l'utilisateur : pas de retour dans R2 sans ligne visible
+    assert.ok(t.rows('SELECT deleted_at FROM assets')[0].deleted_at)
+    // Renvoyé sous un autre type : l'ancienne clé n'est pas effacée si une autre ligne visible l'utilise (ne devrait pas arriver).
+    const old = `uploads/demo/${id}.png`
+    await t.env.FILES.put(old, png.buffer, { httpMetadata: { contentType: 'image/png' } })
+    t.db.raw.prepare("INSERT INTO assets (id, user_id, kind, source, name, r2_key, created_at) VALUES ('copie', 'autre', 'image', 'upload', 'copie', ?1, 1)").run(old)
+    assert.equal((await send(t, new Uint8Array([1, 2]), 'image/jpeg', '?key=a-lz3k9-refus')).status, 201)
+    assert.deepEqual([...t.objects.keys()].sort(), [`uploads/demo/${id}.jpg`, old])
+  } finally { console.error = quiet; t.restore() }
 })
