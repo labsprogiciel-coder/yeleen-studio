@@ -79,6 +79,6 @@ test('Krea 3 (générateur d’images) : taille exacte au format choisi, au plus
 
 test('image : le style choisi s’ajoute après le texte, avant le style de la marque', async () => {
   const { styleText } = await import('@studio/catalog/styles')
-  const i = buildInput('image', nano, { prompt: 'un hippo', style: 'watercolor', brandStyle: 'tons chauds', resolution: '1K', ratio: 'Auto' })
-  assert.equal(i.prompt, `un hippo, ${styleText('watercolor')}, tons chauds`)
+  const i = buildInput('image', nano, { prompt: 'un hippo', style: 'cinema', brandStyle: 'tons chauds', resolution: '1K', ratio: 'Auto' })
+  assert.equal(i.prompt, `un hippo, ${styleText('cinema')}, tons chauds`)
 })

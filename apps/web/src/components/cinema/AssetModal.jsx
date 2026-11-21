@@ -205,7 +205,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
             return (
               <div key={x.id} className="am-cell">
                 <button type="button" className={`am-it am-st${on ? ' on' : ''}`} aria-pressed={on} onClick={() => chooseStyle(x.id)} aria-label={`Style ${x.label}${on ? ', choisi : toucher pour le retirer' : ''}`}>
-                  <StyleThumb style={x} />
+                  <StyleThumb style={x} loop />
                   <span className="am-nm">{x.label}</span>
                   {on && <span className="am-ck" aria-hidden="true"><Icon name="check" size={14} /></span>}
                 </button>
