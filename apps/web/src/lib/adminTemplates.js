@@ -420,6 +420,9 @@ export function framesRefsWarning(model, inputs) {
 /* ——— Entrées ——— */
 
 /** Ajouts possibles pour ce modèle, compte tenu des entrées déjà là : [{ id, label, slot, kind }]. */
+/** L'étape « Entrées » a-t-elle un sens pour ce modèle ? Oui s'il a déjà des entrées ou peut en recevoir (sinon, texte seul : Plans directement). */
+export const takesInputs = (model, inputs = []) => inputs.length > 0 || allowedAdds(model, inputs).length > 0
+
 export function allowedAdds(model, inputs) {
   if (!model) return []
   const r = slotRules(model)
