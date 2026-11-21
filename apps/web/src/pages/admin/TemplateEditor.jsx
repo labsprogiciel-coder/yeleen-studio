@@ -400,10 +400,6 @@ function Plans({ model, plans, inputs, onChange, bare = false }) {
   const durs = durationsFor(model, cur.dur)
   return (
     <section className={`${bare ? '' : 'adm-card '}tm-sec tm-plans`} aria-labelledby="tm-pl-t">
-      <div className="ep-row">
-        <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" level={3} />
-        <small className="tm-total">{total} s au total</small>
-      </div>
       {cites.length > 0 && (
         <div className="ep-tiles tm-cites" aria-label="Entrées à citer dans le plan">
           {cites.map((x) => (x.input.url
@@ -417,6 +413,10 @@ function Plans({ model, plans, inputs, onChange, bare = false }) {
             )))}
         </div>
       )}
+      <div className="ep-row">
+        <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" level={3} />
+        <small className="tm-total">{total} s au total</small>
+      </div>
       <PromptBox
         id="tm-plan" role={s.multi ? 'tabpanel' : undefined} aria-labelledby={s.multi ? `plan-tab-${active}` : undefined}
         canClear={Boolean(cur.text)} onClear={() => setText('')} clearLabel="Effacer le plan"
