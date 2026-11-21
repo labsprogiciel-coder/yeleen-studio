@@ -13,7 +13,7 @@ import { caurisLabel, cauris } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
 import {
   ACCEPT, BLURB_MAX, CATEGORIES, GENJUTSU_LIMITS, GENJUTSU_RATIOS, GENJUTSU_TOOLS, NAME_MAX, capChips, draftIssues, durationsFor, framesRefsWarning, fromTemplate, planTabsState, pseudoAsset,
-  EDITOR_STEPS, draftAfterSave, isCategory, isDirty, issueStep, issueText, patchInput, soundChoice, stepIssueCounts, templateError, templatePrice, toPayload, unknownTokens, userNeeds,
+  EDITOR_STEPS, draftAfterSave, isCategory, isDirty, issueStep, issueText, patchInput, soundChoice, stepIssueCounts, takesInputs, templateError, templatePrice, toPayload, unknownTokens, userNeeds,
 } from '../../lib/adminTemplates.js'
 import PlanTabs from '../../components/PlanTabs.jsx'
 import MentionTextarea from '../../components/MentionTextarea.jsx'
@@ -83,7 +83,8 @@ export default function TemplateEditor({ id, onBack }) {
   const issues = draftIssues(draft)
   const price = templatePrice({ ...draft, genjutsu: gen ? null : draft.genjutsu })
   const shownInputs = gen ? draft.inputs : []
-  const counts = gen ? stepIssueCounts(issues, draft.plans, draft.inputs) : null
+  const steps = gen && takesInputs(model, draft.inputs) // modèle texte seul : pas d'étape « Entrées », les plans directement
+  const counts = steps ? stepIssueCounts(issues, draft.plans, draft.inputs) : null
   // Un problème de la publication qui relève d'une étape : on l'affiche (et on ramène l'étape à l'écran).
   const goStep = (k) => { setStep(k); stepper.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }) }
 
@@ -238,7 +239,8 @@ export default function TemplateEditor({ id, onBack }) {
             )}
           </section>
 
-          {gen && (
+          {gen && !steps && <Plans model={model} plans={draft.plans} inputs={draft.inputs} onChange={(plans) => set({ plans })} />}
+          {steps && (
             <Stepper ref={stepper} step={step} onStep={setStep} counts={counts}>
               <TemplateInputs bare model={model} inputs={draft.inputs} onChange={(inputs) => set({ inputs })}
                 onPatch={(idx, patch) => setDraft((d) => ({ ...d, inputs: patchInput(d.inputs, idx, patch) }))} upload={upload} uploading={uploading} />
@@ -281,7 +283,7 @@ export default function TemplateEditor({ id, onBack }) {
             {dirty && <p className="tm-note">Enregistrez d’abord vos changements pour publier ou retirer le modèle.</p>}
             {issues.length > 0
               ? <ul className="tm-issues" aria-label="À corriger avant de publier">{issues.map((i, n) => {
-                const k = gen ? EDITOR_STEPS.findIndex((x) => x.id === issueStep(i)) : -1
+                const k = steps ? EDITOR_STEPS.findIndex((x) => x.id === issueStep(i)) : -1
                 return <li key={n}>{k < 0 ? issueText(i, shownInputs)
                   : <button type="button" className="tm-issue-go" onClick={() => goStep(k)} title={`Aller à l’étape ${EDITOR_STEPS[k].label}`}>{issueText(i, shownInputs)}</button>}</li>
               })}</ul>
@@ -391,7 +393,6 @@ function Plans({ model, plans, inputs, onChange, bare = false }) {
   const active = Math.min(shown, Math.max(0, plans.length - 1)) // moins de plans (autre modèle, rechargement) : le dernier
   const s = planTabsState(plans, active, { max, onChange, setActive: setShown, newDur: durationsFor(model)[0] ?? 5 })
   const cur = plans[active] ?? { text: '', dur: 5 }
-  const total = plans.reduce((n, p) => n + (Number(p.dur) || 0), 0)
   const cites = tokenItems(inputs).map((x) => ({ ...x, input: inputs.find((i) => i.idx === x.idx) }))
   const known = new Set(cites.map((x) => x.token))
   const items = cites.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: x.input.url ? pseudoAsset(x.input, x.title) : null }))
@@ -400,10 +401,6 @@ function Plans({ model, plans, inputs, onChange, bare = false }) {
   const durs = durationsFor(model, cur.dur)
   return (
     <section className={`${bare ? '' : 'adm-card '}tm-sec tm-plans`} aria-labelledby="tm-pl-t">
-      <div className="ep-row">
-        <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" level={3} />
-        <small className="tm-total">{total} s au total</small>
-      </div>
       {cites.length > 0 && (
         <div className="ep-tiles tm-cites" aria-label="Entrées à citer dans le plan">
           {cites.map((x) => (x.input.url
@@ -417,6 +414,9 @@ function Plans({ model, plans, inputs, onChange, bare = false }) {
             )))}
         </div>
       )}
+      <div className="ep-row">
+        <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" level={3} />
+      </div>
       <PromptBox
         id="tm-plan" role={s.multi ? 'tabpanel' : undefined} aria-labelledby={s.multi ? `plan-tab-${active}` : undefined}
         canClear={Boolean(cur.text)} onClear={() => setText('')} clearLabel="Effacer le plan"

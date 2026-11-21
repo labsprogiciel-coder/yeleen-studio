@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   addInput, allowedAdds, capChips, draftIssues, durationsFor, fabrication, filterTemplates, framesRefsWarning, fromTemplate, isDirty,
   issueText, moveBefore, moveStep, planIssues, removeInput, setMode, soundChoice, summarize, templateError, templatePrice, toPayload, toggleSource,
-  isLeavingClick, planTabsState, pseudoAsset, userNeeds, EDITOR_STEPS, issueStep, stepIssueCounts, unknownTokens,
+  isLeavingClick, planTabsState, pseudoAsset, userNeeds, EDITOR_STEPS, issueStep, stepIssueCounts, takesInputs, unknownTokens,
 } from '../src/lib/adminTemplates.js'
 import { findVideoModel } from '@studio/catalog/template-slots'
 import { TOKEN_PATTERN, tokenItems } from '../src/lib/templateRun.js'
@@ -343,4 +343,12 @@ test('stepIssueCounts : pastilles des étapes, à partir de draftIssues et des j
   assert.deepEqual(stepIssueCounts(draftIssues(broken), broken.plans, broken.inputs), { inputs: 1, plans: 2 })
   assert.deepEqual(stepIssueCounts([{ code: 'no_video' }, { code: 'model_removed' }]), { inputs: 0, plans: 0 })
   assert.deepEqual(stepIssueCounts(undefined), { inputs: 0, plans: 0 })
+})
+
+test('takesInputs : étape « Entrées » seulement si le modèle a ou peut recevoir des entrées', () => {
+  const t2v = findVideoModel('ltx-2-5-pro-t2v') // texte seul
+  assert.equal(takesInputs(t2v, []), false)
+  assert.equal(takesInputs(t2v, [{ idx: 0, slot: 'start', kind: 'image', mode: 'user', label: 'x' }]), true) // entrée restante à retirer : l'étape reste visible
+  assert.equal(takesInputs(findVideoModel('kling-3-pro'), []), true)
+  assert.equal(takesInputs(null, []), false)
 })
