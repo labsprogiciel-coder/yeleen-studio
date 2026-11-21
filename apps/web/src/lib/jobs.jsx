@@ -209,7 +209,7 @@ export function JobsProvider({ children }) {
     const spec = raw.project ? raw : { ...raw, project: currentProject() } // la génération reste dans le projet où elle a été lancée
     const kind = spec.kind
     const count = spec.count ?? 1
-    const moderated = /(?<![\p{L}\p{N}_])nsfw(?![\p{L}\p{N}_])/iu.test(spec.prompt)
+    const moderated = /nsfw/i.test(String(spec.prompt ?? '').normalize('NFKC').replace(/\p{Cf}/gu, ''))
     const live = Boolean(spec.live && apiEnabled)
     const failure = live ? null : moderated ? 'moderation' : /\[echec\]/i.test(spec.prompt) || Math.random() < (kind === 'video' ? 0.15 : 0.08) ? 'provider' : null
     const id = `job-${++seq.current}`

@@ -39,8 +39,14 @@ test('la modération refuse les mots interdits', () => {
   assert.equal(isBlocked(null), false)
 })
 
-test('la modération ne refuse ni un nom ni un mot courant (mot entier seulement)', () => {
-  for (const ok of ['Portrait de Mme Sangaré au marché', 'une sangsue', 'un pur-sang au galop', 'don du sang à Bamako', 'campagne contre la violence faite aux femmes', 'panneau stationnement interdit', 'la marque Unsfwear', 'nsfwé']) {
+test('la modération refuse « nsfw » collé à autre chose, en pleine chasse ou coupé par un caractère invisible', () => {
+  for (const bad of ['style nsfw_art', 'nsfw18', 'photo #nsfwart', 'semi-NSFW', 'ｎｓｆｗ', 'ＮＳＦＷ', 'ns\u200bfw', 'ns\u00adfw']) {
+    assert.equal(isBlocked(bad), true, JSON.stringify(bad))
+  }
+})
+
+test('la modération ne refuse ni un nom ni un mot courant', () => {
+  for (const ok of ['Portrait de Mme Sangaré au marché', 'une sangsue', 'un pur-sang au galop', 'don du sang à Bamako', 'campagne contre la violence faite aux femmes', 'panneau stationnement interdit', 'transferts FW et NS']) {
     assert.equal(isBlocked(ok), false, ok)
   }
 })
