@@ -17,6 +17,9 @@ test('Sentry : ni paramètres d’adresse (jeton du webhook), ni en-têtes, ni c
 
 test('Sentry : une erreur imprévue dans une route arrive à Sentry (Hono ne la relance pas), et la réponse reste un 500', async () => {
   const { default: worker } = await import('../src/worker.js')
+  // La route qui échoue n'existe que dans ce test (l'API n'en garde aucune) : ajoutée à l'application avant sa première requête.
+  const { default: app } = await import('../src/index.js')
+  app.get('/essai-sentry', () => { throw new Error('Essai Sentry : erreur volontaire du test') })
   const sent = []
   const transport = () => ({ send: async (envelope) => { sent.push(JSON.stringify(envelope)); return {} }, flush: async () => true })
   const env = { ENV: 'dev', SENTRY_DSN: 'https://k@o0.ingest.de.sentry.io/1', SENTRY_TRANSPORT: transport }
@@ -25,10 +28,16 @@ test('Sentry : une erreur imprévue dans une route arrive à Sentry (Hono ne la 
   const quiet = console.error
   console.error = () => {}
   try {
-    const res = await worker.fetch(new Request('http://api/debug/sentry'), env, ctx)
+    const res = await worker.fetch(new Request('http://api/essai-sentry'), env, ctx)
     await Promise.all(waits)
     assert.equal(res.status, 500)
     assert.equal(await res.text(), 'Internal Server Error')
   } finally { console.error = quiet }
   assert.ok(sent.some((e) => e.includes('Essai Sentry')), 'l’erreur doit être envoyée à Sentry')
+})
+
+test('aucune route d’essai dans l’API : /debug/sentry n’existe plus', async () => {
+  const { default: app } = await import('../src/index.js')
+  const res = await app.fetch(new Request('http://api/debug/sentry'), { ENV: 'dev' })
+  assert.equal(res.status, 404)
 })

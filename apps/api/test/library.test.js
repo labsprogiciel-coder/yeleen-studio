@@ -22,6 +22,7 @@ function setup({ files = true, vars = {} } = {}) {
       return { size: buf?.byteLength ?? 0 }
     },
     get: async (key) => { const o = objects.get(key); return o && { body: new Uint8Array(o.buf), size: o.buf.byteLength, httpMetadata: { contentType: o.type } } },
+    head: async (key) => { const o = objects.get(key); return o ? { size: o.buf.byteLength } : null },
     delete: async (key) => { objects.delete(key) },
   }
   const env = {
@@ -100,7 +101,12 @@ test('suppression : le fichier disparaît de la bibliothèque (et de mes favoris
     assert.equal((await t.json(`/assets/${encodeURIComponent(id)}`, { method: 'DELETE' })).status, 404)
     assert.deepEqual((await t.json('/assets')).body.assets.map((a) => a.id), [`${jobId}:1`])
     assert.equal((await t.json('/favorites')).body.favorites.length, 0)
-    assert.ok(t.rows('SELECT deleted_at FROM assets WHERE idx = 0')[0].deleted_at) // suppression douce
+    assert.ok(t.rows('SELECT deleted_at FROM assets WHERE idx = 0')[0].deleted_at) // la ligne reste, marquée
+    // Le fichier supprimé n'est plus dans R2 ni servi ; l'autre sortie de la génération reste.
+    assert.deepEqual([...t.objects.keys()], [`outputs/demo/${jobId}/1.png`])
+    assert.equal((await t.env.FILES.get(`outputs/demo/${jobId}/0.png`)) ?? null, null)
+    assert.equal((await app.fetch(new Request(`http://api/files/outputs/demo/${jobId}/0.png`), t.env)).status, 404)
+    assert.equal((await app.fetch(new Request(`http://api/files/outputs/demo/${jobId}/1.png`), t.env)).status, 200)
   } finally { t.restore() }
 })
 
@@ -222,9 +228,10 @@ test('import : le fichier va dans R2 sous uploads/, une ligne `assets` (source u
     assert.equal(served.headers.get('content-type'), 'image/png')
     assert.equal(served.headers.get('x-content-type-options'), 'nosniff') // jamais lu comme une page
     assert.deepEqual(new Uint8Array(await served.arrayBuffer()), png)
-    // Supprimé : retiré de la bibliothèque (le fichier reste dans R2 jusqu'au nettoyage).
+    // Supprimé : retiré de la bibliothèque et effacé de R2.
     assert.equal((await t.json(`/assets/${a.id}`, { method: 'DELETE' })).status, 200)
     assert.equal((await t.json('/assets')).body.assets.length, 0)
+    assert.equal([...t.objects.keys()].filter((k) => k.startsWith('uploads/')).length, 0)
   } finally { t.restore() }
 })
 
@@ -370,4 +377,203 @@ test('vidéo à refaire, audio vers vidéo : un audio fixe mesurable (MP3 dans R
     assert.equal(res.status, 202)
     assert.equal(res.body.cost, videoCost(findModel(VIDEO_MODELS, 'ltx-2-3-a2v'), 4)) // ni les 2 s annoncées ni le maximum (10 s)
   } finally { globalThis.fetch = fal; t.restore() }
+})
+
+test('suppression : R2 en panne ou fichier déjà absent, la demande réussit quand même ; une nouvelle demande efface le fichier resté', async () => {
+  const t = setup()
+  const quiet = console.error
+  const logged = []
+  console.error = (...a) => logged.push(a.join(' '))
+  try {
+    const a = (await send(t, new Uint8Array([1, 2, 3]), 'image/png')).body.asset
+    const key = `uploads/demo/${a.id}.png`
+    const del = t.env.FILES.delete
+    t.env.FILES.delete = async () => { throw new Error('R2 indisponible') }
+    assert.equal((await t.json(`/assets/${a.id}`, { method: 'DELETE' })).status, 200)
+    assert.equal((await t.json('/assets')).body.assets.length, 0)
+    assert.ok(t.rows('SELECT deleted_at FROM assets')[0].deleted_at)
+    assert.ok(t.objects.has(key)) // resté dans R2, noté dans le journal
+    assert.ok(logged.some((l) => l.includes(key)))
+    t.env.FILES.delete = del
+    assert.equal((await t.json(`/assets/${a.id}`, { method: 'DELETE' })).status, 404) // déjà supprimé, mais le fichier est effacé cette fois
+    assert.equal(t.objects.has(key), false)
+    // Fichier déjà absent de R2 : pas une erreur.
+    const b = (await send(t, new Uint8Array([4, 5]), 'image/png')).body.asset
+    t.objects.delete(`uploads/demo/${b.id}.png`)
+    assert.equal((await t.json(`/assets/${b.id}`, { method: 'DELETE' })).status, 200)
+  } finally { console.error = quiet; t.restore() }
+})
+
+test('suppression : le fichier d’un autre compte n’est pas touché ; une clé encore utilisée par une ligne visible est gardée', async () => {
+  const t = setup()
+  try {
+    const a = (await send(t, new Uint8Array([1, 2, 3]), 'image/png')).body.asset
+    const key = `uploads/demo/${a.id}.png`
+    t.db.raw.prepare('UPDATE assets SET user_id = ?1 WHERE id = ?2').run('autre', a.id)
+    assert.equal((await t.json(`/assets/${a.id}`, { method: 'DELETE' })).status, 404)
+    assert.ok(t.objects.has(key))
+    assert.equal(t.rows('SELECT deleted_at FROM assets')[0].deleted_at, null)
+    // Deux lignes sur la même clé (ne devrait pas arriver, mais rien ne l'interdit en base) : le fichier reste tant que l'une est visible.
+    t.db.raw.prepare('UPDATE assets SET user_id = ?1 WHERE id = ?2').run('demo', a.id)
+    t.db.raw.prepare("INSERT INTO assets (id, user_id, kind, source, name, r2_key, created_at) VALUES ('copie', 'autre', 'image', 'upload', 'copie', ?1, 1)").run(key)
+    assert.equal((await t.json(`/assets/${a.id}`, { method: 'DELETE' })).status, 200)
+    assert.ok(t.objects.has(key))
+    assert.equal((await app.fetch(new Request(`http://api/files/${key}`), t.env)).status, 200)
+  } finally { t.restore() }
+})
+
+test('import rejoué après suppression : jamais l’ancienne ligne sans fichier, le fichier est réécrit et la ligne revient', async () => {
+  const t = setup()
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?name=logo&key=a-lz3k9-abcde')
+    assert.equal((await t.json(`/assets/${first.body.asset.id}`, { method: 'DELETE' })).status, 200)
+    assert.equal(t.objects.size, 0)
+    const again = await send(t, new Uint8Array([137, 80, 78, 71, 9, 9]), 'image/png', '?name=logo%20bis&key=a-lz3k9-abcde')
+    assert.equal(again.status, 201)
+    assert.equal(again.body.replay, undefined)
+    assert.deepEqual([again.body.asset.id, again.body.asset.name, again.body.asset.bytes], [first.body.asset.id, 'logo bis', 6])
+    const served = await app.fetch(new Request(again.body.asset.url), t.env)
+    assert.equal(served.status, 200)
+    assert.equal((await served.arrayBuffer()).byteLength, 6)
+    assert.deepEqual((await t.json('/assets')).body.assets.map((a) => a.id), [first.body.asset.id])
+    assert.equal(t.rows('SELECT * FROM assets').length, 1)
+    // Rejoué tant qu'il est visible : toujours le même asset, rien n'est réécrit.
+    assert.equal((await send(t, png, 'image/png', '?key=a-lz3k9-abcde')).body.replay, true)
+    // Supprimé puis renvoyé sous un autre type : l'ancienne clé ne traîne pas.
+    assert.equal((await t.json(`/assets/${first.body.asset.id}`, { method: 'DELETE' })).status, 200)
+    const jpg = await send(t, new Uint8Array([1, 2]), 'image/jpeg', '?key=a-lz3k9-abcde')
+    assert.equal(jpg.status, 201)
+    assert.equal(t.objects.size, 1)
+    assert.match([...t.objects.keys()][0], new RegExp(`^uploads/demo/${first.body.asset.id}-[0-9a-f-]{36}\\.jpg$`))
+    // Le même contenu sans clé : un nouvel asset, comme avant.
+    assert.equal((await send(t, png, 'image/png')).status, 201)
+  } finally { t.restore() }
+})
+
+test('import rejoué après suppression : une suppression en cours n’efface que l’ancien fichier, jamais celui qui vient d’être écrit', async () => {
+  const t = setup()
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?key=a-lz3k9-course')
+    const id = first.body.asset.id
+    const old = `uploads/demo/${id}.png`
+    assert.equal((await t.json(`/assets/${id}`, { method: 'DELETE' })).status, 200)
+    // La fin d'une suppression répétée (effacement de l'ancienne clé dans R2) tombe juste après l'écriture du nouveau fichier.
+    const put = t.env.FILES.put
+    t.env.FILES.put = async (...a) => { const r = await put(...a); t.objects.delete(old); return r }
+    const again = await send(t, png, 'image/png', '?key=a-lz3k9-course')
+    t.env.FILES.put = put
+    assert.equal(again.status, 201)
+    assert.notEqual(again.body.asset.url.split('/files/')[1], old)
+    assert.equal((await app.fetch(new Request(again.body.asset.url), t.env)).status, 200)
+    assert.equal((await t.json('/assets')).body.assets.length, 1)
+  } finally { t.restore() }
+})
+
+test('import rejoué après suppression : de deux envois simultanés, un seul reprend la ligne ; le fichier de l’autre ne reste pas dans R2', async () => {
+  const t = setup()
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?key=a-lz3k9-double')
+    const id = first.body.asset.id
+    assert.equal((await t.json(`/assets/${id}`, { method: 'DELETE' })).status, 200)
+    // Le second envoi (JPEG) passe en entier pendant que le premier (PNG) écrit son fichier : tous deux ont lu la ligne supprimée.
+    const put = t.env.FILES.put
+    let inner = null
+    t.env.FILES.put = async (...a) => {
+      const r = await put(...a)
+      if (!inner) { inner = true; t.env.FILES.put = put; inner = await send(t, new Uint8Array([1, 2]), 'image/jpeg', '?key=a-lz3k9-double') }
+      return r
+    }
+    const outer = await send(t, png, 'image/png', '?key=a-lz3k9-double')
+    assert.equal(inner.status, 201)
+    assert.deepEqual([outer.status, outer.body.replay], [200, true]) // le perdant rend l'asset du gagnant
+    assert.equal(outer.body.asset.url, inner.body.asset.url)
+    assert.deepEqual([...t.objects.keys()], [inner.body.asset.url.split('/files/')[1]])
+    assert.equal((await app.fetch(new Request(inner.body.asset.url), t.env)).status, 200)
+    // Supprimé ensuite : c'est bien le fichier du gagnant qui part, rien ne reste.
+    assert.equal((await t.json(`/assets/${id}`, { method: 'DELETE' })).status, 200)
+    assert.equal(t.objects.size, 0)
+  } finally { t.restore() }
+})
+
+test('suppression répétée pendant un import rejoué : c’est le fichier de la ligne réellement supprimée qui est effacé ; favori resté retiré', async () => {
+  const t = setup()
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?key=a-lz3k9-relu')
+    const id = first.body.asset.id
+    assert.equal((await t.json(`/assets/${id}`, { method: 'DELETE' })).status, 200)
+    // Un favori resté après une suppression (son retrait avait échoué) : la demande répétée le retire.
+    t.db.raw.prepare("INSERT INTO favorites (user_id, scope, item_id, created_at) VALUES ('demo', 'mine', ?1, 1)").run(id)
+    assert.equal((await t.json(`/assets/${id}`, { method: 'DELETE' })).status, 404)
+    assert.equal((await t.json('/favorites')).body.favorites.length, 0)
+    // L'import rejoué passe en entier entre la lecture et la marque d'une suppression répétée : la ligne marquée est la nouvelle.
+    const prepare = t.env.DB.prepare
+    let revived = null
+    t.env.DB.prepare = (sql) => {
+      if (!revived && /^UPDATE assets SET deleted_at = \?3/.test(sql)) {
+        const st = prepare(sql)
+        return { bind: (...a) => ({ ...st.bind(...a), run: async () => { t.env.DB.prepare = prepare; revived = await send(t, new Uint8Array([1, 2]), 'image/jpeg', '?key=a-lz3k9-relu'); return st.bind(...a).run() } }) }
+      }
+      return prepare(sql)
+    }
+    const del = await t.json(`/assets/${id}`, { method: 'DELETE' })
+    t.env.DB.prepare = prepare
+    assert.equal(revived.status, 201)
+    assert.equal(del.status, 200) // la ligne redevenue visible a bien été supprimée
+    assert.equal(t.objects.size, 0) // et son fichier (le JPEG) effacé, pas seulement l'ancien PNG
+    assert.equal((await t.json('/assets')).body.assets.length, 0)
+  } finally { t.restore() }
+})
+
+test('import rejoué après suppression : D1 refuse puis ne répond plus, le fichier écrit est gardé (la reprise a pu être enregistrée)', async () => {
+  const t = setup()
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?key=a-lz3k9-muet')
+    assert.equal((await t.json(`/assets/${first.body.asset.id}`, { method: 'DELETE' })).status, 200)
+    const prepare = t.env.DB.prepare
+    // La reprise est enregistrée mais sa réponse se perd, et la relecture échoue aussi.
+    t.env.DB.prepare = (sql) => {
+      if (!/UPDATE assets SET deleted_at = NULL/.test(sql)) return prepare(sql)
+      const st = prepare(sql)
+      return { bind: (...a) => ({ run: async () => { await st.bind(...a).run(); t.db.failing = true; throw new Error('réponse perdue') } }) }
+    }
+    assert.equal((await send(t, png, 'image/png', '?key=a-lz3k9-muet')).status, 503)
+    t.env.DB.prepare = prepare
+    t.db.failing = false
+    // La ligne est visible et son fichier est là : le nouvel essai la rend telle quelle.
+    const again = await send(t, png, 'image/png', '?key=a-lz3k9-muet')
+    assert.equal(again.body.replay, true)
+    assert.equal((await app.fetch(new Request(again.body.asset.url), t.env)).status, 200)
+  } finally { console.error = quiet; t.restore() }
+})
+
+test('import rejoué après suppression : si D1 refuse, le fichier réécrit ne reste pas dans R2 ; l’ancienne clé encore utilisée ailleurs est gardée', async () => {
+  const t = setup()
+  const quiet = console.error
+  console.error = () => {}
+  try {
+    const png = new Uint8Array([137, 80, 78, 71, 9])
+    const first = await send(t, png, 'image/png', '?key=a-lz3k9-refus')
+    const id = first.body.asset.id
+    assert.equal((await t.json(`/assets/${id}`, { method: 'DELETE' })).status, 200)
+    const prepare = t.env.DB.prepare
+    t.env.DB.prepare = (sql) => { if (/UPDATE assets SET deleted_at = NULL/.test(sql)) throw new Error('D1 indisponible'); return prepare(sql) }
+    assert.equal((await send(t, png, 'image/png', '?key=a-lz3k9-refus')).status, 503)
+    t.env.DB.prepare = prepare
+    assert.equal(t.objects.size, 0) // supprimé par l'utilisateur : pas de retour dans R2 sans ligne visible
+    assert.ok(t.rows('SELECT deleted_at FROM assets')[0].deleted_at)
+    // Renvoyé sous un autre type : l'ancienne clé n'est pas effacée si une autre ligne visible l'utilise (ne devrait pas arriver).
+    const old = `uploads/demo/${id}.png`
+    await t.env.FILES.put(old, png.buffer, { httpMetadata: { contentType: 'image/png' } })
+    t.db.raw.prepare("INSERT INTO assets (id, user_id, kind, source, name, r2_key, created_at) VALUES ('copie', 'autre', 'image', 'upload', 'copie', ?1, 1)").run(old)
+    assert.equal((await send(t, new Uint8Array([1, 2]), 'image/jpeg', '?key=a-lz3k9-refus')).status, 201)
+    assert.equal(t.objects.size, 2)
+    assert.ok(t.objects.has(old))
+  } finally { console.error = quiet; t.restore() }
 })

@@ -9,11 +9,11 @@ import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { VIDEO_MODELS, audioBilledSecs } from '@studio/catalog'
 import { findTool } from '@studio/catalog/tools'
 import { slotTokens } from '@studio/catalog/template-slots'
-import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource, videoTemplate } from './library.js'
+import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, purgeFile, removeFavorite, reviveUpload, SCOPES, templateSource, videoTemplate } from './library.js'
 import { mediaInfo } from './media.js'
 import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
-import { isBlocked } from './moderation.js'
+import { checkedText, isBlocked } from './moderation.js'
 import { PaygateError, paygateClient, verifySignature } from './paygate.js'
 import { priceJob } from './pricing.js'
 import { runwareClient } from './runware.js'
@@ -113,10 +113,6 @@ const UPLOAD_TYPES = /^(image\/(png|jpeg|webp|gif)|audio\/(mpeg|mp3|wav|x-wav|mp
 
 app.get('/health', (c) => c.json({ ok: true }))
 
-// Essai de Sentry (temporaire) : une erreur volontaire, pour vérifier qu'elle arrive dans le projet yeleen-backend. Réservé aux
-// comptes connectés (la garde ci-dessus s'applique). À retirer une fois vérifié.
-app.get('/debug/sentry', () => { throw new Error('Essai Sentry : erreur volontaire de /debug/sentry') })
-
 // Fichiers d'entrée (image de départ, image de fin, audio) : déposés chez fal, l'adresse revient ici.
 app.post('/uploads', notBlocked, async (c) => {
   const type = (c.req.header('content-type') ?? '').split(';')[0]
@@ -193,24 +189,53 @@ app.post('/assets', notBlocked, withDb(async (c, db) => {
   const origin = new URL(c.req.url).origin
   const id = await importId(accountId(c), q.key)
   const known = q.key ? await getAsset(db, accountId(c), id) : null
-  if (known) return c.json({ asset: assetView(known, origin), replay: true }) // déjà reçu : rien n'est réécrit
-  const key = uploadKey(accountId(c), id, type)
+  if (known && !known.deleted_at) return c.json({ asset: assetView(known, origin), replay: true }) // déjà reçu : rien n'est réécrit
+  // Déjà reçu puis supprimé (son fichier est effacé de R2) : l'import est refait en entier, jamais rendu avec une adresse sans fichier.
+  // Son fichier prend alors une clé R2 neuve : une suppression en cours n'efface que l'ancienne clé, jamais ce qui vient d'être écrit,
+  // et deux envois simultanés n'écrivent pas l'un sur l'autre.
+  const key = uploadKey(accountId(c), known ? `${id}-${crypto.randomUUID()}` : id, type)
   const body = length > STREAM_FROM ? c.req.raw.body : await c.req.arrayBuffer()
   const stored = await bucket.put(key, body, { httpMetadata: { contentType: type } })
   const bytes = stored?.size ?? length
   if (!bytes || bytes > MAX_IMPORT[kind]) { await bucket.delete(key); return c.json({ error: bytes ? 'too_large' : 'empty' }, bytes ? 413 : 400) }
+  const upload = { id, kind, name, key, contentType: type, bytes, secs: num(q.secs, 6 * 3600), width: num(q.width, 20000), height: num(q.height, 20000) }
+  if (known) {
+    let row
+    try {
+      row = await reviveUpload(db, accountId(c), upload, known.r2_key)
+    } catch (e) {
+      // D1 refuse : le fichier écrit n'est effacé que si la ligne, relue, ne pointe pas sur lui. Relecture impossible : il reste
+      // (la reprise a pu être enregistrée malgré l'erreur ; mieux vaut un fichier en trop qu'une ligne visible sans fichier).
+      const now = await getAsset(db, accountId(c), id).then((r) => ({ row: r }), () => null)
+      if (now && now.row?.r2_key !== key) await bucket.delete(key).catch(() => {})
+      else if (!now) console.error('import rejoué : fichier laissé dans R2, ligne illisible', id, key)
+      throw e
+    }
+    if (!row) {
+      // Un autre envoi du même import a repris la ligne (ou elle a changé) : ce fichier-ci, sous sa propre clé, n'est à personne.
+      await bucket.delete(key).catch((e) => console.error('import rejoué : fichier perdant resté dans R2', id, key, e.message))
+      const winner = await getAsset(db, accountId(c), id)
+      if (winner && !winner.deleted_at) return c.json({ asset: assetView(winner, origin), replay: true })
+      return c.json({ error: 'storage_unavailable' }, 503)
+    }
+    // L'ancien fichier est effacé s'il traînait encore (suppression inachevée), sauf si une autre ligne visible l'utilise.
+    await purgeFile(db, bucket, { id, r2_key: known.r2_key })
+    return c.json({ asset: assetView(row, origin) }, 201)
+  }
   try {
-    const row = await insertUpload(db, accountId(c), { id, kind, name, key, contentType: type, bytes, secs: num(q.secs, 6 * 3600), width: num(q.width, 20000), height: num(q.height, 20000) })
+    const row = await insertUpload(db, accountId(c), upload)
     return c.json({ asset: assetView(row, origin) }, 201)
   } catch (e) {
     // Deux envois simultanés du même import : le premier a gagné, son fichier (même clé R2) reste.
     const winner = q.key ? await getAsset(db, accountId(c), id).catch(() => null) : null
-    if (winner) return c.json({ asset: assetView(winner, origin), replay: true })
+    if (winner && !winner.deleted_at) return c.json({ asset: assetView(winner, origin), replay: true })
     await bucket.delete(key).catch(() => {}) // pas de fichier orphelin dans R2 si D1 refuse
     throw e
   }
 }))
-app.delete('/assets/:id', withDb(async (c, db) => (await deleteAsset(db, accountId(c), c.req.param('id')) ? c.json({ ok: true }) : c.json({ error: 'not_found' }, 404))))
+// Suppression réelle : la ligne est marquée et le fichier effacé de R2 (voir deleteAsset). Les copies hors de R2 (cache des navigateurs
+// et du CDN, fichiers déposés chez un fournisseur) ne sont pas effacées d'ici.
+app.delete('/assets/:id', withDb(async (c, db) => (await deleteAsset(db, accountId(c), c.req.param('id'), { bucket: c.env.FILES }) ? c.json({ ok: true }) : c.json({ error: 'not_found' }, 404))))
 
 // Favoris, dans Ma bibliothèque (`mine`, identifiant d'un fichier) et dans la Bibliothèque Yeleen (`yeleen`, identifiant du catalogue).
 app.get('/favorites', withDb(async (c, db) => c.json({ favorites: await listFavorites(db, accountId(c)) })))
@@ -417,7 +442,7 @@ app.post('/jobs', async (c) => {
   const texts = req.kind === 'video' ? req.plans.map((p) => p.text)
     : req.kind === 'tool' ? price.model.inputs.filter((f) => f.type === 'text').map((f) => req.inputs?.[f.key] ?? '')
       : req.kind === 'workflow' ? Object.values(req.inputs ?? {}).filter((v) => typeof v === 'string') : [req.prompt ?? '']
-  if (isBlocked(texts.join(' '))) return c.json({ error: 'moderation' }, 422)
+  if (isBlocked(checkedText(req, texts))) return c.json({ error: 'moderation' }, 422)
   // Garde-fou tant qu'il n'y a ni connexion ni plafond par compte : on refuse une seule demande très coûteuse.
   const cap = Number(c.env.MAX_JOB_COST ?? 600) // 600 : une vidéo Genjutsu de 20 s en 720p (environ 490 cauris) passe
   if (price.cost > cap) return c.json({ error: 'too_expensive', max: cap }, 400)
