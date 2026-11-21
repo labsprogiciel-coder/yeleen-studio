@@ -23,6 +23,8 @@ function setup({ db = testD1(), store = new Map() } = {}) {
     const body = init?.body ? JSON.parse(init.body) : undefined
     if (u.includes('/v1/collections')) return Response.json({ id: 'pg1', reference: body.reference, status: 'processing', amount: body.amount, currency: 'XOF', method: { authType: 'PROVIDER_AUTH' }, metadata: body.metadata }, { status: 201 })
     if (u.endsWith('/nano-banana-pro')) return Response.json({ request_id: 'r1', status_url: 'https://q/s', response_url: 'https://q/r', cancel_url: 'https://q/c' })
+    if (u.startsWith('https://q/s')) return Response.json({ status: 'IN_QUEUE', queue_position: 1 }) // une annulation n'est remboursée qu'en file
+    if (u === 'https://q/c') return Response.json({ status: 'CANCELLATION_REQUESTED' }) // … et confirmée par fal
     return Response.json({ detail: 'boom' }, { status: 500 })
   }
   const json = async (path, init) => { const res = await app.fetch(new Request(`http://api${path}`, init), env); return { status: res.status, body: await res.json() } }

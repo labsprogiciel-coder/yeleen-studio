@@ -330,3 +330,44 @@ test('seeds/genjutsu.sql : se charge après templates.sql, et chaque vidéo Genj
     }
   } finally { t.restore() }
 })
+
+test('vidéo à refaire, audio vers vidéo : un audio fixe du modèle (non mesuré) est facturé pour la durée maximale', async () => {
+  const { VIDEO_MODELS, findModel, videoCost } = await import('@studio/catalog')
+  const t = setup()
+  const sent = []
+  const fal = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith('https://queue.fal.run/fal-ai/ltx-2.3/audio-to-video')) { sent.push(JSON.parse(init.body)); return Response.json({ request_id: 'r1', status_url: 'https://q/x/status', response_url: 'https://q/x', cancel_url: 'https://q/x/cancel' }) }
+    return fal(url, init)
+  }
+  try {
+    t.db.raw.prepare(`INSERT INTO templates (id, name, blurb, category, video_key, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
+      VALUES ('chant', 'Chant', 'Une chanson', 'musique', 'templates/chant/video.mp4', 'ltx-2-3-a2v', '[{"text":"une chanteuse","dur":5}]', NULL, 'auto', 1, NULL, 0, 1, 1)`).run()
+    t.db.raw.prepare("INSERT INTO template_inputs (template_id, idx, slot, kind, mode, file_key) VALUES ('chant', 0, 'audio', 'audio', 'fixed', 'templates/chant/voix.mp3')").run()
+    const res = await t.json('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'video', modelId: 'ltx-2-3-a2v', template: 'chant', plans: [{ text: 'une chanteuse', dur: 2 }], secs: 2, ratio: 'auto' }) })
+    assert.equal(res.status, 202)
+    assert.equal(res.body.cost, videoCost(findModel(VIDEO_MODELS, 'ltx-2-3-a2v'), 10)) // 10 s : le maximum du modèle, pas les 2 s annoncées
+    assert.equal(sent[0].audio_url, 'http://api/files/templates/chant/voix.mp3')
+  } finally { globalThis.fetch = fal; t.restore() }
+})
+
+test('vidéo à refaire, audio vers vidéo : un audio fixe mesurable (MP3 dans R2) est facturé pour sa durée, pas pour le maximum', async () => {
+  const { VIDEO_MODELS, findModel, videoCost } = await import('@studio/catalog')
+  const { frames } = await import('./media.test.js')
+  const t = setup()
+  const fal = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith('https://queue.fal.run/fal-ai/ltx-2.3/audio-to-video')) return Response.json({ request_id: 'r1', status_url: 'https://q/x/status', response_url: 'https://q/x', cancel_url: 'https://q/x/cancel' })
+    return fal(url, init)
+  }
+  try {
+    t.db.raw.prepare(`INSERT INTO templates (id, name, blurb, category, video_key, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
+      VALUES ('chant', 'Chant', 'Une chanson', 'musique', 'templates/chant/video.mp4', 'ltx-2-3-a2v', '[{"text":"une chanteuse","dur":4}]', NULL, 'auto', 1, NULL, 0, 1, 1)`).run()
+    t.db.raw.prepare("INSERT INTO template_inputs (template_id, idx, slot, kind, mode, file_key) VALUES ('chant', 0, 'audio', 'audio', 'fixed', 'templates/chant/voix.mp3')").run()
+    const mp3 = frames(128, Math.round((4 * 44100) / 1152)) // 4 s
+    await t.env.FILES.put('templates/chant/voix.mp3', mp3.buffer.slice(mp3.byteOffset, mp3.byteOffset + mp3.byteLength), { httpMetadata: { contentType: 'audio/mpeg' } })
+    const res = await t.json('/jobs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'video', modelId: 'ltx-2-3-a2v', template: 'chant', plans: [{ text: 'une chanteuse', dur: 2 }], secs: 2, ratio: 'auto' }) })
+    assert.equal(res.status, 202)
+    assert.equal(res.body.cost, videoCost(findModel(VIDEO_MODELS, 'ltx-2-3-a2v'), 4)) // ni les 2 s annoncées ni le maximum (10 s)
+  } finally { globalThis.fetch = fal; t.restore() }
+})

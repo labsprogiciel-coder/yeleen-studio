@@ -75,3 +75,11 @@ test('Genjutsu : facturé à la seconde mesurée de la source (arrondie au-dessu
   assert.deepEqual(toolInput(findTool('object-swap'), { ...inputs, prompt: ' la bouteille ' }), { video_url: inputs.video, image_urls: inputs.images, resolution: '480p', prompt: 'la bouteille' })
   assert.equal('prompt' in toolInput(t, inputs), false)
 })
+
+test('annulation : confirmée (true) seulement si Higgsfield l’accepte ; déjà commencée (400) ou finie (409) rend false ; autre erreur levée', async () => {
+  const cancel = (status) => higgsfieldClient({ key: 'id:secret', fetch: async () => new Response(JSON.stringify({}), { status }) }).cancel('https://api.higgsfield.ai/requests/r1/cancel')
+  assert.equal(await cancel(200), true)
+  assert.equal(await cancel(400), false)
+  assert.equal(await cancel(409), false)
+  await assert.rejects(cancel(503))
+})
