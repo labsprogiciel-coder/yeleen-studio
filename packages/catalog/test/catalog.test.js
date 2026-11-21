@@ -141,3 +141,26 @@ test('outils image au modèle choisi : point d’accès, entrée et prix du mod�
   assert.equal(toolCheck(ed, { ...four, images: four.images.slice(0, 3), model: 'qwen-image-3' }), null)
   assert.equal(toolCheck(ed, four), null)
 })
+
+test('LTX 2.5 : endpoints lightricks, prix fal, à côté des modèles 2.3 inchangés', async () => {
+  const { durationOptions } = await import('../src/models.js')
+  const ep = (id) => findModel(VIDEO_MODELS, id)?.endpoint
+  assert.equal(ep('ltx-2-5-pro'), 'lightricks/ltx-2.5/image-to-video/pro')
+  assert.equal(ep('ltx-2-5-fast'), 'lightricks/ltx-2.5/image-to-video/fast')
+  assert.equal(ep('ltx-2-5-pro-t2v'), 'lightricks/ltx-2.5/text-to-video/pro')
+  assert.equal(ep('ltx-2-5-fast-t2v'), 'lightricks/ltx-2.5/text-to-video/fast')
+  assert.equal(ep('ltx-2-5-a2v'), 'lightricks/ltx-2.5/audio-to-video/pro')
+  assert.equal(ep('ltx-2-5-fast-a2v'), 'lightricks/ltx-2.5/audio-to-video/fast')
+  for (const id of ['ltx-2-3-pro', 'ltx-2-3-pro-t2v', 'ltx-2-3-fast-t2v', 'ltx-2-3-a2v']) assert.match(ep(id), /^fal-ai\/ltx-2\.3\//)
+  const pro = findModel(VIDEO_MODELS, 'ltx-2-5-pro')
+  assert.equal(videoCost(pro, 10, '1080p'), toJetons(1.7))
+  assert.equal(videoCost(pro, 6, '720p'), toJetons(0.72))
+  assert.equal(videoCost(findModel(VIDEO_MODELS, 'ltx-2-5-fast-t2v'), 10, '2160p'), toJetons(3))
+  assert.equal(videoCost(findModel(VIDEO_MODELS, 'ltx-2-5-a2v'), 10), toJetons(1.7))
+  assert.equal(videoCost(findModel(VIDEO_MODELS, 'ltx-2-5-fast-a2v'), 20), toJetons(2.6))
+  // Fast : 20 s en 1080p à 25 i/s, 10 s en 1440p ou à 50 i/s
+  const t2v = findModel(VIDEO_MODELS, 'ltx-2-5-fast-t2v').caps
+  assert.equal(Math.max(...durationOptions(t2v, '1080p', 25)), 20)
+  assert.equal(Math.max(...durationOptions(t2v, '1440p', 25)), 10)
+  assert.equal(Math.max(...durationOptions(t2v, '1080p', 50)), 10)
+})

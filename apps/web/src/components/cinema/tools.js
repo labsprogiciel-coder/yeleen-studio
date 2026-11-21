@@ -50,6 +50,7 @@ export const ALL_TOOLS = {
     { id: 'video-relight', icon: 'sun', title: 'Rééclairage vidéo', desc: 'Modifiez l’éclairage et l’atmosphère' },
     { id: 'video-extend', icon: 'extend', title: 'Prolonger la vidéo', desc: 'Ajoutez quelques secondes avant ou après le clip' },
     { id: 'video-reframe', icon: 'crop', title: 'Recadrer la vidéo', desc: 'Passez une vidéo en story, en carré ou en paysage' },
+    { id: 'video-reframe-2-5', icon: 'crop', title: 'Recadrer la vidéo · LTX 2.5', desc: 'Le recadrage avec LTX 2.5, au même prix' },
     { id: 'motion-transfer', icon: 'user', title: 'Transfert de mouvement', desc: 'Votre personnage refait exactement les gestes d’une vidéo' },
     { id: 'object-swap', icon: 'shapes', title: 'Remplacer un objet', desc: 'Remplacez un objet de la vidéo par votre produit' },
     { id: 'video-remove-bg', icon: 'cutout', title: 'Supprimer l’arrière-plan vidéo', desc: 'Isolez la personne ou l’objet de la vidéo' },

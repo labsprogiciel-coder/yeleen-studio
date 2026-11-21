@@ -160,7 +160,8 @@ function videoInput(model, req) {
       generate_audio: sound,
     })
   }
-  if (model.id === 'ltx-2-3-a2v') {
+  if (model.input === 'audio' && model.id.startsWith('ltx-')) {
+    // LTX 2.3 et 2.5 (Pro et Fast) : audio vers vidéo, image de départ facultative
     return clean({ audio_url: req.audioUrl, image_url: req.startImageUrl, prompt: text || undefined, aspect_ratio: req.ratio })
   }
   // LTX 2.3 et 2.5 : image vers vidéo ou texte vers vidéo

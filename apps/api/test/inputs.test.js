@@ -61,6 +61,8 @@ test('outils ajoutés : prolonger, fluidifier, recadrer, restaurer, photo produi
   assert.deepEqual(buildInput('tool', findTool('video-extend'), { inputs: { video: v, mode: 'start', duration: '10' } }), { video_url: v, mode: 'start', duration: 10 })
   assert.deepEqual(buildInput('tool', findTool('video-fps'), { inputs: { video: v, fps: '120' } }), { video_url: v, target_fps: 120, model: 'Apollo', H264_output: true })
   assert.deepEqual(buildInput('tool', findTool('video-reframe'), { inputs: { video: v } }), { video_url: v, aspect_ratio: '9:16', resolution: '720p' })
+  assert.deepEqual(buildInput('tool', findTool('video-reframe-2-5'), { inputs: { video: v, ratio: '1:1', resolution: '1080p' } }), { video_url: v, aspect_ratio: '1:1', resolution: '1080p' })
+  assert.equal(findTool('video-reframe-2-5').endpoint, 'lightricks/ltx-2.5/reframe')
   assert.deepEqual(buildInput('tool', findTool('photo-restore'), { inputs: { image: f, colors: 'keep' } }), { image_url: f, remove_scratches: true, enhance_resolution: true, fix_colors: false })
   const product = buildInput('tool', findTool('product-photo'), { inputs: { image: f, scene: 'market', ratio: '4:5' } }) // Krea 3 par défaut
   assert.deepEqual(product.image_size, { width: 1296, height: 1616 }) // 4:5, environ 2,1 Mpx, multiples de 16

@@ -101,6 +101,7 @@ test('outils ajoutés : prix au pire cas affiché (durée ajoutée, images cré�
   assert.equal(toolCost(findTool('video-extend'), { duration: '20' }), toJetons(EXTEND_MODEL.price.usd * 20))
   assert.equal(toolCost(findTool('video-fps'), { fps: '60' }), toJetons((60 - 24) * 10 * 0.002))
   assert.equal(toolCost(findTool('video-reframe'), { resolution: '1080p' }), toJetons(2))
+  assert.equal(toolCost(findTool('video-reframe-2-5'), { resolution: '720p' }), toJetons(1)) // LTX 2.5 : même prix que la 2.3
   assert.equal(findTool('video-hdr').maxP, 1080)
 })
 

@@ -369,6 +369,20 @@ export const TOOLS = [
     usd: (v) => per({ '720p': 0.1, '1080p': 0.2 })(v.resolution) * 10,
     build: (v) => ({ video_url: v.video, aspect_ratio: v.ratio, resolution: v.resolution }),
   },
+  {
+    id: 'video-reframe-2-5',
+    name: 'Recadrer la vidéo · LTX 2.5',
+    output: 'video',
+    endpoint: 'lightricks/ltx-2.5/reframe', // même schéma et même prix que la 2.3 : 0,10 $ en 720p, 0,20 $ en 1080p, à la seconde de la source
+    maxSecs: 10,
+    inputs: [
+      { key: 'video', type: 'video', label: 'Vidéo à recadrer' },
+      { key: 'ratio', type: 'select', label: 'Nouveau format', options: [opt('9:16', 'Story 9:16'), opt('1:1', 'Carré 1:1'), opt('4:5', 'Post 4:5'), opt('16:9', 'Paysage 16:9')] },
+      { key: 'resolution', type: 'select', label: 'Résolution', options: [opt('720p', '720p'), opt('1080p', '1080p')] },
+    ],
+    usd: (v) => per({ '720p': 0.1, '1080p': 0.2 })(v.resolution) * 10,
+    build: (v) => ({ video_url: v.video, aspect_ratio: v.ratio, resolution: v.resolution }),
+  },
   // Genjutsu (Higgsfield) : la vidéo source garde son mouvement et son cadre ; les photos donnent le personnage ou l'objet.
   // Facturé à la seconde de la source, arrondie au-dessus (tarif lu sur l'estimation de l'API : 0,318 $ en 480p, 0,681 $ en 720p,
   // 1,632 $ en 1080p, non proposé : 20 s dépasseraient le plafond d'une génération, MAX_JOB_COST). Source de 4 à 20 s ; jusqu'à

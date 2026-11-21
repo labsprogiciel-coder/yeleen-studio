@@ -267,3 +267,26 @@ test('styles : l’identifiant devient la consigne du catalogue, sur chaque plan
   const kr = runwareInput(m('kling-3-pro'), { plans: [{ text: 'a', dur: 5 }, { text: 'b', dur: 5 }], secs: 10, style: 'clay' })
   assert.equal(kr.providerSettings.klingai.multiPrompt[1].prompt, `b, ${styleText('clay')}`)
 })
+
+test('LTX 2.5 : Pro et Fast en image, en texte et en audio, à côté de la 2.3', () => {
+  // image → vidéo Pro : caméra, image de fin ; 720p ou 1080p, 10 s au plus, pas de 48 i/s
+  const pro = buildInput('video', m('ltx-2-5-pro'), { ...base, resolution: '1080p', fps: 50, ratio: '9:16', camera: 'jib_up', startImageUrl: F, endImageUrl: F })
+  assert.deepEqual(pro, { prompt: 'Une caméra tourne autour du produit', image_url: F, end_image_url: F, duration: 6, resolution: '1080p', fps: 50, aspect_ratio: '9:16', generate_audio: true, camera_motion: 'jib_up' })
+  const okPro = { ...base, modelId: 'ltx-2-5-pro', resolution: '720p', fps: 25, ratio: 'auto', startImageUrl: F }
+  assert.equal(priceJob(okPro).cost, videoCost(m('ltx-2-5-pro'), 6, '720p'))
+  assert.equal(priceJob({ ...okPro, resolution: '1440p' }).error, 'unsupported_resolution')
+  assert.equal(priceJob({ ...okPro, fps: 48 }).error, 'unsupported_fps')
+  assert.equal(priceJob({ ...okPro, secs: 12, plans: [{ text: 'a', dur: 12 }] }).error, 'invalid_duration')
+  // texte → vidéo : pas d'image, la caméra passe
+  const t2v = buildInput('video', m('ltx-2-5-fast-t2v'), { ...base, resolution: '2160p', fps: 25, ratio: '16:9', camera: 'dolly_out', startImageUrl: F })
+  assert.equal('image_url' in t2v, false)
+  assert.equal(t2v.camera_motion, 'dolly_out')
+  assert.equal(priceJob({ ...base, modelId: 'ltx-2-5-pro-t2v', resolution: '1080p', fps: 25, ratio: '16:9' }).ok, true)
+  // audio → vidéo : même requête que la 2.3 ; Pro jusqu'à 10 s, Fast jusqu'à 20 s
+  const a = { kind: 'video', plans: [{ text: 'Une présentatrice', dur: 15 }], secs: 15, audioUrl: A, ratio: 'auto', startImageUrl: F }
+  assert.deepEqual(buildInput('video', m('ltx-2-5-fast-a2v'), a), { audio_url: A, image_url: F, prompt: 'Une présentatrice', aspect_ratio: 'auto' })
+  assert.equal(priceJob({ ...a, modelId: 'ltx-2-5-fast-a2v' }).ok, true)
+  assert.equal(priceJob({ ...a, modelId: 'ltx-2-5-a2v' }).error, 'invalid_duration')
+  assert.equal(priceJob({ ...a, modelId: 'ltx-2-5-a2v', secs: 10, plans: [{ text: 'x', dur: 10 }] }).ok, true)
+  assert.equal(priceJob({ ...a, modelId: 'ltx-2-5-a2v', audioUrl: undefined, secs: 5, plans: [{ text: 'x', dur: 5 }] }).error, 'missing_audio')
+})
