@@ -213,7 +213,7 @@ app.post('/assets', notBlocked, withDb(async (c, db) => {
     }
     if (!row) {
       // Un autre envoi du même import a repris la ligne (ou elle a changé) : ce fichier-ci, sous sa propre clé, n'est à personne.
-      await bucket.delete(key).catch(() => {})
+      await bucket.delete(key).catch((e) => console.error('import rejoué : fichier perdant resté dans R2', id, key, e.message))
       const winner = await getAsset(db, accountId(c), id)
       if (winner && !winner.deleted_at) return c.json({ asset: assetView(winner, origin), replay: true })
       return c.json({ error: 'storage_unavailable' }, 503)
