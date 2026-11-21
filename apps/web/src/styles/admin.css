@@ -183,7 +183,7 @@ dialog.adm-dlg::backdrop{background:color-mix(in srgb,var(--plum) 55%,transparen
 .tm-notice p,.tm-notice ul,.adm-panel .adm-ok p,.tm-side .adm-err p,.tm-side .adm-err ul,.tm-side .adm-ok p{margin:0}
 .tm-notice ul,.tm-side .adm-err ul,.tm-issues{padding-left:18px;font-size:13px;line-height:1.45}
 .tm-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.tm-row{display:grid;grid-template-columns:auto 56px minmax(0,1fr) 170px 110px 90px 120px auto;align-items:center;gap:14px;padding:12px 4px;border-top:1px solid var(--line-soft)}
+.tm-row{display:grid;grid-template-columns:88px 56px minmax(0,1fr) 170px 110px 90px 120px 92px;align-items:center;gap:14px;padding:12px 4px;border-top:1px solid var(--line-soft)}
 .tm-row.head{padding-top:0;padding-bottom:8px;color:var(--ink-4);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-top:0}
 .tm-row.head+.tm-row{border-top:0}
 .tm-row.dragging{opacity:.5}
@@ -210,6 +210,11 @@ dialog.adm-dlg::backdrop{background:color-mix(in srgb,var(--plum) 55%,transparen
 .tm-switch i::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--surface);box-shadow:0 1px 2px var(--wash-2);transition:left .15s}
 .tm-switch.on i{background:var(--lime);border-color:var(--lime-edge)}.tm-switch.on i::after{left:16px}
 .tm-acts{display:flex;gap:6px;justify-content:flex-end}
+/* Chaque ligne est sa propre grille : colonnes de largeur fixe pour que les titres restent alignés sur les lignes. */
+.tm-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:12px 4px 0;border-top:1px solid var(--line-soft);font-size:13px;color:var(--ink-3)}
+.tm-pages>div{display:flex;align-items:center;gap:8px}
+.tm-model{width:100%;min-height:40px;border:1px solid var(--line);background:var(--field);font-weight:500}
+.tm-model-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Éditeur */
 .tm-editor{display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -279,7 +284,7 @@ dialog.adm-dlg::backdrop{background:color-mix(in srgb,var(--plum) 55%,transparen
 .tm-kv div{display:flex;justify-content:space-between;gap:10px}.tm-kv dt{color:var(--ink-3)}.tm-kv dd{margin:0;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .tm-big{margin:0;font-size:22px;font-weight:800;font-family:var(--font-display)}
 .tm-issues{margin:0;color:var(--danger-ink)}
-@media (max-width:1180px){.tm-row{grid-template-columns:auto 56px minmax(0,1fr) 150px 90px 110px auto}.tm-row>.tm-cat{display:none}.tm-row.head>span:nth-child(5){display:none}}
+@media (max-width:1180px){.tm-row{grid-template-columns:88px 56px minmax(0,1fr) 150px 90px 110px 92px}.tm-row>.tm-cat{display:none}.tm-row.head>span:nth-child(5){display:none}}
 @media (max-width:900px){.tm-edit{grid-template-columns:minmax(0,1fr)}.tm-side{position:static}}
 @media (max-width:700px){
   .tm-row.head{display:none}

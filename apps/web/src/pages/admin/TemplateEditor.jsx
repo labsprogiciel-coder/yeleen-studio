@@ -5,6 +5,9 @@ import { VIDEO_MODELS } from '@studio/catalog'
 import { findTool } from '@studio/catalog/tools'
 import { findVideoModel } from '@studio/catalog/template-slots'
 import Icon from '../../lib/icons.jsx'
+import Menu from '../../components/Menu.jsx'
+import ModelLogo from '../../components/ModelLogo.jsx'
+import { logoFor } from '../../lib/modelLogos.js'
 import { api } from '../../lib/api.js'
 import { caurisLabel, cauris } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
@@ -24,6 +27,9 @@ const fileName = (key) => (key ? key.split('/').pop() : '')
  * déposés (rangés tout de suite sous templates/<id>/, et rattachés au modèle à l'enregistrement).
  */
 const LEAVE = 'Quitter sans enregistrer les changements ?'
+
+/** Modèles vidéo proposés dans l'éditeur, avec leur logo (comme le choix du modèle dans Cinéma). */
+const MODEL_ITEMS = VIDEO_MODELS.map((m) => ({ id: m.id, logo: logoFor(m.id), icon: 'video', title: m.name, desc: m.tagline }))
 
 export default function TemplateEditor({ id, onBack }) {
   const [t, setT] = useState(null) // le modèle tel que l'API l'a renvoyé
@@ -176,13 +182,13 @@ export default function TemplateEditor({ id, onBack }) {
             {gen ? (
               <>
                 <div className="tm-grid3">
-                  <label className="adm-field">
-                    <span>Modèle</span>
-                    <select value={draft.modelId} onChange={(e) => changeModel(e.target.value)}>
-                      {!model && <option value={draft.modelId} disabled>Modèle retiré ({draft.modelId})</option>}
-                      {VIDEO_MODELS.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                  </label>
+                  <div className="adm-field">
+                    <span id="tm-model-l">Modèle</span>
+                    <Menu items={MODEL_ITEMS} value={draft.modelId} onChange={changeModel} label="Modèle vidéo" menuWidth={340} search="Rechercher un modèle" className="tm-model">
+                      {model ? <><ModelLogo logo={logoFor(model.id)} size={18} /><span className="tm-model-n">{model.name}</span></>
+                        : <span className="tm-model-n">Modèle retiré ({draft.modelId})</span>}
+                    </Menu>
+                  </div>
                   {model?.caps.resolutions && (
                     <label className="adm-field">
                       <span>Résolution</span>
