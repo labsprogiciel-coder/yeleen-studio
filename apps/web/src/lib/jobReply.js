@@ -11,11 +11,13 @@ export function createPatch(r, failures = {}, now = Date.now()) {
   return { remoteId: r?.jobId }
 }
 
-// Le serveur ne connaît pas la génération (404) : une fois peut être un hasard du déploiement, trois fois de suite elle est perdue.
+// Le serveur ne connaît pas la génération (404) : une fois peut être un hasard du déploiement, et une demande rendue par sa clé peut
+// être encore en cours d'envoi (pas encore enregistrée). Trois fois de suite et depuis 30 s au moins : elle est perdue.
 export const LOST_AFTER = 3
-/** Après `misses` réponses 404 de suite au suivi : rien tant que ce n'est pas sûr, puis un échec `lost` (sans annoncer de remboursement). */
-export function lostPatch(misses, now = Date.now()) {
-  return misses < LOST_AFTER ? null : { status: 'FAILED', failure: 'lost', refund: 0, finishedAt: now }
+export const LOST_SPAN = 30_000
+/** Après `misses` réponses 404 de suite depuis `since` : rien tant que ce n'est pas sûr, puis un échec `lost` (sans annoncer de remboursement). */
+export function lostPatch(misses, since, now = Date.now()) {
+  return misses < LOST_AFTER || now - since < LOST_SPAN ? null : { status: 'FAILED', failure: 'lost', refund: 0, finishedAt: now }
 }
 
 /**

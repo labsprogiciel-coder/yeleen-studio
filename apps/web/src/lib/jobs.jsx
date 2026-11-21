@@ -338,7 +338,7 @@ export function JobsProvider({ children }) {
   // Suivi des générations réelles : on interroge l'API tant qu'une génération est active.
   const polling = useRef(new Set())
   const last = useRef(new Map()) // dernier appel par génération : le rythme dépend de son âge et de la visibilité de l'onglet
-  const misses = useRef(new Map()) // réponses 404 de suite par génération (voir lostPatch)
+  const misses = useRef(new Map()) // réponses 404 de suite par génération : { n, since } (voir lostPatch)
   const liveActive = state.jobs.some((j) => j.live && j.remoteId && (j.status === 'IN_QUEUE' || j.status === 'IN_PROGRESS'))
   useEffect(() => {
     if (!liveActive) return
@@ -365,9 +365,10 @@ export function JobsProvider({ children }) {
       } catch (e) {
         // Le reste est passager : on réessaie au prochain tour. Introuvable plusieurs fois de suite : la génération est perdue, le suivi s'arrête.
         if (e?.status !== 404) return
-        const n = (misses.current.get(j.id) ?? 0) + 1
-        misses.current.set(j.id, n)
-        const patch = lostPatch(n, Date.now())
+        const seen = misses.current.get(j.id) ?? { n: 0, since: Date.now() }
+        seen.n++
+        misses.current.set(j.id, seen)
+        const patch = lostPatch(seen.n, seen.since, Date.now())
         if (!patch || !isActive(ref.current.jobs.find((x) => x.id === j.id))) return
         misses.current.delete(j.id)
         dispatch({ type: 'REMOTE', id: j.id, patch: { ...patch, logs: [{ msg: `Erreur : ${FAILURES.lost.message}`, error: true }] }, message: `Échec : ${j.title}.` })

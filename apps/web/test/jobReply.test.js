@@ -30,8 +30,11 @@ test('envoi : une génération acceptée ou encore active ne reçoit que son ide
   assert.deepEqual(createPatch({ jobId: 'j1', status: 'COMPLETED', deduped: true }, FAILURES, 5), { remoteId: 'j1' })
 })
 
-test('suivi introuvable : rien avant trois réponses 404 de suite, puis un échec « lost » sans remboursement annoncé', () => {
-  assert.equal(lostPatch(1, 5), null)
-  assert.equal(lostPatch(2, 5), null)
-  assert.deepEqual(lostPatch(3, 5), { status: 'FAILED', failure: 'lost', refund: 0, finishedAt: 5 })
+test('suivi introuvable : rien avant trois réponses 404 de suite étalées sur 30 s, puis un échec « lost » sans remboursement annoncé', () => {
+  assert.equal(lostPatch(1, 0, 5), null)
+  assert.equal(lostPatch(2, 0, 40_000), null)
+  // Trois 404 en quelques secondes : une demande encore en cours d'envoi côté serveur n'est pas perdue.
+  assert.equal(lostPatch(3, 0, 4_000), null)
+  assert.equal(lostPatch(9, 1_000, 30_000), null)
+  assert.deepEqual(lostPatch(9, 1_000, 31_000), { status: 'FAILED', failure: 'lost', refund: 0, finishedAt: 31_000 })
 })
