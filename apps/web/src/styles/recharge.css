@@ -34,9 +34,11 @@ dialog.rc-dlg::backdrop{background:rgba(0,0,0,.66)}
 .rc-logo.rc-op-orange{background:#ff7900;color:var(--on-light)}
 .rc-logo.rc-op-moov{background:#0060a9}
 .rc-logo.rc-op-wave{background:#1dc8f2;color:var(--on-light)}
-.rc-card-edit{position:relative;flex:none;border:0;padding:0;background:none;color:var(--ink-3);font:inherit;font-size:12px;font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
-.rc-card-edit::after{content:'';position:absolute;inset:-12px -6px} /* cible tactile de 44 px sans agrandir le texte */
-.rc-card-edit:hover{color:var(--ink)}
+.rc-card{position:relative}
+.rc-card-edit{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-2);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.rc-card-edit::after{content:'';position:absolute;inset:-6px -2px} /* cible tactile de 44 px */
+.rc-card-edit:hover{color:var(--ink);background:var(--fill)}
+.rc-card:has(.rc-card-edit) .rc-card-price{align-self:end;padding-top:34px} /* le prix passe sous le bouton, en bas à droite */
 .rc-card-price{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 .rc-card-price b{font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .rc-card-price small{font-size:12px;color:var(--ink-4);white-space:nowrap}
@@ -142,7 +144,7 @@ button.rc-st:hover{color:var(--ink)}
   dialog.rc-dlg{--rc-pad:16px;width:100%;max-width:100%;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0}
   .rc-top h2{font-size:22px}
   .rc-card{grid-template-columns:auto minmax(0,1fr);column-gap:12px;row-gap:8px}
-  .rc-card-price{grid-column:2;flex-direction:row;align-items:baseline;gap:8px;text-align:left}
+  .rc-card .rc-card-price,.rc-card:has(.rc-card-edit) .rc-card-price{grid-column:2;align-self:auto;padding-top:0;flex-direction:row;align-items:baseline;gap:8px;text-align:left}
   .rc-packs{grid-template-columns:1fr}
   .rc-pack{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:14px;padding:14px 16px;text-align:left}
   .rc-pack::after{position:static;grid-column:1;grid-row:1}

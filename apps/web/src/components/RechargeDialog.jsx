@@ -55,7 +55,7 @@ function Progress({ step }) {
   return <div className="rc-prog" aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
 }
 
-/** Rappel du pack choisi (et de l'opérateur, puis du numéro), chaque choix modifiable tant que le paiement n'est pas lancé. */
+/** Rappel du pack choisi (et de l'opérateur, puis du numéro). « Modifier » (en haut à droite) repart du pack tant que le paiement n'est pas lancé ; les choix déjà faits restent sélectionnés. */
 function PackCard({ pack, operator, phone, country, step, onGo }) {
   const c = TOPUP_COUNTRIES[country]
   const edit = step < 3
@@ -64,16 +64,15 @@ function PackCard({ pack, operator, phone, country, step, onGo }) {
       <Cauri size={40} className="rc-card-cw" />
       <div className="rc-card-main">
         <p className="rc-card-qty"><b>{jetons(pack.jetons)}</b> cauris
-          {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(0)} aria-label="Changer de pack">Changer</button>}
         </p>
         {step > 1 && operator && (
           <p className="rc-card-op">
             <i className={`rc-logo rc-op-${operator}`} aria-hidden="true">{OPERATORS[operator].charAt(0)}</i>
             <span>{OPERATORS[operator]}{step > 2 && phone ? ` · +${c.dial} ${localNumber(phone, c)}` : ''}</span>
-            {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(1)} aria-label="Changer d’opérateur">Changer</button>}
           </p>
         )}
       </div>
+      {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(0)} aria-label="Modifier la recharge"><Icon name="pencil" size={14} />Modifier</button>}
       <p className="rc-card-price"><b>{fcfa(pack.fcfa)}</b><small>≈ {perJeton(pack)} FCFA le cauri</small></p>
     </section>
   )
@@ -337,7 +336,7 @@ export default function RechargeDialog({ open, request, onClose }) {
     foot = <button type="button" className="rc-ghost" onClick={() => setView('buy')}>Retour</button>
   } else if (step === 0) {
     body = (
-      <form id={FORM} className="rc-panel" onSubmit={(e) => { e.preventDefault(); go(operator ? 2 : 1) }}>
+      <form id={FORM} className="rc-panel" onSubmit={(e) => { e.preventDefault(); go(1) }}>
         {title('Combien de cauris ?')}
         <fieldset className="rc-packs">
           <legend className="sr-only">Pack de cauris</legend>
