@@ -272,7 +272,7 @@ dialog.adm-dlg::backdrop{background:color-mix(in srgb,var(--plum) 55%,transparen
 .tm-slot>.ep-tile{width:96px;height:96px;padding:8px;gap:4px;font-size:11px}
 .tm-slot>.ep-tile>svg{flex:none}
 .tm-slot>.ep-tile.pic>.at~svg,.tm-slot>.ep-tile .at-play{display:none}
-.tm-plans .ep-plans h2{font-family:var(--font-display);font-stretch:78%;font-size:15px;font-weight:800;letter-spacing:0;text-transform:uppercase;color:inherit}
+.tm-plans .ep-plans h3{margin:0;font-family:var(--font-display);font-stretch:78%;font-size:15px;font-weight:800;letter-spacing:0;text-transform:uppercase;color:inherit}
 .tm-plans .ep-row{flex-wrap:wrap}
 .tm-total{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3)}
 .tm-cites{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}

@@ -338,14 +338,14 @@ function Plans({ model, plans, inputs, onChange }) {
   const total = plans.reduce((n, p) => n + (Number(p.dur) || 0), 0)
   const cites = tokenItems(inputs).map((x) => ({ ...x, input: inputs.find((i) => i.idx === x.idx) }))
   const known = new Set(cites.map((x) => x.token))
-  const items = cites.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: pseudoAsset(x.input, x.title) }))
+  const items = cites.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: x.input.url ? pseudoAsset(x.input, x.title) : null }))
   const stale = [...new Set((cur.text.match(new RegExp(`@${TOKEN_PATTERN}(?!\\d)`, 'g')) ?? []).map((t) => t.slice(1)).filter((t) => !known.has(t)))]
   const setText = (text) => onChange(plans.map((p, k) => (k === active ? { ...p, text } : p)))
   const durs = durationsFor(model, cur.dur)
   return (
     <section className="adm-card tm-sec tm-plans" aria-labelledby="tm-pl-t">
       <div className="ep-row">
-        <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" />
+        <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" level={3} />
         <small className="tm-total">{total} s au total</small>
       </div>
       {cites.length > 0 && (
