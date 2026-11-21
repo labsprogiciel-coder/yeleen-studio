@@ -420,10 +420,12 @@ export class Account {
     // Échec d'une génération constaté chez le fournisseur : remboursée et passée FAILED en une requête, seulement si elle est encore
     // active (une génération annulée ou terminée entre-temps n'est ni remboursée ni réécrite : 409 avec la génération enregistrée).
     if (pathname === '/job/fail') {
-      const { jobId, failure } = input
+      const { jobId, failure, submitting = false } = input
       const job = await this.state.storage.get(`job:${jobId}`)
       if (!job) return Response.json({ ok: false, error: 'not_found' }, { status: 404 })
       if (TERMINAL.includes(job.status)) return Response.json({ ok: false, error: 'terminal', status: job.status, job, balance: w.balance }, { status: 409 })
+      // Échec d'une réservation jamais envoyée (`submitting`, voir expireJob) : la route l'a envoyée et enregistrée entre-temps, elle continue.
+      if (submitting && !job.submitting) return Response.json({ ok: false, error: 'sent', status: job.status, job, balance: w.balance }, { status: 409 })
       // Fichiers en cours de copie (un autre suivi a vu la génération terminée) : c'est lui qui décide de l'issue.
       if (job.storingAt && Date.now() - job.storingAt < STORING) return Response.json({ ok: false, error: 'storing', status: job.status, job, balance: w.balance }, { status: 409 })
       const r = refund(w, { jobId })

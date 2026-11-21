@@ -76,9 +76,13 @@ export async function providerCancel(env, job) {
   }
 }
 
-/** Délai dépassé (voir deadlineOf) : annulation chez le fournisseur (sans garantie), puis échec `timeout` remboursé par le compte. */
+/**
+ * Délai dépassé (voir deadlineOf) : annulation chez le fournisseur (sans garantie), puis échec `timeout` remboursé par le compte.
+ * Réservation jamais envoyée : échouée seulement si elle l'est encore (`submitting`) ; envoyée par la route entre-temps, elle continue.
+ */
 export async function expireJob({ env, acct, job }) {
-  if (!job.submitting) await providerCancel(env, job)
+  if (job.submitting) return acct('/job/fail', { jobId: job.id, failure: 'timeout', submitting: true })
+  await providerCancel(env, job)
   return acct('/job/fail', { jobId: job.id, failure: 'timeout' })
 }
 
