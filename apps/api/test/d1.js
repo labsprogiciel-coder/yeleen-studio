@@ -17,11 +17,27 @@ export function testD1() {
       const stmt = db.prepare(sql)
       return {
         bind: (...args) => ({
+          exec: () => { // pour batch() : une lecture rend ses lignes, comme D1
+            if (/^\s*(SELECT|WITH)\b/i.test(sql)) return { success: true, results: stmt.all(...args) }
+            const r = stmt.run(...args); return { success: true, results: [], meta: { changes: Number(r.changes) } }
+          },
           run: async () => { d1.calls++; if (d1.failing) throw new Error('D1 indisponible'); const r = stmt.run(...args); return { success: true, meta: { changes: Number(r.changes) } } },
           first: async () => { d1.calls++; if (d1.failing) throw new Error('D1 indisponible'); return stmt.get(...args) ?? null },
           all: async () => { d1.calls++; return { results: stmt.all(...args) } },
         }),
       }
+    },
+    /** Comme D1 : les requêtes liées s'exécutent dans une seule transaction (tout ou rien). `failAt` : rang de la requête qui échoue (test). */
+    failAt: null,
+    batch: async (stmts) => {
+      d1.calls++
+      if (d1.failing) throw new Error('D1 indisponible')
+      db.exec('BEGIN')
+      try {
+        const out = stmts.map((s, n) => { if (n === d1.failAt) throw new Error('D1 : requête refusée'); return s.exec() })
+        db.exec('COMMIT')
+        return out
+      } catch (e) { db.exec('ROLLBACK'); throw e }
     },
     exec: (sql) => db.exec(sql),
     raw: db,

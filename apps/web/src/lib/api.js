@@ -78,6 +78,33 @@ export const api = {
   adminTopups: (q = {}) => request(`/admin/topups?${new URLSearchParams(Object.entries(q).filter(([, v]) => v != null && v !== '' && v !== false))}`),
   adminRecheck: (uid, reference, { key, reason }) => post(`/admin/users/${enc(uid)}/topups/${enc(reference)}/recheck`, { key, reason }),
   adminJobs: (scope = 'active') => request(`/admin/jobs?${new URLSearchParams({ scope })}`),
+  /** Modèles (vidéos à refaire) : liste complète (publiés ou non), un modèle, création, enregistrement, publication, ordre, suppression. */
+  adminTemplates: () => request('/admin/templates'),
+  adminTemplate: (id) => request(`/admin/templates/${enc(id)}`),
+  adminCreateTemplate: (spec) => post('/admin/templates', spec),
+  adminSaveTemplate: (id, spec) => request(`/admin/templates/${enc(id)}`, { method: 'PUT', body: JSON.stringify(spec) }),
+  adminPublishTemplate: (id, published) => post(`/admin/templates/${enc(id)}/publish`, { published }),
+  adminOrderTemplates: (ids) => post('/admin/templates/order', { ids }),
+  adminDeleteTemplate: (id) => request(`/admin/templates/${enc(id)}`, { method: 'DELETE' }),
+  /** Le modèle tel que Cinéma le reçoit (même forme que GET /templates), publié ou non : pour « Essayer sur mon compte ». */
+  adminPreviewTemplate: (id) => request(`/admin/templates/${enc(id)}/preview`),
+  /**
+   * Dépose un fichier d'un modèle (vidéo d'exemple, source Genjutsu, fichier fixe d'une entrée), tel quel : il doit être déjà léger.
+   * `role` : `video` | `source` | `input`. Rend { key, url, size, contentType, secs? } (secs : durée mesurée d'une source).
+   */
+  adminUploadTemplateFile: async (id, file, role) => {
+    let res
+    try {
+      res = await fetch(`${BASE}/admin/templates/${enc(id)}/files?${new URLSearchParams({ role, name: file.name })}`, {
+        method: 'POST', body: file, headers: { 'content-type': file.type || 'application/octet-stream', ...(await authHeader()) },
+      })
+    } catch {
+      throw new ApiError(0, { error: 'unreachable' })
+    }
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new ApiError(res.status, body)
+    return body
+  },
 }
 
 const enc = encodeURIComponent

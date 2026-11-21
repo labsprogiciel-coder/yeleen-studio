@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import icon from '../../assets/brand/qreativ-icon-tangerine.svg'
 import { Amount } from '../Cauri.jsx'
 import { categoryLabel, templateCost } from '../../lib/templates.js'
+import { todoText } from '../../lib/templateRun.js'
 
 const PAGE = 12 // cartes montrées avant « Voir plus »
 /** Proportions de la vidéo (« 9:16 » → [9, 16]) ; 16:9 si le format est « auto » ou inconnu. */
@@ -82,14 +83,13 @@ export default function VideoTemplates({ templates, onPick, selectedId = null })
 
 /**
  * La vidéo à refaire choisie, en tête de Créations : lisible (commandes, en boucle, sans le son au départ), au format de la vidéo,
- * avec son nom, sa description et ce qu'il reste à faire dans le panneau. `onClear` : ne plus la suivre.
+ * avec son nom, sa description et ce qu'il reste à faire dans le panneau. `onClear` : ne plus la suivre. `t.preview` : modèle non publié
+ * ouvert par l'administration (« Essayer sur mon compte »).
  */
 export function PickedTemplate({ t, onClear }) {
   const genjutsu = Boolean(t.genjutsu)
   const vertical = dims(t.ratio)[1] > dims(t.ratio)[0]
-  const todo = genjutsu
-    ? `Ajoutez ${t.genjutsu.roles.length > 1 ? `une photo par personne (${t.genjutsu.roles.length})` : t.genjutsu.tool === 'object-swap' ? 'la photo du produit' : 'votre photo'} dans le panneau, puis générez.`
-    : t.photo ? `Ajoutez ${t.photo.charAt(0).toLowerCase()}${t.photo.slice(1)} dans le panneau, puis générez.` : 'Ajustez le texte si vous voulez, puis générez.'
+  const todo = todoText(t) // d'après les rôles (Genjutsu) ou les entrées à fournir
   return (
     <section className={`cx-picked${vertical ? ' tall' : ''}`} aria-labelledby="cx-picked-h">
       <div className="cx-picked-v" style={{ aspectRatio: aspect(t.ratio) }}>
@@ -98,6 +98,7 @@ export function PickedTemplate({ t, onClear }) {
       <div className="cx-picked-t">
         <small>Vidéo à refaire{genjutsu ? (t.genjutsu.tool === 'object-swap' ? ' · votre produit dans la vidéo' : ' · vous dans la vidéo') : ''}</small>
         <h2 id="cx-picked-h">{t.name}</h2>
+        {t.preview && <p className="cx-picked-prev" role="note">Aperçu : modèle non publié</p>}
         {t.blurb && <p>{t.blurb}</p>}
         <p className="cx-picked-todo">{todo}</p>
         {onClear && <button type="button" className="cx-picked-x" onClick={onClear}>Choisir une autre vidéo</button>}

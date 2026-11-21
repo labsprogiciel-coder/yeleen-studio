@@ -249,17 +249,20 @@ export function JobsProvider({ children }) {
 
   // Envoi réel : les fichiers d'entrée (images, audio) sont d'abord déposés chez le fournisseur, puis la demande part.
   const startLive = useCallback(async (job, live) => {
-    const { files, elements, references, inputFiles, ...body } = live
+    const { files, elements, references, inputFiles, templateInputs, ...body } = live
     const given = Object.entries(files ?? {}).filter(([, f]) => f)
-    const total = given.length + (elements?.length ?? 0) + (references?.length ?? 0)
+    const total = given.length + (elements?.length ?? 0) + (references?.length ?? 0) + (templateInputs?.length ?? 0)
     if (total) {
       dispatch({ type: 'REMOTE', id: job.id, patch: { logs: [{ msg: total > 1 ? 'Envoi des fichiers' : 'Envoi du fichier' }] } })
-      const [urls, elUrls, refUrls] = await Promise.all([Promise.all(given.map(([, f]) => api.upload(f))), Promise.all((elements ?? []).map((e) => api.upload(e.file))), Promise.all((references ?? []).map((r) => api.upload(r.file)))])
+      const [urls, elUrls, refUrls, tplUrls] = await Promise.all([Promise.all(given.map(([, f]) => api.upload(f))), Promise.all((elements ?? []).map((e) => api.upload(e.file))), Promise.all((references ?? []).map((r) => api.upload(r.file))), Promise.all((templateInputs ?? []).map((t) => api.upload(t.file)))])
+      // Vidéo à refaire : chaque entrée garde son numéro ; le serveur place les fichiers selon le modèle et ajoute ceux de Qreativ.
+      if (templateInputs?.length) body.templateInputs = templateInputs.map((t, i) => ({ idx: t.idx, url: tplUrls[i] }))
       const field = { start: 'startImageUrl', end: 'endImageUrl', audio: 'audioUrl', model: 'modelImageUrl', garment: 'garmentImageUrl' }
       given.forEach(([slot], i) => { body[field[slot]] = urls[i] })
       if (elements?.length) body.elements = elements.map((e, i) => ({ kind: e.kind, url: elUrls[i] }))
       if (references?.length) body.references = references.map((r, i) => ({ kind: r.kind, url: refUrls[i] }))
     }
+    if (templateInputs && !body.templateInputs) body.templateInputs = [] // rien à fournir : seulement les fichiers de Qreativ
     if (inputFiles) { // workflow : chaque champ photo (un fichier, ou une liste) est déposé chez le fournisseur
       const up = async (v) => (Array.isArray(v) ? Promise.all(v.map((f) => api.upload(f))) : api.upload(v))
       const entries = await Promise.all(Object.entries(inputFiles).map(async ([k, v]) => [k, await up(v)]))

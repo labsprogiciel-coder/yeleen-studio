@@ -9,6 +9,7 @@ import {
   ACTIONS, JOB_STATUS, LEDGER_KIND, MAX_ADJUST, TOPUP_STATUS, adminError, adminKey, ageMin, attemptStore, canRecheck, cauris, caurisLabel, checkReason,
   failureKind, formatAge, formatDate, identity, isActiveJob, isStuckJob, isStuckTopup, parseAmount, pick, refundable, resultText, sortTopups,
 } from '../lib/admin.js'
+import TemplatesTab from './admin/TemplatesTab.jsx'
 import '../styles/shell.css'
 import '../styles/admin.css'
 
@@ -21,9 +22,10 @@ const TABS = [
   { id: 'users', label: 'Utilisateurs', icon: 'user' },
   { id: 'jobs', label: 'Générations en cours', icon: 'sparkles' },
   { id: 'topups', label: 'Recharges', icon: 'download' },
+  { id: 'templates', label: 'Modèles', icon: 'extend' },
 ]
 
-/** Adresse d'une section ; « Utilisateurs » garde le compte ouvert. */
+/** Adresse d'une section ; « Utilisateurs » garde le compte ouvert (« Modèles » revient à la liste). */
 const sectionHref = (id, uid) => `/admin?${new URLSearchParams(id === 'users' && uid ? { t: id, u: uid } : { t: id })}`
 
 /**
@@ -79,6 +81,7 @@ export default function Admin() {
   const [params, setParams] = useSearchParams()
   const tab = Math.max(0, TABS.findIndex((t) => t.id === params.get('t')))
   const uid = params.get('u') ?? ''
+  const tplId = params.get('m') ?? '' // modèle ouvert dans l'éditeur (onglet « Modèles »)
   const nav = useRef(null)
   const [dialog, setDialog] = useState(null) // { spec, n } : `n` change à chaque ouverture, donc une clé d'idempotence neuve
   const openAction = useCallback((spec) => setDialog((d) => ({ spec, n: (d?.n ?? 0) + 1 })), [])
@@ -115,6 +118,7 @@ export default function Admin() {
           {tab === 0 && <UsersTab uid={uid} select={(u) => go({ t: 'users', u })} openAction={openAction} />}
           {tab === 1 && <JobsTab openAction={openAction} />}
           {tab === 2 && <TopupsTab openAction={openAction} />}
+          {tab === 3 && <TemplatesTab id={tplId} open={(m) => go({ t: 'templates', m })} />}
         </section>
       </main>
       {dialog && <ActionDialog key={dialog.n} spec={dialog.spec} attempts={attempts.current} onClose={() => setDialog(null)} />}

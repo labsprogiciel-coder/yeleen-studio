@@ -1,0 +1,20 @@
+/* Entrées d'une vidéo à refaire dans Références (Cinéma, voir TemplateInputs.jsx) : couleurs du thème seulement. */
+.ti-tiles{margin-bottom:8px}
+.ti-wrap{display:flex;flex-direction:column;gap:4px}
+.ti-tags{display:flex;flex-wrap:wrap;gap:4px;min-height:0}
+.ti-tags:empty{display:none}
+.ti-tok{border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--lime-ink);font:inherit;font-size:11px;font-weight:700;padding:1px 6px;cursor:pointer}
+.ti-tok:hover{border-color:var(--line-strong)}
+.ti-tok:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.ti-opt{font-style:normal;font-size:11px;font-weight:600;color:var(--ink-3);background:var(--fill);border-radius:6px;padding:2px 6px}
+.ep-tile>.ti-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.ep-tile>.ti-media~svg,.ep-tile>.ti-media~span,.ep-tile>.ti-media~em{position:relative}
+.ti-fixed{cursor:default}
+.ti-by{position:absolute;top:8px;right:8px;font-style:normal;font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px;background:var(--fill);color:var(--ink-2)}
+.ti-fixed .ti-by{background:rgba(13,14,16,.78);color:#fff}
+.ti-gen{cursor:default;border-style:dashed}
+.ti-gen[aria-busy="true"] svg{animation:ti-pulse 1s ease-in-out infinite}
+@keyframes ti-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.ti-gen[aria-busy="true"] svg{animation:none}}
+.ti-krea{margin:4px 0 12px}
+.ti-krea h3{margin:0 0 4px;font-size:13px;font-weight:700;color:var(--ink)}

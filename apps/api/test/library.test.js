@@ -144,13 +144,16 @@ test('Vidéos à refaire : publiques, publiées seulement, dans l’ordre, fichi
     ins.run('fete', 'Tabaski', null, 'fete', 'templates/fete/video.mp4', 'wan-3', '[{"text":"Une famille réunie","dur":8}]', '720p', 'auto', 0, null, 0, 1)
     ins.run('brouillon', 'Pas prêt', null, 'pub', 'templates/b/video.mp4', 'wan-3', '[{"text":"x","dur":5}]', null, null, 1, null, 2, 0)
     ins.run('casse', 'Plans illisibles', null, 'pub', 'templates/c/video.mp4', 'wan-3', 'pas du json', null, null, 1, null, 3, 1)
+    const calls = t.db.calls
     const res = await t.json('/templates')
     assert.equal(res.status, 200)
+    assert.equal(t.db.calls - calls, 1) // modèles et entrées lus dans un seul batch (même instantané)
     assert.match(res.headers.get('cache-control'), /max-age=300/)
     assert.deepEqual(res.body.templates.map((x) => x.id), ['fete', 'maquis'])
     assert.deepEqual(res.body.templates[1], {
       id: 'maquis', name: 'Pub de maquis', blurb: 'Le soir au maquis, puis le plat en gros plan', category: 'pub', video: 'http://api/files/templates/maquis/video.mp4', image: null,
-      modelId: 'kling-4', plans: [{ text: 'Un maquis le soir', dur: 5 }, { text: 'Gros plan sur le plat', dur: 5 }], resolution: '1080p', ratio: '9:16', sound: true, photo: 'Une photo de votre plat',
+      modelId: 'kling-4', plans: [{ text: 'Un maquis le soir', dur: 5 }, { text: 'Gros plan sur le plat', dur: 5 }], resolution: '1080p', ratio: '9:16', sound: true, photo: 'Une photo de votre plat', // ancienne forme sans consigne d'image : la photo est l'image de début à fournir
+      inputs: [{ idx: 0, slot: 'start', kind: 'image', mode: 'user', label: 'Une photo de votre plat', optional: false }],
     })
 
     t.objects.set('templates/maquis/video.mp4', { buf: new Uint8Array([1, 2, 3]).buffer, type: 'video/mp4' })
