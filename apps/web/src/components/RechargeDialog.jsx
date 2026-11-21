@@ -5,7 +5,7 @@ import { api, apiEnabled } from '../lib/api.js'
 import { jetonLabel, jetons, useJobs } from '../lib/jobs.jsx'
 import { useToast } from '../lib/toasts.jsx'
 import {
-  COUNTRIES, OPERATORS, PACKS, STATUS, TOPUP_COUNTRIES, countdown, errorMessage, failureText, fcfa, isFinal, isOpen, limitError, lines,
+  COUNTRIES, OPERATORS, PACKS, STATUS, TOPUP_COUNTRIES, countdown, countryOfPhone, errorMessage, failureText, fcfa, isFinal, isOpen, limitError, lines,
   maskPhone, telHref, topupCountries, ussdCodes,
 } from '../lib/topups.js'
 import '../styles/recharge.css'
@@ -87,8 +87,8 @@ const FLAGS = {
 const Flag = ({ k }) => <svg className="rc-flag" viewBox="0 0 24 16" aria-hidden="true">{FLAGS[k]}</svg>
 const PLACEHOLDER = { BF: '70 12 34 56', CI: '07 12 34 56 78', SN: '77 123 45 67' }
 
-/** Champ téléphone : pays (drapeau et indicatif) puis numéro local. Seuls les pays où l'opérateur est proposé sont listés. */
-function PhoneField({ countries, country, onCountry, phone, onPhone, operator, amount }) {
+/** Champ téléphone : pays (drapeau et indicatif) puis numéro local. Seuls les pays où l'opérateur est proposé sont listés. Figé pendant la vérification du numéro : la réponse correspond toujours au pays et au numéro affichés. */
+function PhoneField({ countries, country, onCountry, phone, onPhone, operator, amount, busy }) {
   const c = TOPUP_COUNTRIES[country]
   const pick = countries.length > 1
   return (
@@ -99,12 +99,12 @@ function PhoneField({ countries, country, onCountry, phone, onPhone, operator, a
           <Flag k={country} /><span>+{c.dial}</span>
           {pick && <Icon name="chevD" size={14} />}
           {pick && (
-            <select value={country} onChange={(e) => onCountry(e.target.value)} aria-label="Pays du numéro">
+            <select value={country} onChange={(e) => onCountry(e.target.value)} aria-label="Pays du numéro" disabled={busy}>
               {countries.map((k) => <option key={k} value={k}>{COUNTRIES[k]} (+{TOPUP_COUNTRIES[k].dial})</option>)}
             </select>
           )}
         </span>
-        <input id="rc-phone" type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => onPhone(e.target.value)}
+        <input id="rc-phone" type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => onPhone(e.target.value)} readOnly={busy}
           placeholder={PLACEHOLDER[country] ?? ''} aria-describedby="rc-phone-n" />
       </div>
       <small id="rc-phone-n">Numéro {OPERATORS[operator]} {pick ? '' : `au ${COUNTRIES[country]} `}: {c.digits} chiffres, sans l’indicatif +{c.dial}.</small>
@@ -213,7 +213,7 @@ export default function RechargeDialog({ open, request, onClose }) {
 
   const go = (i) => { setError(null); setCodeSteps(null); setCode(''); setStep(i) }
   const restart = (toStep) => { setTopup(null); setReference(null); setCode(''); setCodeSteps(null); setError(null); setStep(toStep) }
-  const follow = (t) => { setTopup(t); setPack(t.pack); setOperator(t.operator); setPhone(t.phone ?? ''); setCodeSteps(null); setError(null); setStep(3); setView('buy') }
+  const follow = (t) => { setTopup(t); setPack(t.pack); setOperator(t.operator); setCountry(countryOfPhone(t.phone, COUNTRY_LIST) ?? countriesFor(t.operator)[0] ?? COUNTRY_LIST[0]); setPhone(t.phone ?? ''); setCodeSteps(null); setError(null); setStep(3); setView('buy') }
 
   // Fenêtre native : ouverte en modale, fermée par Échap, par la croix ou d'un clic sur le fond.
   useEffect(() => {
@@ -325,7 +325,7 @@ export default function RechargeDialog({ open, request, onClose }) {
 
   const err = error && <p className="rc-err" role="alert">{error}</p>
   const title = (text, hidden) => <h3 ref={panel} tabIndex={-1} className={hidden ? 'sr-only' : undefined}>{text}</h3>
-  const back = (i) => <button type="button" className="rc-ghost" onClick={() => go(i)}>Retour</button>
+  const back = (i) => <button type="button" className="rc-ghost" onClick={() => go(i)} disabled={busy}>Retour</button>
 
   let body
   let foot = null
@@ -378,7 +378,7 @@ export default function RechargeDialog({ open, request, onClose }) {
       <form id={FORM} className="rc-panel" onSubmit={checkNumber} noValidate>
         {title(`Votre numéro ${OPERATORS[operator]}`)}
         <PhoneField countries={countriesFor(operator)} country={country} onCountry={(k) => { setCountry(k); setError(null) }}
-          phone={phone} onPhone={(v) => { setPhone(v); setError(null) }} operator={operator} amount={fcfa(selected.fcfa)} />
+          phone={phone} onPhone={(v) => { setPhone(v); setError(null) }} operator={operator} amount={fcfa(selected.fcfa)} busy={busy} />
         {err}
       </form>
     )
