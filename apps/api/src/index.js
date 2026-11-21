@@ -193,7 +193,7 @@ app.post('/assets', notBlocked, withDb(async (c, db) => {
   // Déjà reçu puis supprimé (son fichier est effacé de R2) : l'import est refait en entier, jamais rendu avec une adresse sans fichier.
   // Son fichier prend alors une clé R2 neuve : une suppression en cours n'efface que l'ancienne clé, jamais ce qui vient d'être écrit,
   // et deux envois simultanés n'écrivent pas l'un sur l'autre.
-  const key = uploadKey(accountId(c), known ? `${id}-${crypto.randomUUID().slice(0, 8)}` : id, type)
+  const key = uploadKey(accountId(c), known ? `${id}-${crypto.randomUUID()}` : id, type)
   const body = length > STREAM_FROM ? c.req.raw.body : await c.req.arrayBuffer()
   const stored = await bucket.put(key, body, { httpMetadata: { contentType: type } })
   const bytes = stored?.size ?? length

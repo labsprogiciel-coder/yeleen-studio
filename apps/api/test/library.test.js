@@ -445,7 +445,7 @@ test('import rejoué après suppression : jamais l’ancienne ligne sans fichier
     const jpg = await send(t, new Uint8Array([1, 2]), 'image/jpeg', '?key=a-lz3k9-abcde')
     assert.equal(jpg.status, 201)
     assert.equal(t.objects.size, 1)
-    assert.match([...t.objects.keys()][0], new RegExp(`^uploads/demo/${first.body.asset.id}-[0-9a-f]{8}\\.jpg$`))
+    assert.match([...t.objects.keys()][0], new RegExp(`^uploads/demo/${first.body.asset.id}-[0-9a-f-]{36}\\.jpg$`))
     // Le même contenu sans clé : un nouvel asset, comme avant.
     assert.equal((await send(t, png, 'image/png')).status, 201)
   } finally { t.restore() }
