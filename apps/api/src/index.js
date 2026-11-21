@@ -280,6 +280,16 @@ function requestOf(req, texts) {
  * téléversé et mesuré par ce compte (POST /uploads) et rester dans ces limites. Sinon le prix débité ne couvrirait pas le coût.
  */
 const measured = (c, url) => account(c).fetch(`https://account/media/get?url=${encodeURIComponent(url)}`).then((r) => r.json())
+/** Durée d'un fichier fixe d'un modèle (clé R2), lue dans son en-tête ; null s'il manque ou si son format n'est pas mesuré. */
+async function fixedSecs(bucket, key) {
+  try {
+    const obj = await bucket?.get(key)
+    return obj ? mediaInfo(await new Response(obj.body).arrayBuffer(), obj.httpMetadata?.contentType ?? '')?.secs ?? null : null
+  } catch (e) {
+    console.error('mesure du fichier fixe', e.message)
+    return null
+  }
+}
 async function mediaIssue(c, tool, inputs) {
   if (!tool.maxSecs && !tool.maxP) return null
   for (const f of tool.inputs.filter((x) => x.type === 'video' || x.type === 'audio')) {
@@ -403,14 +413,17 @@ app.post('/jobs', async (c) => {
     trusted = built.trusted
   }
   // Vidéo dont la durée est celle de l'audio fourni : le prix suit la durée mesurée au téléversement (POST /uploads), jamais celle
-  // qu'annonce l'application. Audio fixe d'un modèle (fichier du serveur, non mesuré) : facturé pour la durée maximale.
+  // qu'annonce l'application. Audio fixe d'un modèle (fichier du serveur) : mesuré dans R2 ; format non mesuré : durée maximale.
   const fromAudio = req.kind === 'video' ? VIDEO_MODELS.find((m) => m.id === req.modelId)?.caps.duration.fromAudio : null
   if (fromAudio && typeof req.audioUrl === 'string') {
-    if (trusted.includes(req.audioUrl)) req = { ...req, secs: fromAudio.max }
-    else {
+    if (trusted.includes(req.audioUrl)) {
+      const secs = await fixedSecs(c.env.FILES, req.audioUrl.slice(`${new URL(c.req.url).origin}/files/`.length))
+      req = { ...req, secs: secs > 0 ? audioBilledSecs(fromAudio, secs) : fromAudio.max }
+    } else {
       const m = await measured(c, req.audioUrl)
       if (!(m?.secs > 0)) return c.json({ error: 'unmeasured_media' }, 400)
-      if (m.secs < fromAudio.min - 0.05 || m.secs > fromAudio.max + 0.05) return c.json({ error: 'invalid_duration' }, 400)
+      // Au-dessus du maximum : même marge que les outils (un MP3 mesuré par ses trames dépasse un peu la durée qu'affiche le navigateur).
+      if (m.secs < fromAudio.min - 0.05 || m.secs > fromAudio.max + 0.5) return c.json({ error: 'invalid_duration' }, 400)
       req = { ...req, secs: audioBilledSecs(fromAudio, m.secs) }
     }
   }

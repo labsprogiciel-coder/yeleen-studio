@@ -507,3 +507,24 @@ test('audio vers vidéo : facturée sur la durée mesurée de l’audio, jamais 
     assert.equal(sent.length, 3)
   } finally { t.restore() }
 })
+
+test('audio vers vidéo : un audio à la durée maximale, mesuré un peu au-dessus (trames de remplissage d’un MP3), est accepté et facturé au maximum', async () => {
+  const { VIDEO_MODELS, findModel, videoCost } = await import('@studio/catalog')
+  const { frames } = await import('./media.test.js')
+  const pro = findModel(VIDEO_MODELS, 'ltx-2-3-a2v') // 2 à 10 s
+  let n = 0
+  const t = setup((url) => {
+    if (url.includes('storage/upload/initiate')) { n++; return { body: { file_url: `https://v3b.fal.media/files/b${n}.mp3`, upload_url: `https://v3b.fal.media/upload/${n}` } } }
+    if (url.startsWith('https://queue.fal.run/')) return { body: queued }
+    return { body: {} }
+  })
+  const upload = async (secs) => { const mp3 = frames(128, Math.round((secs * 44100) / 1152)); return (await t.req('/uploads?name=voix.mp3', { method: 'POST', headers: { 'content-type': 'audio/mpeg', 'content-length': String(mp3.length) }, body: mp3 })).json() }
+  const job = (audioUrl) => t.req('/jobs', post({ kind: 'video', modelId: pro.id, plans: [{ text: 'une chanteuse', dur: 10 }], secs: 10, ratio: 'auto', audioUrl }))
+  try {
+    const edge = await upload(10.1) // 10 s d'après le navigateur
+    assert.equal(edge.secs, 10.1)
+    const ok = await job(edge.url)
+    assert.deepEqual([ok.status, (await ok.json()).cost], [202, videoCost(pro, 10)])
+    assert.equal((await (await job((await upload(10.6)).url)).json()).error, 'invalid_duration')
+  } finally { t.restore() }
+})

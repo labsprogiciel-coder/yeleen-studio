@@ -17,6 +17,9 @@ import { useEffect, useMemo, useState } from 'react'
 const g = (i) => gradient(i, 'video')
 const PRESETS = ['Travelling avant', 'Orbite 360°', 'Zoom explosif', 'Plan drone', 'Ralenti', 'Plongée', 'Caméra épaule', 'Ambiance néon']
 
+// Audio dont la durée fixe le prix (audio vers vidéo) : seulement les formats que le serveur sait mesurer (apps/api/src/media.js).
+const MEASURED_AUDIO = 'audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a'
+
 const HINT = 'Décrivez le changement visuel souhaité, par exemple « Il neige » ou « Il fait nuit ».'
 
 const PANEL_MODES = {
@@ -85,6 +88,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
     : caps.startFrame === 'required' && !files.start ? 'Ce modèle exige une image de départ.'
     : caps.endFrame === 'withStart' && files.end && !files.start ? 'Avec ce modèle, une image de fin demande aussi une image de départ.'
     : caps.audioRef === 'required' && !files.audio ? `Ce modèle exige un fichier audio${range ? ` de ${range.min} à ${range.max} s` : ''}.`
+    : range && files.audio && !MEASURED_AUDIO.split(',').includes(files.audio.type) ? 'Ce modèle lit les fichiers audio MP3, WAV ou M4A.'
     : range && files.audio && (Number.isNaN(audioSecs) ? true : audioSecs !== null && (audioSecs < range.min || audioSecs > range.max))
       ? (Number.isNaN(audioSecs) ? 'Ce fichier audio n’a pas pu être lu.' : `Votre audio dure ${String(audioSecs).replace('.', ',')} s : il doit durer entre ${range.min} et ${range.max} s.`)
       : null
@@ -113,7 +117,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
             <>
               <DropTile icon="img" label="Départ" accept="image/*" file={files.start ?? null} onFile={setFile('start')} required={caps.startFrame === 'required'} disabled={caps.startFrame === 'none'} reason="Ce modèle part du texte seul : pas d’image de départ" />
               <DropTile icon="img" label="Fin" accept="image/*" file={files.end ?? null} onFile={setFile('end')} disabled={!caps.endFrame} reason={caps.startFrame === 'none' ? 'Texte seul : pas d’images en entrée' : 'Ce modèle n’accepte pas d’image de fin'} />
-              <DropTile icon="mus" label="Piste audio" accept="audio/*" file={files.audio ?? null} onFile={setFile('audio')} required={caps.audioRef === 'required'} disabled={!caps.audioRef} reason="Ce modèle n’accepte pas de piste audio en entrée" />
+              <DropTile icon="mus" label="Piste audio" accept={range ? MEASURED_AUDIO : 'audio/*'} file={files.audio ?? null} onFile={setFile('audio')} required={caps.audioRef === 'required'} disabled={!caps.audioRef} reason="Ce modèle n’accepte pas de piste audio en entrée" />
             </>
           )}
         </div>
