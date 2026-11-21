@@ -437,7 +437,7 @@ app.post('/jobs', async (c) => {
   const endpoint = endpointFor(price.model, req)
   const origin = new URL(c.req.url).origin
   // Réservation : la place, le débit et la génération (`submitting` : pas encore envoyée) sont écrits par une seule requête du compte.
-  // Si cette route s'arrête ensuite (client parti, erreur), le réveil du compte la fait échouer et la rembourse (voir SUBMIT_DEADLINE).
+  // Si la suite s'arrête quand même (Worker interrompu, erreur), le réveil du compte la fait échouer et la rembourse (voir SUBMIT_DEADLINE).
   const draft = { id, kind: req.kind, modelId: price.model.id, provider, endpoint, cost: price.cost, count: price.count, status: 'IN_QUEUE', submitting: true, origin, createdAt: Date.now(), ...requestOf(req, texts) }
   // Génération déjà enregistrée (même clé, ou terminée pendant l'envoi) : rendue avec son vrai statut, 202 si elle est encore active.
   const existing = (job, balance, extra = {}) => c.json({ ...view(job), cost: job.cost ?? price.cost, balance, ...extra }, isActive(job) ? 202 : 200)
@@ -446,37 +446,50 @@ app.post('/jobs', async (c) => {
   // { error: 'too_many_active', max }, compte bloqué, ou { error: 'insufficient', missing } : le message que l'interface affiche déjà
   if (!r.ok) return c.json(r, r.error === 'account_blocked' ? 403 : r.error === 'too_many_active' ? 429 : 402)
 
-  let sub
-  try {
-    const withUser = { ...req, count: price.count, endUserId: accountId(c) }
-    sub = provider === 'runware' ? await runware(c).submit(runwareInput(price.model, withUser))
-      : provider === 'higgsfield' ? await higgsfield(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { idempotencyKey: id })
-      : await fal(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { webhookUrl: await falWebhook(c, origin, id) })
-  } catch (e) {
-    console.error(`submit ${provider}`, e.message)
-    const policy = e?.isContentPolicy === true // FalError, RunwareError ou HiggsfieldError
-    // Remboursée et notée FAILED d'un coup : la génération existe, le nouvel essai de l'interface (même clé) et son suivi la retrouvent.
-    const back = await call(c, '/job/fail', { jobId: id, failure: policy ? 'moderation' : 'provider' })
-    return c.json({ error: policy ? 'moderation' : 'provider', refunded: back.refunded ?? back.job?.refund ?? 0, balance: back.balance }, policy ? 422 : 502)
-  }
+  // La suite (envoi au fournisseur, enregistrement, échec remboursé) est confiée à waitUntil : si le client coupe pendant l'envoi,
+  // elle va quand même au bout, et la génération acceptée par le fournisseur est enregistrée et suivie (le nouvel essai avec la même
+  // clé, ou l'historique, la retrouve) au lieu d'être remboursée par le réveil alors que le fournisseur la facture.
+  // Limite : après la coupure, waitUntil ne laisse qu'environ 30 s. Un envoi qui traîne plus longtemps retombe sur le réveil
+  // (SUBMIT_DEADLINE : échec et remboursement, sans annulation chez le fournisseur).
+  const finish = async () => {
+    let sub
+    try {
+      const withUser = { ...req, count: price.count, endUserId: accountId(c) }
+      sub = provider === 'runware' ? await runware(c).submit(runwareInput(price.model, withUser))
+        : provider === 'higgsfield' ? await higgsfield(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { idempotencyKey: id })
+        : await fal(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { webhookUrl: await falWebhook(c, origin, id) })
+    } catch (e) {
+      console.error(`submit ${provider}`, e.message)
+      const policy = e?.isContentPolicy === true // FalError, RunwareError ou HiggsfieldError
+      // Remboursée et notée FAILED d'un coup : la génération existe, le nouvel essai de l'interface (même clé) et son suivi la retrouvent.
+      const back = await call(c, '/job/fail', { jobId: id, failure: policy ? 'moderation' : 'provider' })
+      return c.json({ error: policy ? 'moderation' : 'provider', refunded: back.refunded ?? back.job?.refund ?? 0, balance: back.balance }, policy ? 422 : 502)
+    }
 
-  // Runware n'a pas de file visible ni d'annulation : la génération est « en cours » dès l'envoi (et une annulation n'est pas remboursée).
-  const status = provider === 'runware' ? 'IN_PROGRESS' : 'IN_QUEUE'
-  const { submitting, ...kept } = draft
-  const job = { ...kept, status, ...(provider === 'runware' ? { startedAt: Date.now() } : {}), ...sub }
-  let put
-  try {
-    put = await call(c, '/job/put', job)
-  } catch (e) {
-    await providerCancel(c.env, job) // jamais enregistrée : le réveil rembourse la réservation, on tente d'arrêter le fournisseur
-    throw e
+    // Runware n'a pas de file visible ni d'annulation : la génération est « en cours » dès l'envoi (et une annulation n'est pas remboursée).
+    const status = provider === 'runware' ? 'IN_PROGRESS' : 'IN_QUEUE'
+    const { submitting, ...kept } = draft
+    const job = { ...kept, status, ...(provider === 'runware' ? { startedAt: Date.now() } : {}), ...sub }
+    let put
+    try {
+      put = await call(c, '/job/put', job)
+    } catch (e) {
+      await providerCancel(c.env, job) // jamais enregistrée : le réveil rembourse la réservation, on tente d'arrêter le fournisseur
+      throw e
+    }
+    // Refusée : échouée par le réveil (envoi trop long) ou annulée par l'administration entre-temps, donc déjà remboursée.
+    if (put.ok === false) {
+      await providerCancel(c.env, job)
+      return existing(put.job ?? job, (await call(c, '/balance')).balance)
+    }
+    return c.json({ jobId: id, status, cost: price.cost, balance: r.balance }, 202)
   }
-  // Refusée : échouée par le réveil (envoi trop long) ou annulée par l'administration entre-temps, donc déjà remboursée.
-  if (put.ok === false) {
-    await providerCancel(c.env, job)
-    return existing(put.job ?? job, (await call(c, '/balance')).balance)
-  }
-  return c.json({ jobId: id, status, cost: price.cost, balance: r.balance }, 202)
+  // Jamais rejetée (waitUntil ne doit pas recevoir de rejet) : l'erreur est rendue à la route, qui la relance comme avant.
+  const work = finish().then((res) => ({ res }), (err) => ({ err }))
+  try { c.executionCtx.waitUntil(work) } catch { /* tests, ou pas de contexte d'exécution : la route attend elle-même */ }
+  const out = await work
+  if (out.err) throw out.err
+  return out.res
 })
 
 // `timeout` (délai dépassé, voir jobs.js) est présenté comme `provider` : c'est le message que l'interface connaît (« n'a pas répondu à temps »).
