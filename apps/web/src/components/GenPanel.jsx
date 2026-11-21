@@ -43,8 +43,10 @@ export function QualityMenu({ s }) {
  * `accept` limite ce que la bibliothèque montre et importe ; `disabled` + `reason` : le modèle choisi n'accepte pas cette entrée ;
  * `required` : il l'exige. `onFile(file, asset)` reçoit le fichier choisi (null pour vider la case). `asset` : la case montre cet
  * asset de la bibliothèque au lieu d'un fichier (les modèles gardent l'asset, pas le fichier).
+ * `upload` ({ onFile(file), busy }) : la case ouvre le sélecteur de fichiers de l'appareil au lieu de la bibliothèque (l'éditeur de
+ * modèles envoie le fichier au serveur) ; `busy` pendant l'envoi. × appelle toujours `onFile(null)`.
  */
-export function DropTile({ icon, label, accept, file, asset = null, onFile, disabled = false, reason, required = false }) {
+export function DropTile({ icon, label, accept, file, asset = null, onFile, disabled = false, reason, required = false, upload = null }) {
   const [thumb, setThumb] = useState(null)
   const [picking, setPicking] = useState(false)
   const { getFile } = useAssets()
@@ -69,22 +71,30 @@ export function DropTile({ icon, label, accept, file, asset = null, onFile, disa
   }
   const name = file?.name ?? asset?.name
   const shown = !file && asset // un asset sans fichier : son aperçu de bibliothèque
+  const busy = Boolean(upload?.busy)
   return (
     <>
-      <div className={`ep-tile${name ? ' has' : ''}${thumb || shown ? ' pic' : ''}`} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}>
+      <div className={`ep-tile${name ? ' has' : ''}${thumb || shown ? ' pic' : ''}${busy ? ' busy' : ''}`} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} aria-busy={upload ? busy : undefined}>
         {shown && <AssetThumb asset={asset} />}
-        <button type="button" className="ep-pick" aria-haspopup="dialog" aria-label={name ? `${label} : ${name}, changer` : `${label} : choisir dans la bibliothèque`} onClick={() => setPicking(true)} />
+        {upload ? (
+          <label className="ep-pick">
+            <input type="file" className="sr-only" accept={accept} disabled={busy} aria-label={busy ? `${label} : envoi en cours` : name ? `${label} : ${name}, remplacer` : `${label} : déposer un fichier`}
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload.onFile(f) }} />
+          </label>
+        ) : (
+          <button type="button" className="ep-pick" aria-haspopup="dialog" aria-label={name ? `${label} : ${name}, changer` : `${label} : choisir dans la bibliothèque`} onClick={() => setPicking(true)} />
+        )}
         <Icon name={icon} size={20} />
-        <span>{name ?? label}</span>
+        <span>{busy ? 'Envoi…' : name ?? label}</span>
         {required && !name && <em className="ep-req">requis</em>}
-        {name && (
+        {name && !busy && (
           <button type="button" className="ep-x" aria-label={`Retirer ${name}`} onClick={() => onFile(null)}>
             <Icon name="close" size={12} />
           </button>
         )}
-        <span className="ep-lib" aria-hidden="true"><Icon name="folder" size={14} /></span>
+        <span className="ep-lib" aria-hidden="true"><Icon name={upload ? 'upload' : 'folder'} size={14} /></span>
       </div>
-      <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={pick} accept={accept} single />
+      {!upload && <AssetModal open={picking} onClose={() => setPicking(false)} onAdd={pick} accept={accept} single />}
     </>
   )
 }
@@ -131,7 +141,7 @@ export function AddMedia({ label = 'Ajouter un média', onAdd, accept = 'image/*
 
 /**
  * Case d'une référence jointe (Cinéma) : son aperçu et son nom (« Image 1 »). Toucher la case la cite dans le texte ;
- * `off` : le modèle choisi ne l'utilise pas.
+ * `off` : le modèle choisi ne l'utilise pas. Sans `onRemove`, pas de bouton × (l'éditeur de modèles retire les entrées ailleurs).
  */
 export function RefTile({ asset, token, off = false, onCite, onRemove }) {
   return (
@@ -140,7 +150,7 @@ export function RefTile({ asset, token, off = false, onCite, onRemove }) {
       <button type="button" className="ep-pick" aria-label={`Citer ${token} (${asset.name}) dans le texte`} onClick={onCite} />
       <Icon name={asset.kind === 'video' ? 'vid' : asset.kind === 'audio' ? 'mus' : 'img'} size={20} />
       <span>{token}</span>
-      <button type="button" className="ep-x" aria-label={`Retirer ${token}`} onClick={onRemove}><Icon name="close" size={12} /></button>
+      {onRemove && <button type="button" className="ep-x" aria-label={`Retirer ${token}`} onClick={onRemove}><Icon name="close" size={12} /></button>}
     </div>
   )
 }

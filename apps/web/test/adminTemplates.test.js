@@ -1,11 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  addInput, allowedAdds, capChips, draftIssues, durationsFor, fabrication, filterTemplates, framesRefsWarning, fromTemplate, insertToken, isDirty,
+  addInput, allowedAdds, capChips, draftIssues, durationsFor, fabrication, filterTemplates, framesRefsWarning, fromTemplate, isDirty,
   issueText, moveBefore, moveStep, planIssues, removeInput, setMode, soundChoice, summarize, templateError, templatePrice, toPayload, toggleSource,
-  isLeavingClick, tokenList, userNeeds,
+  isLeavingClick, planTabsState, pseudoAsset, userNeeds,
 } from '../src/lib/adminTemplates.js'
 import { findVideoModel } from '@studio/catalog/template-slots'
+import { TOKEN_PATTERN, tokenItems } from '../src/lib/templateRun.js'
 
 const KLING = findVideoModel('kling-3-pro')
 const SEED = findVideoModel('seedance-2-5')
@@ -203,17 +204,48 @@ test('entrées : ajout à la fin, retrait avec renumérotation, photo de départ
   assert.deepEqual(setMode(after, 0, 'fixed'), [{ idx: 0, slot: 'start', kind: 'image', mode: 'fixed', file: '' }])
 })
 
-test('plans : jetons dans l’ordre des entrées, insertion au curseur avec espaces', () => {
+test('plans : jetons cités dans l’ordre des entrées (sans « @ »), comme dans Cinéma', () => {
   const inputs = [
     { idx: 0, slot: 'reference', kind: 'video', mode: 'fixed', file: 'templates/a.mp4' },
     { idx: 1, slot: 'reference', kind: 'image', mode: 'user', label: 'plat' },
     { idx: 2, slot: 'reference', kind: 'image', mode: 'user', label: 'logo' },
     { idx: 3, slot: 'start', kind: 'image', mode: 'user', label: 'x' },
   ]
-  assert.deepEqual(tokenList(inputs), ['@Video1', '@Image1', '@Image2'])
-  assert.deepEqual(insertToken('Gros plan de', '@Image1'), { text: 'Gros plan de @Image1', caret: 20 })
-  assert.deepEqual(insertToken('ab', '@X', 1, 1), { text: 'a @X b', caret: 5 })
-  assert.deepEqual(insertToken('', '@X'), { text: '@X', caret: 2 })
+  assert.deepEqual(tokenItems(inputs).map((x) => x.token), ['Video1', 'Image1', 'Image2'])
+  assert.ok(tokenItems(inputs).every((x) => new RegExp(`^${TOKEN_PATTERN}$`).test(x.token)))
+})
+
+test('onglets des plans : ajout, retrait et plan affiché', () => {
+  const calls = []
+  const plans = [{ text: 'a', dur: 5 }, { text: 'b', dur: 10 }, { text: 'c', dur: 5 }]
+  const mk = (ps, active, max = 4) => planTabsState(ps, active, { max, newDur: 3, onChange: (p) => calls.push(['plans', p]), setActive: (i) => calls.push(['active', i]) })
+  let s = mk(plans, 1)
+  assert.equal(s.multi, true)
+  assert.equal(s.multiAllowed, true)
+  assert.equal(mk(plans, 0, 1).multiAllowed, false)
+  assert.equal(mk([plans[0]], 0).multi, false)
+  // Ajouter : un plan vide à la durée proposée, qui devient le plan affiché.
+  s.addPlan()
+  assert.deepEqual(calls.splice(0), [['plans', [...plans, { text: '', dur: 3 }]], ['active', 3]])
+  // Retirer le plan affiché : celui d'avant s'affiche.
+  s.removePlan(1)
+  assert.deepEqual(calls.splice(0), [['plans', [plans[0], plans[2]]], ['active', 0]])
+  // Retirer un plan d'avant : le même plan reste affiché (son numéro baisse).
+  mk(plans, 2).removePlan(0)
+  assert.deepEqual(calls.splice(0), [['plans', [plans[1], plans[2]]], ['active', 1]])
+  // Retirer un plan d'après : rien ne bouge à l'écran.
+  mk(plans, 0).removePlan(2)
+  assert.deepEqual(calls.splice(0), [['plans', [plans[0], plans[1]]], ['active', 0]])
+  // Le dernier plan ne se retire pas.
+  mk([plans[0]], 0).removePlan(0)
+  assert.deepEqual(calls, [])
+})
+
+test('entrée vue comme un asset : nom du fichier, sinon le titre ; adresse du fichier', () => {
+  assert.deepEqual(pseudoAsset({ idx: 2, slot: 'reference', kind: 'video', mode: 'fixed', file: 'templates/t/in-1.mp4', url: 'https://r2/x.mp4' }),
+    { id: 'tpl-2', kind: 'video', name: 'in-1.mp4', url: 'https://r2/x.mp4' })
+  assert.deepEqual(pseudoAsset({ idx: 0, slot: 'start', kind: 'image', mode: 'user' }), { id: 'tpl-0', kind: 'image', name: 'Image de début', url: null })
+  assert.equal(pseudoAsset({ idx: 0, slot: 'reference', kind: 'image', mode: 'fixed', file: '' }, 'Réf.').name, 'Réf.')
 })
 
 test('ce que l’utilisateur fournit : par sorte, facultatifs signalés ; Genjutsu : ses rôles', () => {

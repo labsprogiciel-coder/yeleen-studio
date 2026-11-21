@@ -12,9 +12,15 @@ import { api } from '../../lib/api.js'
 import { caurisLabel, cauris } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
 import {
-  ACCEPT, BLURB_MAX, CATEGORIES, GENJUTSU_LIMITS, GENJUTSU_RATIOS, GENJUTSU_TOOLS, NAME_MAX, capChips, draftIssues, durationsFor, framesRefsWarning, fromTemplate, insertToken,
-  draftAfterSave, isCategory, isDirty, issueText, patchInput, soundChoice, templateError, templatePrice, toPayload, tokenList, userNeeds,
+  ACCEPT, BLURB_MAX, CATEGORIES, GENJUTSU_LIMITS, GENJUTSU_RATIOS, GENJUTSU_TOOLS, NAME_MAX, capChips, draftIssues, durationsFor, framesRefsWarning, fromTemplate, planTabsState, pseudoAsset,
+  draftAfterSave, isCategory, isDirty, issueText, patchInput, soundChoice, templateError, templatePrice, toPayload, userNeeds,
 } from '../../lib/adminTemplates.js'
+import PlanTabs from '../../components/PlanTabs.jsx'
+import MentionTextarea from '../../components/MentionTextarea.jsx'
+import { PromptBox, RefTile } from '../../components/GenPanel.jsx'
+import { MAX_PLANS } from '../../lib/useGenSettings.js'
+import { TOKEN_PATTERN, tokenItems } from '../../lib/templateRun.js'
+import '../../styles/library.css' // aperçus AssetThumb (.at) des cases reprises du panneau de l'éditeur
 import TemplateInputs from './TemplateInputs.jsx'
 import Switch from './Switch.jsx'
 
@@ -317,53 +323,72 @@ function CategoryField({ value, onChange }) {
   )
 }
 
-/** Plans du générateur : texte et durée ; « Insérer : » met le jeton au curseur du dernier plan touché. */
+/**
+ * Plans du générateur, avec les pièces du panneau de l'éditeur (comme l'écran Cinéma) : onglets numérotés (PlanTabs), cadre de
+ * texte (PromptBox) où « @ » cite une entrée (MentionTextarea), durée du plan au pied ; les cases des entrées citables, au-dessus,
+ * insèrent leur jeton au curseur. Le plan affiché reste un état d'écran : le brouillon ne change que par `onChange(plans)`.
+ */
 function Plans({ model, plans, inputs, onChange }) {
-  const refs = useRef([])
-  const last = useRef({ n: 0, start: null, end: null })
-  const max = model?.caps.multiShot ? 4 : 1
-  const tokens = tokenList(inputs)
-  const total = plans.reduce((s, p) => s + (Number(p.dur) || 0), 0)
-  const setPlan = (n, patch) => onChange(plans.map((p, k) => (k === n ? { ...p, ...patch } : p)))
-  const track = (n) => (e) => { last.current = { n, start: e.target.selectionStart, end: e.target.selectionEnd } }
-  const insert = (tok) => {
-    const { n, start, end } = last.current
-    const p = plans[n] ?? plans[0]
-    if (!p) return
-    const k = plans[n] ? n : 0
-    const r = insertToken(p.text, tok, start ?? p.text.length, end ?? start ?? p.text.length)
-    setPlan(k, { text: r.text })
-    last.current = { n: k, start: r.caret, end: r.caret }
-    requestAnimationFrame(() => { const el = refs.current[k]; if (el) { el.focus(); el.setSelectionRange(r.caret, r.caret) } })
-  }
+  const area = useRef(null)
+  const [shown, setShown] = useState(0)
+  const max = model?.caps.multiShot ? MAX_PLANS : 1
+  const active = Math.min(shown, Math.max(0, plans.length - 1)) // moins de plans (autre modèle, rechargement) : le dernier
+  const s = planTabsState(plans, active, { max, onChange, setActive: setShown, newDur: durationsFor(model)[0] ?? 5 })
+  const cur = plans[active] ?? { text: '', dur: 5 }
+  const total = plans.reduce((n, p) => n + (Number(p.dur) || 0), 0)
+  const cites = tokenItems(inputs).map((x) => ({ ...x, input: inputs.find((i) => i.idx === x.idx) }))
+  const known = new Set(cites.map((x) => x.token))
+  const items = cites.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: pseudoAsset(x.input, x.title) }))
+  const stale = [...new Set((cur.text.match(new RegExp(`@${TOKEN_PATTERN}(?!\\d)`, 'g')) ?? []).map((t) => t.slice(1)).filter((t) => !known.has(t)))]
+  const setText = (text) => onChange(plans.map((p, k) => (k === active ? { ...p, text } : p)))
+  const durs = durationsFor(model, cur.dur)
   return (
-    <section className="adm-card tm-sec" aria-labelledby="tm-pl-t">
-      <h3 id="tm-pl-t">{max > 1 ? 'Plans' : 'Consigne'} <small>{total} s au total</small></h3>
-      {tokens.length > 0 && (
-        <div className="tm-ins"><span>Insérer :</span>{tokens.map((tok) => <button key={tok} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insert(tok)}>{tok}</button>)}</div>
-      )}
-      {plans.map((p, n) => (
-        <div key={n} className="tm-plan">
-          <em aria-hidden="true">{n + 1}</em>
-          <label className="adm-field">
-            <span>Ce qui se passe{plans.length > 1 ? ` (plan ${n + 1})` : ''}</span>
-            <textarea ref={(el) => { refs.current[n] = el }} value={p.text} maxLength={2000} onChange={(e) => { setPlan(n, { text: e.target.value }); track(n)(e) }}
-              onSelect={track(n)} onFocus={track(n)} />
-          </label>
-          <label className="adm-field">
-            <span>Durée</span>
-            <select value={p.dur} onChange={(e) => setPlan(n, { dur: Number(e.target.value) })}>
-              {durationsFor(model, p.dur).map((d) => <option key={d} value={d}>{d} s</option>)}
-            </select>
-          </label>
-          {plans.length > 1
-            ? <button type="button" className="tm-icon" aria-label={`Retirer le plan ${n + 1}`} onClick={() => onChange(plans.filter((_, k) => k !== n))}><Icon name="close" size={16} /></button>
-            : <span />}
+    <section className="adm-card tm-sec tm-plans" aria-labelledby="tm-pl-t">
+      <div className="ep-row">
+        <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" />
+        <small className="tm-total">{total} s au total</small>
+      </div>
+      {cites.length > 0 && (
+        <div className="ep-tiles tm-cites" aria-label="Entrées à citer dans le plan">
+          {cites.map((x) => (x.input.url
+            ? <RefTile key={x.idx} asset={pseudoAsset(x.input, x.title)} token={x.token} onCite={() => area.current?.insertAt(x.token)} />
+            : (
+              <div key={x.idx} className="ep-tile" title={x.title}>
+                <button type="button" className="ep-pick" aria-label={`Citer ${x.token} (${x.title}) dans le texte`} onClick={() => area.current?.insertAt(x.token)} />
+                <Icon name={x.input.kind === 'video' ? 'vid' : x.input.kind === 'audio' ? 'mus' : 'img'} size={20} />
+                <span>{x.token}</span>
+              </div>
+            )))}
         </div>
-      ))}
-      {plans.length < max && (
-        <button type="button" className="adm-btn sm tm-add" onClick={() => onChange([...plans, { text: '', dur: durationsFor(model)[0] ?? 5 }])}><Icon name="plus" size={14} />Ajouter un plan</button>
       )}
+      <PromptBox
+        id="tm-plan" role={s.multi ? 'tabpanel' : undefined} aria-labelledby={s.multi ? `plan-tab-${active}` : undefined}
+        canClear={Boolean(cur.text)} onClear={() => setText('')} clearLabel="Effacer le plan"
+        note={stale.length > 0 && <p className="ep-refnote" role="status">{stale.map((t) => `@${t}`).join(', ')} : aucune entrée ne porte ce nom.</p>}
+        foot={<>
+          {cites.length > 0 && <button type="button" className="ep-at" aria-label="Citer une entrée" onClick={() => area.current?.insertAt()}><Icon name="at" size={16} /></button>}
+          {durs.length > 0 && (
+            <Menu items={durs.map((d) => ({ id: d, title: `${d} s` }))} value={cur.dur} onChange={(dur) => onChange(plans.map((p, k) => (k === active ? { ...p, dur: Number(dur) } : p)))}
+              label={`Durée du plan ${active + 1}`} menuWidth={160} className="ep-chip">
+              <Icon name="clock" size={16} />{cur.dur} s
+            </Menu>
+          )}
+        </>}
+      >
+        <MentionTextarea
+          ref={area}
+          value={cur.text}
+          onChange={setText}
+          items={items}
+          pattern={TOKEN_PATTERN}
+          isRef={(t) => known.has(t)}
+          emptyHint="Ajoutez une entrée pour pouvoir la citer ici."
+          placeholder={s.multi ? `Ce qui se passe dans le plan ${active + 1}. Tapez @ pour citer une entrée.` : 'Ce qui se passe dans la vidéo. Tapez @ pour citer une entrée.'}
+          aria-label={s.multi ? `Plan ${active + 1}` : 'Plan'}
+          maxLength={2000}
+          rows={4}
+        />
+      </PromptBox>
       {plans.length > max && <p className="tm-warn">Ce modèle ne fait qu’un plan : retirez les autres.</p>}
     </section>
   )

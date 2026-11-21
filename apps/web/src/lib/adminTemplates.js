@@ -460,22 +460,6 @@ export function toggleSource(inputs, idx, on, label = 'Votre photo') {
   return renumber(inputs.filter((i) => i.idx !== from).map((i) => (i.idx === idx ? rest : i)))
 }
 
-/** Insère `token` dans `text` à la place de la sélection [start, end) : { text, caret }. Ajoute des espaces au besoin. */
-export function insertToken(text, token, start = text.length, end = start) {
-  const before = text.slice(0, start)
-  const after = text.slice(end)
-  const pre = before && !/\s$/.test(before) ? ' ' : ''
-  const post = after && !/^\s/.test(after) ? ' ' : ''
-  const out = `${before}${pre}${token}${post}${after}`
-  return { text: out, caret: before.length + pre.length + token.length + post.length }
-}
-
-/** Jetons à proposer dans « Insérer : », dans l'ordre des entrées. */
-export function tokenList(inputs) {
-  const t = slotTokens(inputs)
-  return [...inputs].sort((a, b) => a.idx - b.idx).map((i) => t[i.idx]).filter(Boolean)
-}
-
 /** « Ce que l'utilisateur fournit » : [{ label, value }] par sorte de fichier ; texte libre non demandé. */
 export function userNeeds(d) {
   if (d.kind === 'genjutsu') {
@@ -525,4 +509,29 @@ export function serialLatest(run, onError = () => {}) {
     })()
     return running
   }
+}
+
+/**
+ * État lu par PlanTabs (onglets des plans, voir components/PlanTabs.jsx), bâti sur les plans du brouillon. `active` (le plan
+ * affiché) reste un état d'écran : il n'entre pas dans le brouillon, qui ne change que par `onChange(plans)`.
+ */
+export function planTabsState(plans, active, { max, onChange, setActive, newDur = 5 }) {
+  return {
+    plans,
+    active,
+    multi: plans.length > 1,
+    multiAllowed: max > 1,
+    setActive,
+    addPlan: () => { onChange([...plans, { text: '', dur: newDur }]); setActive(plans.length) },
+    removePlan: (i) => {
+      if (plans.length < 2) return
+      onChange(plans.filter((_, k) => k !== i))
+      setActive(Math.max(0, active >= i ? active - 1 : active))
+    },
+  }
+}
+
+/** Une entrée vue comme un asset de la bibliothèque (pour AssetThumb, DropTile et RefTile) : { id, kind, name, url }. */
+export function pseudoAsset(i, title = inputTitle(i)) {
+  return { id: `tpl-${i.idx}`, kind: i.kind ?? 'image', name: i.file ? i.file.split('/').pop() : title, url: i.url ?? null }
 }
