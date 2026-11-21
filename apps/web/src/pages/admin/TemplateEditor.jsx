@@ -391,7 +391,6 @@ function Plans({ model, plans, inputs, onChange, bare = false }) {
   const active = Math.min(shown, Math.max(0, plans.length - 1)) // moins de plans (autre modèle, rechargement) : le dernier
   const s = planTabsState(plans, active, { max, onChange, setActive: setShown, newDur: durationsFor(model)[0] ?? 5 })
   const cur = plans[active] ?? { text: '', dur: 5 }
-  const total = plans.reduce((n, p) => n + (Number(p.dur) || 0), 0)
   const cites = tokenItems(inputs).map((x) => ({ ...x, input: inputs.find((i) => i.idx === x.idx) }))
   const known = new Set(cites.map((x) => x.token))
   const items = cites.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: x.input.url ? pseudoAsset(x.input, x.title) : null }))
@@ -415,7 +414,6 @@ function Plans({ model, plans, inputs, onChange, bare = false }) {
       )}
       <div className="ep-row">
         <PlanTabs s={s} single={max === 1} singleReason="Ce modèle ne fait qu’un plan" controls="tm-plan" headingId="tm-pl-t" level={3} />
-        <small className="tm-total">{total} s au total</small>
       </div>
       <PromptBox
         id="tm-plan" role={s.multi ? 'tabpanel' : undefined} aria-labelledby={s.multi ? `plan-tab-${active}` : undefined}
