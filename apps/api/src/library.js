@@ -47,7 +47,7 @@ const keyInUse = async (db, key) => Boolean(await db.prepare('SELECT 1 AS n FROM
  * n'est pas une erreur. Rend vrai si le fichier n'est plus dans R2 ; faux s'il y reste (gardé, R2 ou D1 en panne : noté dans le journal,
  * la ligne reste marquée supprimée et une nouvelle demande de suppression réessaie).
  */
-async function purgeFile(db, bucket, row) {
+export async function purgeFile(db, bucket, row) {
   if (!bucket) return false
   try {
     if (await keyInUse(db, row.r2_key)) return false
@@ -65,19 +65,31 @@ async function purgeFile(db, bucket, row) {
  * supprimé. Déjà supprimé : faux, mais l'effacement dans R2 est réessayé (il a pu échouer la première fois).
  */
 export async function deleteAsset(db, account, id, { bucket, now = Date.now() } = {}) {
-  const row = await db.prepare('SELECT id, r2_key, deleted_at FROM assets WHERE id = ?1 AND user_id = ?2').bind(id, account).first()
-  if (!row) return false
+  const read = () => db.prepare('SELECT id, r2_key, deleted_at FROM assets WHERE id = ?1 AND user_id = ?2').bind(id, account).first()
+  if (!await read()) return false
   const r = await db.prepare('UPDATE assets SET deleted_at = ?3 WHERE id = ?2 AND user_id = ?1 AND deleted_at IS NULL').bind(account, id, now).run()
   const done = (r.meta?.changes ?? 0) > 0
-  if (done) await db.prepare("DELETE FROM favorites WHERE user_id = ?1 AND scope = 'mine' AND item_id = ?2").bind(account, id).run()
-  await purgeFile(db, bucket, row)
+  // La ligne est relue après la marque : un import rejoué a pu lui donner un autre fichier entre-temps, et c'est la clé de la ligne
+  // réellement supprimée qu'il faut effacer. Redevenue visible (import rejoué juste après) : rien à effacer ici.
+  const row = await read()
+  if (row?.deleted_at) {
+    // Aussi quand elle était déjà supprimée : le retrait des favoris a pu échouer la première fois.
+    await db.prepare("DELETE FROM favorites WHERE user_id = ?1 AND scope = 'mine' AND item_id = ?2").bind(account, id).run()
+    await purgeFile(db, bucket, row)
+  }
   return done
 }
 
-/** Un import supprimé puis renvoyé avec la même clé (son fichier vient d'être réécrit dans R2) : la ligne redevient visible, à neuf. */
-export async function reviveUpload(db, account, { id, kind, name, key, contentType, bytes, secs = null, width = null, height = null }, now = Date.now()) {
-  await db.prepare(`UPDATE assets SET deleted_at = NULL, kind = ?3, name = ?4, r2_key = ?5, content_type = ?6, bytes = ?7, width = ?8, height = ?9, secs = ?10, created_at = ?11
-    WHERE id = ?1 AND user_id = ?2 AND source = 'upload'`).bind(id, account, kind, name, key, contentType, bytes, width, height, secs, now).run()
+/**
+ * Un import supprimé puis renvoyé avec la même clé d'import : la ligne redevient visible, à neuf, sur le fichier qui vient d'être écrit
+ * dans R2 sous `key` (une clé neuve à chaque fois, voir POST /assets). `was` est la clé R2 de la ligne supprimée telle qu'on l'a lue :
+ * la ligne n'est reprise que si elle est encore supprimée avec cette clé, donc un seul de deux envois simultanés la reprend.
+ * Rend la ligne, ou null si un autre envoi (ou rien) l'a reprise.
+ */
+export async function reviveUpload(db, account, { id, kind, name, key, contentType, bytes, secs = null, width = null, height = null }, was, now = Date.now()) {
+  const r = await db.prepare(`UPDATE assets SET deleted_at = NULL, kind = ?3, name = ?4, r2_key = ?5, content_type = ?6, bytes = ?7, width = ?8, height = ?9, secs = ?10, created_at = ?11
+    WHERE id = ?1 AND user_id = ?2 AND source = 'upload' AND deleted_at IS NOT NULL AND r2_key = ?12`).bind(id, account, kind, name, key, contentType, bytes, width, height, secs, now, was).run()
+  if (!((r.meta?.changes ?? 0) > 0)) return null
   return { id, user_id: account, kind, source: 'upload', name, r2_key: key, content_type: contentType, bytes, width, height, secs, prompt: null, model: null, job_id: null, idx: null, created_at: now }
 }
 

@@ -9,7 +9,7 @@ import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { VIDEO_MODELS, audioBilledSecs } from '@studio/catalog'
 import { findTool } from '@studio/catalog/tools'
 import { slotTokens } from '@studio/catalog/template-slots'
-import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, reviveUpload, SCOPES, templateSource, videoTemplate } from './library.js'
+import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, purgeFile, removeFavorite, reviveUpload, SCOPES, templateSource, videoTemplate } from './library.js'
 import { mediaInfo } from './media.js'
 import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
 import { ledgerOf } from './mirror.js'
@@ -191,27 +191,36 @@ app.post('/assets', notBlocked, withDb(async (c, db) => {
   const known = q.key ? await getAsset(db, accountId(c), id) : null
   if (known && !known.deleted_at) return c.json({ asset: assetView(known, origin), replay: true }) // déjà reçu : rien n'est réécrit
   // Déjà reçu puis supprimé (son fichier est effacé de R2) : l'import est refait en entier, jamais rendu avec une adresse sans fichier.
-  const key = uploadKey(accountId(c), id, type)
+  // Son fichier prend alors une clé R2 neuve : une suppression en cours n'efface que l'ancienne clé, jamais ce qui vient d'être écrit,
+  // et deux envois simultanés n'écrivent pas l'un sur l'autre.
+  const key = uploadKey(accountId(c), known ? `${id}-${crypto.randomUUID().slice(0, 8)}` : id, type)
   const body = length > STREAM_FROM ? c.req.raw.body : await c.req.arrayBuffer()
   const stored = await bucket.put(key, body, { httpMetadata: { contentType: type } })
   const bytes = stored?.size ?? length
   if (!bytes || bytes > MAX_IMPORT[kind]) { await bucket.delete(key); return c.json({ error: bytes ? 'too_large' : 'empty' }, bytes ? 413 : 400) }
   const upload = { id, kind, name, key, contentType: type, bytes, secs: num(q.secs, 6 * 3600), width: num(q.width, 20000), height: num(q.height, 20000) }
   if (known) {
+    let row
     try {
-      // L'ancien fichier (autre type, donc autre clé) est effacé s'il traînait encore, sauf si une autre ligne visible l'utilise.
-      if (known.r2_key !== key) await deleteAsset(db, accountId(c), id, { bucket })
-      const row = await reviveUpload(db, accountId(c), upload)
-      // Une suppression en cours a pu effacer le fichier juste après son écriture : la ligne ne reste pas visible sans fichier.
-      if (await bucket.head(key)) return c.json({ asset: assetView(row, origin) }, 201)
-      await deleteAsset(db, accountId(c), id, { bucket })
-      return c.json({ error: 'storage_unavailable' }, 503)
+      row = await reviveUpload(db, accountId(c), upload, known.r2_key)
     } catch (e) {
-      // D1 refuse : le fichier réécrit ne reste pas dans R2 tant que la ligne est marquée supprimée.
-      const now = await getAsset(db, accountId(c), id).catch(() => null)
-      if (!now || now.deleted_at) await bucket.delete(key).catch(() => {})
+      // D1 refuse : le fichier écrit n'est effacé que si la ligne, relue, ne pointe pas sur lui. Relecture impossible : il reste
+      // (la reprise a pu être enregistrée malgré l'erreur ; mieux vaut un fichier en trop qu'une ligne visible sans fichier).
+      const now = await getAsset(db, accountId(c), id).then((r) => ({ row: r }), () => null)
+      if (now && now.row?.r2_key !== key) await bucket.delete(key).catch(() => {})
+      else if (!now) console.error('import rejoué : fichier laissé dans R2, ligne illisible', id, key)
       throw e
     }
+    if (!row) {
+      // Un autre envoi du même import a repris la ligne (ou elle a changé) : ce fichier-ci, sous sa propre clé, n'est à personne.
+      await bucket.delete(key).catch(() => {})
+      const winner = await getAsset(db, accountId(c), id)
+      if (winner && !winner.deleted_at) return c.json({ asset: assetView(winner, origin), replay: true })
+      return c.json({ error: 'storage_unavailable' }, 503)
+    }
+    // L'ancien fichier est effacé s'il traînait encore (suppression inachevée), sauf si une autre ligne visible l'utilise.
+    await purgeFile(db, bucket, { id, r2_key: known.r2_key })
+    return c.json({ asset: assetView(row, origin) }, 201)
   }
   try {
     const row = await insertUpload(db, accountId(c), upload)
