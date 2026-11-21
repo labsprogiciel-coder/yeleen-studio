@@ -33,7 +33,7 @@ dialog.am-dlg::backdrop{background:rgba(0,0,0,.66)}
 .am-it{position:relative;aspect-ratio:1;padding:0;border:2px solid transparent;border-radius:14px;overflow:hidden;background:var(--surface);cursor:pointer}
 .am-it .at{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border-radius:0}
 .am-it .st-thumb{position:absolute;inset:0}
-.am-it .st-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.am-it .st-thumb img,.am-it .st-thumb video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .am-it.on{border-color:var(--lime)}
 .am-it:disabled{opacity:.5;cursor:default}
 .am-nm{position:absolute;left:0;right:0;bottom:0;padding:18px 10px 8px;background:linear-gradient(transparent,rgba(0,0,0,.72));font-size:12px;font-weight:600;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
@@ -44,7 +44,9 @@ dialog.am-dlg::backdrop{background:rgba(0,0,0,.66)}
 .am-fav:hover{background:rgba(0,0,0,.75)}
 .am-fav::after{content:'';position:absolute;inset:-8px} /* l'étoile reste à 28 px ; la zone tactile fait 44 px */
 @media (hover:none){.am-fav{opacity:1}}
-.am-tag{position:absolute;left:8px;bottom:30px;padding:0 7px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:700;line-height:18px;pointer-events:none}
+/* Origine (« Qreativ ») : en haut à gauche, loin du nom ; à droite de l’étoile quand la vignette en a une. */
+.am-tag{position:absolute;left:8px;top:8px;padding:0 7px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:700;line-height:18px;pointer-events:none}
+.am-cell:has(.am-fav) .am-tag{left:44px;top:13px}
 .am-retry{margin-left:6px;padding:0;border:0;background:none;color:var(--lime-ink);font:inherit;text-decoration:underline;cursor:pointer}
 .am-empty{margin:0;padding:0 24px 24px;color:var(--ink-3);font-size:14px;text-align:center}
 .am-bar{position:absolute;left:0;right:0;bottom:16px;display:flex;justify-content:center;align-items:center;gap:10px;pointer-events:none}
