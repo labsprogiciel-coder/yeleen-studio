@@ -205,15 +205,18 @@ export default function RechargeDialog({ open, request, onClose }) {
   const [history, setHistory] = useState(null)
   const shown = useRef(open) // fenêtre ouverte, lue par le suivi : le message bref ne sert que fenêtre fermée
   shown.current = open
+  // Jeton de la vérification ou du lancement en cours : changer d'étape (Modifier, Retour, nouvelle ouverture, reprise) l'invalide,
+  // et une réponse arrivée après coup est ignorée. Elle ne peut donc jamais s'appliquer à d'autres choix que ceux envoyés.
+  const pendingCall = useRef(0)
   const seen = useRef(false) // résultat déjà montré (fenêtre ouverte) : la prochaine ouverture repart d'un nouvel achat
 
   const selected = PACKS.find((p) => p.id === pack) ?? PACKS[0]
   const c = TOPUP_COUNTRIES[country]
   const loadHistory = useCallback(() => { if (apiEnabled) api.topups().then((r) => setHistory(r.topups)).catch(() => {}) }, [])
 
-  const go = (i) => { setError(null); setCodeSteps(null); setCode(''); setStep(i) }
-  const restart = (toStep) => { setTopup(null); setReference(null); setCode(''); setCodeSteps(null); setError(null); setStep(toStep) }
-  const follow = (t) => { setTopup(t); setPack(t.pack); setOperator(t.operator); setCountry(countryOfPhone(t.phone, COUNTRY_LIST) ?? countriesFor(t.operator)[0] ?? COUNTRY_LIST[0]); setPhone(t.phone ?? ''); setCodeSteps(null); setError(null); setStep(3); setView('buy') }
+  const go = (i) => { pendingCall.current++; setBusy(false); setError(null); setCodeSteps(null); setCode(''); setStep(i) }
+  const restart = (toStep) => { pendingCall.current++; setBusy(false); setTopup(null); setReference(null); setCode(''); setCodeSteps(null); setError(null); setStep(toStep) }
+  const follow = (t) => { pendingCall.current++; setBusy(false); setTopup(t); setPack(t.pack); setOperator(t.operator); setCountry(countryOfPhone(t.phone, COUNTRY_LIST) ?? countriesFor(t.operator)[0] ?? COUNTRY_LIST[0]); setPhone(t.phone ?? ''); setCodeSteps(null); setError(null); setStep(3); setView('buy') }
 
   // Fenêtre native : ouverte en modale, fermée par Échap, par la croix ou d'un clic sur le fond.
   useEffect(() => {
@@ -280,20 +283,23 @@ export default function RechargeDialog({ open, request, onClose }) {
 
   /** Lance (ou relance avec `reference`) la recharge, puis passe à la suite selon la réponse. */
   const create = async (preAuthCode) => {
+    const ticket = ++pendingCall.current
     setBusy(true); setError(null)
     try {
       const r = await api.createTopup({ pack, country, operator, phone, ...(reference ? { reference } : {}), ...(preAuthCode ? { preAuthCode } : {}) })
       syncBalance(r.balance)
+      if (ticket !== pendingCall.current) { loadHistory(); return } // choix changés entre-temps : la recharge reste visible dans « Mes recharges »
       setReference(r.topup.reference)
       if (r.topup.status === 'awaiting_code') { setCodeSteps(lines(r.topup.codeInstructions)); setStep(3); return } // Orange Burkina sans code : paygate n'a rien créé
       setCodeSteps(null); setTopup(r.topup); setStep(3); loadHistory()
       if (r.topup.authType === 'REDIRECT_AUTH' && r.topup.authUrl) window.location.assign(r.topup.authUrl)
     } catch (e) {
+      if (ticket !== pendingCall.current) return
       const t = e.body?.topup
       if (t?.reference) setReference(t.reference)
       if ((e.body?.error === 'cannot_retry' && t) || (t && (t.status === 'failed' || t.status === 'expired'))) { setCodeSteps(null); setTopup(t); setStep(3); loadHistory(); return }
       setError(errorMessage(e, { country }))
-    } finally { setBusy(false) }
+    } finally { if (ticket === pendingCall.current) setBusy(false) }
   }
 
   /** Numéro saisi : on demande à paygate si ce moyen marche pour ce numéro et ce montant, et comment le valider. */
@@ -302,13 +308,16 @@ export default function RechargeDialog({ open, request, onClose }) {
     if (busy) return
     const digits = phone.replace(/\D/g, '')
     if (digits.length !== c.digits && digits.length !== c.digits + c.dial.length) { setError(errorMessage('invalid_phone', { country })); return }
+    const ticket = ++pendingCall.current
     setBusy(true); setError(null)
     let options
     try {
       options = await api.topupOptions({ country, operator, phone, pack })
     } catch (err) {
+      if (ticket !== pendingCall.current) return
       setBusy(false); setError(errorMessage(err, { country })); return
     }
+    if (ticket !== pendingCall.current) return // choix changés pendant la vérification : réponse périmée
     setBusy(false)
     const limit = limitError(options, selected.fcfa)
     if (limit) { setError(errorMessage(limit, { country, min: options.min, max: options.max })); return }
