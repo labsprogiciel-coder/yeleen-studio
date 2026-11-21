@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 import { AuthError, verifyClerkToken } from './auth.js'
 import { falClient } from './fal.js'
 import { buildInput, endpointFor, runwareInput } from './inputs.js'
-import { STORING, advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
+import { STORING, advanceJob, isActive, providerCancel, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { VIDEO_MODELS, audioBilledSecs } from '@studio/catalog'
 import { findTool } from '@studio/catalog/tools'
@@ -103,26 +103,8 @@ const onRunware = (model) => model.provider === 'runware' // voir le catalogue :
 const higgsfield = (c) => higgsfieldClient({ key: c.env.HIGGSFIELD_KEY })
 const onHiggsfield = (model) => model.provider === 'higgsfield' // Soul 2, Genjutsu (outils)
 
-/**
- * Annulation chez le fournisseur, sans garantie (une erreur est journalisée) ; Runware ne sait pas annuler.
- * Rend true seulement si le fournisseur a confirmé l'annulation : Runware ou une demande déjà commencée ou finie
- * (Higgsfield : 400, 409) rendent false, et l'annulation de l'utilisateur n'est alors pas remboursée. Une erreur rend null :
- * l'issue est inconnue.
- */
-async function providerCancel(env, job) {
-  if (job.provider === 'runware') return false
-  try {
-    if (job.provider === 'higgsfield') return (await higgsfieldClient({ key: env.HIGGSFIELD_KEY }).cancel(job.cancelUrl)) === true
-    await falClient({ key: env.FAL_KEY }).cancel(job.cancelUrl)
-    return true
-  } catch (e) {
-    console.error(`annulation ${job.provider ?? 'fal'}`, e.message)
-    return null
-  }
-}
-
 // Compte bloqué par un administrateur (voir account-do.js) : plus de recharge, d'import ni d'« Améliorer ». Les générations sont
-// refusées par le Durable Object lui-même (`/job/claim`).
+// refusées par le Durable Object lui-même (`/job/reserve`).
 const notBlocked = async (c, next) => ((await call(c, '/blocked')).blocked ? c.json({ error: 'account_blocked' }, 403) : next())
 
 const MAX_UPLOAD = 25 * 1024 * 1024
@@ -448,42 +430,57 @@ app.post('/jobs', async (c) => {
   }
 
   const id = crypto.randomUUID()
-  // Clé de demande : la même demande rejouée (double clic, nouvel essai après une coupure) ne coûte qu'une fois.
+  // Clé de demande : la même demande rejouée (double clic, nouvel essai après une coupure) ne coûte qu'une fois, et rend toujours la
+  // même génération, même échouée (jamais un second envoi au fournisseur sous la même clé).
   const key = typeof req.requestId === 'string' && /^[\w.-]{8,80}$/.test(req.requestId) ? req.requestId : null
-  const claim = await call(c, '/job/claim', { key, jobId: id, max: Number(c.env.MAX_ACTIVE_JOBS ?? 6) })
-  if (claim.existing) {
-    const prev = await account(c).fetch(`https://account/job/get?id=${claim.existing}`).then((r) => r.json())
-    return c.json({ jobId: claim.existing, status: prev?.status ?? 'IN_QUEUE', cost: prev?.cost ?? price.cost, balance: (await call(c, '/balance')).balance, deduped: true }, 202)
-  }
-  if (!claim.ok) return c.json(claim, claim.error === 'account_blocked' ? 403 : 429) // { error: 'too_many_active', max } ou compte bloqué
-  const debit = await call(c, '/debit', { jobId: id, amount: price.cost })
-  if (!debit.ok) { await call(c, '/job/release', { jobId: id }); return c.json(debit, 402) } // { error: 'insufficient', missing } : le message que l'interface affiche déjà
-
-  let sub
   const provider = onRunware(price.model) ? 'runware' : onHiggsfield(price.model) ? 'higgsfield' : 'fal'
   const endpoint = endpointFor(price.model, req)
   const origin = new URL(c.req.url).origin
+  // Réservation : la place, le débit et la génération (`submitting` : pas encore envoyée) sont écrits par une seule requête du compte.
+  // Si cette route s'arrête ensuite (client parti, erreur), le réveil du compte la fait échouer et la rembourse (voir SUBMIT_DEADLINE).
+  const draft = { id, kind: req.kind, modelId: price.model.id, provider, endpoint, cost: price.cost, count: price.count, status: 'IN_QUEUE', submitting: true, origin, createdAt: Date.now(), ...requestOf(req, texts) }
+  // Génération déjà enregistrée (même clé, ou terminée pendant l'envoi) : rendue avec son vrai statut, 202 si elle est encore active.
+  const existing = (job, balance, extra = {}) => c.json({ ...view(job), cost: job.cost ?? price.cost, balance, ...extra }, isActive(job) ? 202 : 200)
+  const r = await call(c, '/job/reserve', { key, max: Number(c.env.MAX_ACTIVE_JOBS ?? 6), job: draft })
+  if (r.existing) return existing(r.job ?? { id: r.existing, status: 'IN_QUEUE' }, r.balance, { deduped: true })
+  // { error: 'too_many_active', max }, compte bloqué, ou { error: 'insufficient', missing } : le message que l'interface affiche déjà
+  if (!r.ok) return c.json(r, r.error === 'account_blocked' ? 403 : r.error === 'too_many_active' ? 429 : 402)
+
+  let sub
   try {
     const withUser = { ...req, count: price.count, endUserId: accountId(c) }
     sub = provider === 'runware' ? await runware(c).submit(runwareInput(price.model, withUser))
       : provider === 'higgsfield' ? await higgsfield(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { idempotencyKey: id })
       : await fal(c).submit(endpoint, buildInput(req.kind, price.model, withUser), { webhookUrl: await falWebhook(c, origin, id) })
   } catch (e) {
-    const back = await call(c, '/refund', { jobId: id })
-    await call(c, '/job/release', { jobId: id })
     console.error(`submit ${provider}`, e.message)
     const policy = e?.isContentPolicy === true // FalError, RunwareError ou HiggsfieldError
-    return c.json({ error: policy ? 'moderation' : 'provider', refunded: back.refunded ?? price.cost, balance: back.balance }, policy ? 422 : 502)
+    // Remboursée et notée FAILED d'un coup : la génération existe, le nouvel essai de l'interface (même clé) et son suivi la retrouvent.
+    const back = await call(c, '/job/fail', { jobId: id, failure: policy ? 'moderation' : 'provider' })
+    return c.json({ error: policy ? 'moderation' : 'provider', refunded: back.refunded ?? back.job?.refund ?? 0, balance: back.balance }, policy ? 422 : 502)
   }
 
   // Runware n'a pas de file visible ni d'annulation : la génération est « en cours » dès l'envoi (et une annulation n'est pas remboursée).
   const status = provider === 'runware' ? 'IN_PROGRESS' : 'IN_QUEUE'
-  const job = { id, kind: req.kind, modelId: price.model.id, provider, endpoint, cost: price.cost, count: price.count, status, origin, createdAt: Date.now(), ...(provider === 'runware' ? { startedAt: Date.now() } : {}), ...sub, ...requestOf(req, texts) }
-  await call(c, '/job/put', job)
-  return c.json({ jobId: id, status: job.status, cost: price.cost, balance: debit.balance }, 202)
+  const { submitting, ...kept } = draft
+  const job = { ...kept, status, ...(provider === 'runware' ? { startedAt: Date.now() } : {}), ...sub }
+  let put
+  try {
+    put = await call(c, '/job/put', job)
+  } catch (e) {
+    await providerCancel(c.env, job) // jamais enregistrée : le réveil rembourse la réservation, on tente d'arrêter le fournisseur
+    throw e
+  }
+  // Refusée : échouée par le réveil (envoi trop long) ou annulée par l'administration entre-temps, donc déjà remboursée.
+  if (put.ok === false) {
+    await providerCancel(c.env, job)
+    return existing(put.job ?? job, (await call(c, '/balance')).balance)
+  }
+  return c.json({ jobId: id, status, cost: price.cost, balance: r.balance }, 202)
 })
 
-const view = (job, extra = {}) => ({ jobId: job.id, status: job.status, outputs: job.outputs, failure: job.failure, refund: job.refund ?? 0, ...extra })
+// `timeout` (délai dépassé, voir jobs.js) est présenté comme `provider` : c'est le message que l'interface connaît (« n'a pas répondu à temps »).
+const view = (job, extra = {}) => ({ jobId: job.id, status: job.status, outputs: job.outputs, failure: job.failure === 'timeout' ? 'provider' : job.failure, refund: job.refund ?? 0, ...extra })
 const ended = (job) => !isActive(job)
 
 // Suivi par l'interface : on fait avancer la génération tant qu'elle est active (voir jobs.js ; le webhook et le réveil du compte aussi).
@@ -514,6 +511,8 @@ app.post('/jobs/:id/cancel', async (c) => {
   // refuse aussi, pour une copie commencée après cette lecture).
   const storing = (j) => j.storingAt && Date.now() - j.storingAt < STORING
   const balance = async () => (await call(c, '/balance')).balance
+  // En cours d'envoi au fournisseur : pas encore annulable (l'annuler ici la noterait CANCELED pendant que le fournisseur la démarre).
+  if (job.submitting) return c.json(view(job, { balance: await balance() }))
   if (storing(job)) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { balance: await balance() }))
   // L'état enregistré peut dater (il n'avance qu'au suivi, au webhook ou au réveil) : on relit d'abord l'état chez le fournisseur,
   // comme l'annulation de l'administration. Runware : jamais remboursé ni annulé chez lui, rien à relire.

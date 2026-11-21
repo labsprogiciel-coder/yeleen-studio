@@ -13,6 +13,13 @@ export const isActive = (job) => job.status === 'IN_QUEUE' || job.status === 'IN
 
 export const STORING = 60_000 // une copie dans R2 commencée depuis moins longtemps est en cours ailleurs
 
+// Réservée (`submitting`) mais jamais envoyée au bout de ce délai : la route est morte, le réveil la rembourse. Plus long que le plus
+// long envoi (Runware : 4 essais, 3 attentes de 8 s au plus) et multiple du réveil (60 s).
+export const SUBMIT_DEADLINE = 3 * 60_000
+// Durée maximale d'une génération chez le fournisseur, par type ; au-delà, le réveil la fait échouer et la rembourse (`timeout`).
+const CEILING = { image: 3600_000, audio: 3600_000, tryon: 3600_000 }
+export const deadlineOf = (job) => job.createdAt + (job.submitting ? SUBMIT_DEADLINE : CEILING[job.kind] ?? 2 * 3600_000)
+
 /** Refus définitif de fal (4xx autre que 408 et 429, ou refus pour contenu) ; le reste (5xx, réseau) est passager. */
 const permanent = (e) => e instanceof FalError && (e.isContentPolicy || (e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429))
 
@@ -52,11 +59,37 @@ async function providerStatus(env, job) {
 }
 
 /**
+ * Annulation chez le fournisseur, sans garantie (une erreur est journalisée) ; Runware ne sait pas annuler.
+ * Rend true seulement si le fournisseur a confirmé l'annulation : Runware, une demande pas encore envoyée (`submitting`) ou une
+ * demande déjà commencée ou finie (Higgsfield : 400, 409) rendent false, et l'annulation de l'utilisateur n'est alors pas remboursée.
+ * Une erreur rend null : l'issue est inconnue.
+ */
+export async function providerCancel(env, job) {
+  if (job.submitting || job.provider === 'runware') return false
+  try {
+    if (job.provider === 'higgsfield') return (await higgsfieldClient({ key: env.HIGGSFIELD_KEY }).cancel(job.cancelUrl)) === true
+    await falClient({ key: env.FAL_KEY }).cancel(job.cancelUrl)
+    return true
+  } catch (e) {
+    console.error(`annulation ${job.provider ?? 'fal'}`, e.message)
+    return null
+  }
+}
+
+/** Délai dépassé (voir deadlineOf) : annulation chez le fournisseur (sans garantie), puis échec `timeout` remboursé par le compte. */
+export async function expireJob({ env, acct, job }) {
+  if (!job.submitting) await providerCancel(env, job)
+  return acct('/job/fail', { jobId: job.id, failure: 'timeout' })
+}
+
+/**
  * Fait avancer une génération active d'un pas. `acct(path, body)` appelle le Durable Object du compte (POST JSON) ;
  * `origin` sert aux adresses /files des copies dans R2. Un échec rembourse (une seule fois : le remboursement est idempotent).
  * Rend { job, queuePosition?, logs?, balance? } ; une erreur passagère du fournisseur est levée (on réessaiera).
  */
 export async function advanceJob({ env, acct, accountId, origin, job }) {
+  // Réservée, pas encore envoyée au fournisseur : rien à lui demander (suivi, webhook en avance, réveil, annulation).
+  if (job.submitting) return { job, queuePosition: 0, logs: [] }
   // Échec : le Durable Object rembourse et note FAILED d'un coup, seulement si la génération est encore active chez lui.
   const fail = async (failure) => {
     const r = await acct('/job/fail', { jobId: job.id, failure })
