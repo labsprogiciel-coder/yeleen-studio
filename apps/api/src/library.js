@@ -118,7 +118,9 @@ export function publicTemplate(t, rows, origin) {
   if (rows.length) {
     const start = inputs.find((i) => i.slot === 'start' && i.mode === 'generated')
     image = start?.prompt ?? null
-    photo = (start?.from != null ? inputs.find((i) => i.idx === start.from)?.label : null) ?? null
+    // Sans image de début créée : la photo à fournir est l'image de début elle-même (ancienne forme « photo seule »), si elle est obligatoire.
+    photo = (start ? (start.from != null ? inputs.find((i) => i.idx === start.from)?.label : null)
+      : inputs.find((i) => i.slot === 'start' && i.mode === 'user' && !i.optional)?.label) ?? null
   }
   return {
     id: t.id, name: t.name, blurb: t.blurb ?? null, category: t.category, video: `${origin}/files/${t.video_key}`, image, modelId: t.model_id,

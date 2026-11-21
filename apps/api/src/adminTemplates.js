@@ -3,6 +3,7 @@ import { VIDEO_MODELS } from '@studio/catalog'
 import { LIMITS, findVideoModel, inputIssues } from '@studio/catalog/template-slots'
 import { INPUT_COLS, TEMPLATE_COLS, inputRows, inputsOf, publicTemplate, templateRow } from './library.js'
 import { mediaInfo } from './media.js'
+import { badDuration } from './pricing.js'
 import { templateKey } from './storage.js'
 
 /**
@@ -38,6 +39,24 @@ const rand = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => 'a
 export const slug = (name) => `${String(name).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40).replace(/^-+|-+$/g, '') || 'modele'}-${rand(4)}`
 const parse = (v) => { try { return JSON.parse(v) } catch { return null } }
 
+// Premiers octets attendus pour chaque type accepté : un fichier dont le contenu ne correspond pas à son type est refusé (415).
+const at = (b, off, s) => [...s].every((ch, k) => b[off + k] === ch.charCodeAt(0))
+const isoBmff = (b) => at(b, 4, 'ftyp')
+const wav = (b) => at(b, 0, 'RIFF') && at(b, 8, 'WAVE')
+const MAGIC = {
+  'image/png': (b) => [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((x, k) => b[k] === x),
+  'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/webp': (b) => at(b, 0, 'RIFF') && at(b, 8, 'WEBP'),
+  'video/mp4': isoBmff, 'audio/mp4': isoBmff,
+  'video/quicktime': (b) => ['ftyp', 'moov', 'mdat', 'wide', 'free', 'skip', 'pnot'].some((x) => at(b, 4, x)),
+  'video/webm': (b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3,
+  'audio/mpeg': (b) => at(b, 0, 'ID3') || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0),
+  'audio/wav': wav, 'audio/x-wav': wav,
+  'audio/ogg': (b) => at(b, 0, 'OggS'),
+}
+/** Le contenu (ses premiers octets) correspond-il au type annoncé ? */
+export const magicOk = (type, bytes) => Boolean(MAGIC[type]?.(bytes))
+
 /** Plans illisibles pour ce modèle : 1 à 4 plans { text, dur > 0 }, plusieurs seulement s'il sait enchaîner des plans. */
 const badPlans = (plans, model) => !Array.isArray(plans) || !plans.length || plans.length > 4 || (plans.length > 1 && !model?.caps?.multiShot)
   || plans.some((p) => typeof p?.text !== 'string' || p.text.length > 2000 || !(typeof p.dur === 'number' && Number.isFinite(p.dur) && p.dur > 0))
@@ -53,7 +72,34 @@ export function templateIssues({ videoKey, modelId, plans, inputs, genjutsu }) {
   if (!model) out.push({ code: 'model_removed' })
   else out.push(...inputIssues(model, inputs))
   if (badPlans(plans, model)) out.push({ code: 'bad_plans' })
+  else {
+    if (plans.some((p) => !p.text.trim())) out.push({ code: 'empty_plan' })
+    // Durées : la règle du prix (pricing.js), pour chaque plan et pour leur somme (plusieurs plans). Un son impose la sienne.
+    const c = model?.caps
+    const total = plans.length > 1 ? plans.reduce((n, p) => n + Math.round(p.dur), 0) : plans[0].dur
+    if (c && !c.duration.fromAudio && ((plans.length > 1 && plans.some((p) => badDuration(c, p.dur))) || badDuration(c, total))) out.push({ code: 'bad_duration' })
+  }
   return out
+}
+
+/**
+ * Problèmes des fichiers d'un modèle dans R2 (publication, enregistrement d'un modèle publié) : vidéo d'exemple, source Genjutsu et
+ * fichiers fixes doivent exister (`missing_file`), et un fichier fixe doit être de la sorte de son entrée (`kind_mismatch`).
+ */
+export async function fileIssues(bucket, { videoKey, inputs, genjutsu }) {
+  if (!bucket) return []
+  const files = [
+    ...(videoKey ? [{ key: videoKey, kind: 'video' }] : []),
+    ...(genjutsu?.sourceKey ? [{ key: genjutsu.sourceKey, kind: 'video' }] : []),
+    ...(inputs ?? []).filter((i) => i.mode === 'fixed' && i.file).map((i) => ({ key: i.file, kind: i.kind, idx: i.idx })),
+  ]
+  const heads = await Promise.all(files.map((f) => bucket.head(f.key)))
+  return files.flatMap((f, n) => {
+    const at = f.idx != null ? { idx: f.idx } : {}
+    if (!heads[n]) return [{ code: 'missing_file', key: f.key, ...at }]
+    const type = heads[n].httpMetadata?.contentType
+    return type && !type.startsWith(`${f.kind}/`) ? [{ code: 'kind_mismatch', key: f.key, kind: f.kind, ...at }] : []
+  })
 }
 
 /** Un modèle tel que l'administration le reçoit (toutes les données, adresses des fichiers comprises, et ses problèmes). */
@@ -157,7 +203,10 @@ export function adminTemplatesApp() {
     const t = ID.test(id ?? '') ? await templateRow(c.env.DB, id) : null
     return t ? { t } : { error: c.json({ error: 'not_found' }, 404) }
   }
-  const view = async (c, id) => adminView(await templateRow(c.env.DB, id), await inputRows(c.env.DB, id), origin(c))
+  /** Le modèle `id` tel que l'administration le reçoit, ou null s'il a été supprimé entre-temps. */
+  const view = async (c, id) => { const t = await templateRow(c.env.DB, id); return t ? adminView(t, await inputRows(c.env.DB, id), origin(c)) : null }
+  const gone = (c) => c.json({ error: 'not_found' }, 404)
+  const reply = (c, v, status = 200) => (v ? c.json({ template: v }, status) : gone(c))
 
   // Tous les modèles, publiés ou non, dans l'ordre de la page Modèles.
   a.get('/', async (c) => {
@@ -178,7 +227,7 @@ export function adminTemplatesApp() {
     await db.prepare(`INSERT INTO templates (id, name, blurb, category, video_key, image, model_id, plans, resolution, ratio, sound, photo, sort, published, created_at)
       VALUES (?1, ?2, NULL, 'autres', '', NULL, 'seedance-2-5', '[{"text":"","dur":5}]', NULL, NULL, 1, NULL, ?3, 0, ?4)`).bind(id, name, (last ?? -1) + 1, Date.now()).run()
     await log(c, id, 'create', { name })
-    return c.json({ template: await view(c, id) }, 201)
+    return reply(c, await view(c, id), 201)
   })
 
   // Nouvel ordre : la liste complète (ou partielle) des identifiants ; chaque modèle prend sa position.
@@ -189,14 +238,14 @@ export function adminTemplatesApp() {
     const known = new Set((await db.prepare('SELECT id FROM templates').bind().all()).results.map((r) => r.id))
     const missing = ids.filter((x) => !known.has(x))
     if (missing.length) return c.json({ error: 'unknown_template', ids: missing }, 400)
-    for (const [i, x] of ids.entries()) await db.prepare('UPDATE templates SET sort = ?2 WHERE id = ?1').bind(x, i).run()
+    await db.batch(ids.map((x, i) => db.prepare('UPDATE templates SET sort = ?2 WHERE id = ?1').bind(x, i))) // tout ou rien
     await log(c, '*', 'order', { ids })
     return c.json({ ok: true })
   })
 
   a.get('/:id', async (c) => {
     const { t, error } = await load(c)
-    return error ?? c.json({ template: await view(c, t.id) })
+    return error ?? reply(c, await view(c, t.id))
   })
 
   // Tel que l'application le recevra (GET /templates), publié ou non : pour « Essayer sur mon compte » (Cinéma, ?tpl=<id>).
@@ -216,25 +265,35 @@ export function adminTemplatesApp() {
     const { data, bad } = readTemplate(await body(c))
     if (bad) return c.json({ error: 'invalid_template', issues: bad }, 400)
     const issues = templateIssues(data)
+    if (t.published) issues.push(...await fileIssues(c.env.FILES, data))
     if (t.published && issues.length) return c.json({ error: 'invalid_template', issues }, 422) // publié : il doit rester utilisable
     const db = c.env.DB
-    await db.prepare(`UPDATE templates SET name = ?2, blurb = ?3, category = ?4, video_key = ?5, image = NULL, model_id = ?6, plans = ?7, resolution = ?8, ratio = ?9,
-      sound = ?10, photo = NULL WHERE id = ?1`).bind(t.id, data.name, data.blurb, data.category, data.videoKey, data.modelId, JSON.stringify(data.plans),
-      data.resolution, data.ratio, data.sound ? 1 : 0).run()
-    // Pas de batch() (la base de test n'en a pas) : effacer puis réécrire, dans l'ordre.
-    await db.prepare('DELETE FROM template_inputs WHERE template_id = ?1').bind(t.id).run()
-    for (const i of data.inputs) {
-      await db.prepare('INSERT INTO template_inputs (template_id, idx, slot, kind, mode, file_key, label, optional, prompt, from_idx) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)')
-        .bind(t.id, i.idx, i.slot, i.kind, i.mode, i.file ?? null, i.label ?? null, i.optional ? 1 : 0, i.prompt ?? null, i.from ?? null).run()
-    }
+    // Une seule transaction (batch) : le modèle, ses entrées et sa source Genjutsu changent ensemble ou pas du tout. Les ajouts n'ont
+    // lieu que si le modèle existe encore (supprimé entre-temps : rien n'est recréé, réponse 404).
+    const alive = 'WHERE EXISTS (SELECT 1 FROM templates WHERE id = ?1)'
     const g = data.genjutsu
-    if (g) {
-      await db.prepare(`INSERT INTO template_genjutsu (template_id, tool, source_key, secs, prompt, roles) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+    await db.batch([
+      db.prepare(`UPDATE templates SET name = ?2, blurb = ?3, category = ?4, video_key = ?5, image = NULL, model_id = ?6, plans = ?7, resolution = ?8, ratio = ?9,
+        sound = ?10, photo = NULL WHERE id = ?1`).bind(t.id, data.name, data.blurb, data.category, data.videoKey, data.modelId, JSON.stringify(data.plans),
+        data.resolution, data.ratio, data.sound ? 1 : 0),
+      db.prepare('DELETE FROM template_inputs WHERE template_id = ?1').bind(t.id),
+      ...data.inputs.map((i) => db.prepare(`INSERT INTO template_inputs (template_id, idx, slot, kind, mode, file_key, label, optional, prompt, from_idx)
+        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 ${alive}`).bind(t.id, i.idx, i.slot, i.kind, i.mode, i.file ?? null, i.label ?? null, i.optional ? 1 : 0, i.prompt ?? null, i.from ?? null)),
+      g ? db.prepare(`INSERT INTO template_genjutsu (template_id, tool, source_key, secs, prompt, roles) SELECT ?1, ?2, ?3, ?4, ?5, ?6 ${alive}
         ON CONFLICT (template_id) DO UPDATE SET tool = excluded.tool, source_key = excluded.source_key, secs = excluded.secs, prompt = excluded.prompt, roles = excluded.roles`)
-        .bind(t.id, g.tool, g.sourceKey, g.secs, g.prompt, JSON.stringify(g.roles)).run()
-    } else await db.prepare('DELETE FROM template_genjutsu WHERE template_id = ?1').bind(t.id).run()
+        .bind(t.id, g.tool, g.sourceKey, g.secs, g.prompt, JSON.stringify(g.roles))
+        : db.prepare('DELETE FROM template_genjutsu WHERE template_id = ?1').bind(t.id),
+    ])
+    const v = await view(c, t.id)
+    if (!v) return gone(c)
     await log(c, t.id, 'update', { issues: issues.length })
-    return c.json({ template: await view(c, t.id) })
+    // Publié entre notre lecture et notre écriture (autre administrateur) alors que cette version a des problèmes : on le retire.
+    if (v.published && v.issues.length) {
+      await db.prepare('UPDATE templates SET published = 0 WHERE id = ?1').bind(t.id).run()
+      await log(c, t.id, 'unpublish', { issues: v.issues.length })
+      return reply(c, await view(c, t.id))
+    }
+    return c.json({ template: v })
   })
 
   // Publier (zéro problème, une vidéo d'exemple) ou retirer de la page Modèles (toujours permis).
@@ -243,27 +302,40 @@ export function adminTemplatesApp() {
     if (error) return error
     const { published } = await body(c)
     if (typeof published !== 'boolean') return c.json({ error: 'invalid_published' }, 400)
+    const db = c.env.DB
     if (published) {
-      const issues = (await view(c, t.id)).issues
+      const v = await view(c, t.id)
+      if (!v) return gone(c)
+      const issues = [...v.issues, ...await fileIssues(c.env.FILES, v)]
       if (issues.length) return c.json({ error: 'invalid_template', issues }, 422)
     }
-    await c.env.DB.prepare('UPDATE templates SET published = ?2 WHERE id = ?1').bind(t.id, published ? 1 : 0).run()
+    await db.prepare('UPDATE templates SET published = ?2 WHERE id = ?1').bind(t.id, published ? 1 : 0).run()
+    const v = await view(c, t.id)
+    if (!v) return gone(c)
+    // Relu après l'écriture : une version enregistrée entre-temps (autre administrateur) qui a des problèmes n'est pas publiée.
+    if (published && v.issues.length) {
+      await db.prepare('UPDATE templates SET published = 0 WHERE id = ?1').bind(t.id).run()
+      return c.json({ error: 'invalid_template', issues: v.issues }, 422)
+    }
     await log(c, t.id, published ? 'publish' : 'unpublish')
-    return c.json({ template: await view(c, t.id) })
+    return c.json({ template: v })
   })
 
-  // Suppression définitive : lignes D1, puis fichiers R2 du dossier du modèle seulement (une autre clé peut être partagée).
+  // Suppression définitive : fichiers R2 du dossier du modèle seulement (une autre clé peut être partagée), puis lignes D1 (une panne
+  // de R2 en route laisse le modèle en place : on peut réessayer). Refusée (409) si un autre modèle cite un fichier de ce dossier.
   a.delete('/:id', async (c) => {
     const { t, error } = await load(c)
     if (error) return error
     const db = c.env.DB
-    for (const table of ['template_inputs', 'template_genjutsu']) await db.prepare(`DELETE FROM ${table} WHERE template_id = ?1`).bind(t.id).run()
-    await db.prepare('DELETE FROM templates WHERE id = ?1').bind(t.id).run()
+    const prefix = `templates/${t.id}/`
+    const users = (await db.prepare(`SELECT id FROM templates WHERE id != ?1 AND substr(video_key, 1, ?3) = ?2
+      UNION SELECT template_id FROM template_inputs WHERE template_id != ?1 AND substr(file_key, 1, ?3) = ?2
+      UNION SELECT template_id FROM template_genjutsu WHERE template_id != ?1 AND substr(source_key, 1, ?3) = ?2`).bind(t.id, prefix, prefix.length).all()).results
+    if (users.length) return c.json({ error: 'files_in_use', templates: users.map((r) => r.id).sort() }, 409)
     const bucket = c.env.FILES
     const keys = []
     if (bucket) {
       // Toute la liste d'abord, puis les suppressions : une page suivante ne dépend pas de ce qui a déjà été effacé.
-      const prefix = `templates/${t.id}/`
       let cursor
       do {
         const page = await bucket.list({ prefix, ...(cursor ? { cursor } : {}) })
@@ -272,6 +344,8 @@ export function adminTemplatesApp() {
       } while (cursor)
       for (const k of keys) await bucket.delete(k)
     }
+    await db.batch(['template_inputs', 'template_genjutsu'].map((table) => db.prepare(`DELETE FROM ${table} WHERE template_id = ?1`).bind(t.id))
+      .concat(db.prepare('DELETE FROM templates WHERE id = ?1').bind(t.id)))
     await log(c, t.id, 'delete', { name: t.name, files: keys.length })
     return c.json({ ok: true })
   })
@@ -293,9 +367,18 @@ export function adminTemplatesApp() {
     if (length > max) return c.json({ error: 'too_large', max }, 413)
     const key = templateKey(t.id, rand(12), type)
     const body = length > STREAM_FROM ? c.req.raw.body : await c.req.arrayBuffer()
+    // Contenu contrôlé par ses premiers octets : avant l'écriture quand il est en mémoire, relu dans R2 après l'écriture d'un flux.
+    if (body instanceof ArrayBuffer && body.byteLength && !magicOk(type, new Uint8Array(body, 0, Math.min(16, body.byteLength)))) return c.json({ error: 'unsupported_type' }, 415)
     const stored = await bucket.put(key, body, { httpMetadata: { contentType: type } })
     const size = stored?.size ?? length
     if (!size || size > max) { await bucket.delete(key); return c.json({ error: size ? 'too_large' : 'empty', ...(size ? { max } : {}) }, size ? 413 : 400) }
+    if (!(body instanceof ArrayBuffer)) {
+      const head = await bucket.get(key, { range: { offset: 0, length: 16 } })
+      const first = head ? new Uint8Array(await new Response(head.body).arrayBuffer()).subarray(0, 16) : new Uint8Array()
+      if (!magicOk(type, first)) { await bucket.delete(key); return c.json({ error: 'unsupported_type' }, 415) }
+    }
+    // Modèle supprimé pendant le dépôt : le fichier ne doit pas lui survivre.
+    if (!(await templateRow(c.env.DB, t.id))) { await bucket.delete(key); return gone(c) }
     // Source Genjutsu : sa durée fixe le prix ; mesurée ici quand le fichier est en mémoire (MP4, MOV), sinon l'éditeur la demande.
     const secs = role === 'source' && body instanceof ArrayBuffer ? mediaInfo(body, type)?.secs : undefined
     const name = (c.req.query('name') ?? '').replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120)

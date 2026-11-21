@@ -50,13 +50,15 @@ export const canGenerate = (input, given = {}, prompt = input.prompt) => Boolean
 
 /**
  * Ce qui manque pour lancer la vidéo, dans l'ordre des entrées : chaque entrée `user` obligatoire vide (`source` comprise, tant que
- * son image n'est pas faite) et chaque image `generated` pas encore créée. [{ idx, why: 'user' | 'generated', title }].
+ * son image n'est pas faite), chaque image `generated` pas encore créée et chaque entrée facultative dont l'absence décalerait la
+ * numérotation des suivantes (`order`, voir `shifts`). [{ idx, why: 'user' | 'generated' | 'order', title }].
  */
 export function missingInputs(inputs, given = {}) {
   const out = []
   for (const i of inputs) {
     if (given[i.idx]) continue
-    if (i.mode === 'user' && !i.optional) {
+    if (i.mode === 'user' && i.optional && shifts(i, inputs, given)) out.push({ idx: i.idx, why: 'order', title: inputTitle(i, inputs) })
+    else if (i.mode === 'user' && !i.optional) {
       if (i.slot === 'source' && inputs.some((g) => g.mode === 'generated' && g.from === i.idx && given[g.idx])) continue // l'image est faite : la photo ne sert plus
       out.push({ idx: i.idx, why: 'user', title: inputTitle(i, inputs) })
     } else if (i.mode === 'generated') out.push({ idx: i.idx, why: 'generated', title: inputTitle(i, inputs) })
@@ -64,10 +66,21 @@ export function missingInputs(inputs, given = {}) {
   return out
 }
 
+/**
+ * Une entrée facultative omise décale les jetons des suivantes de sa famille (le serveur ne garde que les fichiers envoyés, dans
+ * l'ordre) : « @Image3 » deviendrait « @Image2 ». Tant qu'une entrée plus loin de la même famille part (fixe ou remplie), elle est due.
+ */
+const family = (i) => (i.slot === 'element' ? 'element' : i.slot === 'reference' ? i.kind : null)
+function shifts(input, inputs, given) {
+  const f = family(input)
+  return Boolean(f) && inputs.some((j) => j.idx > input.idx && family(j) === f && (j.mode === 'fixed' || given[j.idx]))
+}
+
 /** La phrase qui dit ce qui manque, ou null. */
 export function blockerText(missing) {
   const m = missing[0]
   if (!m) return null
+  if (m.why === 'order') return `Ajoutez aussi : ${lower(m.title)} (les entrées suivantes sont numérotées après elle).`
   return m.why === 'generated' ? `Créez d’abord l’${lower(m.title)}.` : `Ajoutez : ${lower(m.title)}.`
 }
 

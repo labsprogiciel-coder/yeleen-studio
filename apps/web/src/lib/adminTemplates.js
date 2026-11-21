@@ -75,9 +75,37 @@ const ISSUES = {
   genjutsu_incomplete: 'Genjutsu incomplet : vidéo source, durée (4 à 20 s), consigne et au moins un rôle.',
   invalid_template: 'Le modèle n’est pas valide : corrigez les points signalés.',
   too_large: 'Fichier trop lourd : images 10 Mo, sons 15 Mo, vidéo d’exemple 20 Mo, autres vidéos 100 Mo au plus.',
-  unsupported_type: 'Format de fichier refusé pour cet emplacement.',
+  unsupported_type: 'Format de fichier refusé pour cet emplacement (ou contenu qui ne correspond pas à son type).',
   length_required: 'Taille du fichier inconnue : réessayez le dépôt.',
   not_found: 'Ce modèle n’existe plus.',
+  unknown_template: 'Ce modèle n’existe plus.',
+  files_in_use: 'Fichier encore utilisé par d’autres modèles{templates} : retirez-le d’abord de ceux-ci.',
+  missing_file: 'Fichier introuvable dans le stockage{key} : déposez-le à nouveau.',
+  bad_duration: 'Durée refusée par ce modèle vidéo : choisissez une durée proposée.',
+  bad_dur: 'Durée refusée par ce modèle vidéo : choisissez une durée proposée.',
+  bad_secs: 'Durée de la vidéo source hors limites (4 à 20 s).',
+  kind_mismatch: 'Le fichier déposé n’est pas de la sorte attendue (image, vidéo ou audio).',
+  optional_not_last: 'Une entrée facultative doit venir après les entrées obligatoires de la même sorte (éléments, images, vidéos ou sons) : déplacez-la à la fin.',
+  cannot_be_optional: 'La photo source ne peut pas être facultative : l’image créée à partir d’elle est toujours nécessaire.',
+  plan_empty: 'Un plan est vide : écrivez son texte.',
+  blank_plan: 'Un plan est vide : écrivez son texte.',
+  empty_plan: 'Un plan est vide : écrivez son texte.',
+  invalid_ids: 'L’ordre envoyé ne correspond plus à la liste : rechargez la page.',
+  invalid_role: 'Sorte de fichier inconnue pour ce dépôt.',
+  invalid_published: 'Valeur de publication refusée.',
+  storage_unavailable: 'Stockage des fichiers indisponible : réessayez dans un instant.',
+}
+
+// Détails facultatifs d'un problème : modèles concernés (noms ou { name, id }) et clé de fichier.
+const names = (list) => (Array.isArray(list) ? list.map((t) => (typeof t === 'string' ? t : t?.name ?? t?.id)).filter(Boolean) : [])
+function fill(msg, issue) {
+  const tpls = names(issue?.templates)
+  const key = typeof issue?.key === 'string' && issue.key ? issue.key.split('/').pop() : ''
+  return msg
+    .replace('{kind}', KIND_LABEL[issue?.kind] ?? 'fichiers')
+    .replace('{field}', FIELD_LABEL[issue?.field] ?? (typeof issue?.field === 'string' ? issue.field : 'un champ'))
+    .replace('{templates}', tpls.length ? ` (${tpls.map((n) => `« ${n} »`).join(', ')})` : '')
+    .replace('{key}', key ? ` (${key})` : '')
 }
 
 /** Titre d'une entrée, pour l'éditeur et les messages. */
@@ -93,9 +121,10 @@ export function inputTitle(i) {
 
 /** Un problème en français ; avec `inputs`, préfixé de l'entrée concernée (« Élément @Element2 : … »). */
 export function issueText(issue, inputs = []) {
-  const msg = (ISSUES[issue?.code] ?? `Problème à corriger (${issue?.code}).`).replace('{kind}', KIND_LABEL[issue?.kind] ?? 'fichiers').replace('{field}', FIELD_LABEL[issue?.field] ?? issue?.field ?? 'un champ')
-  if (issue?.idx == null) return msg
-  const i = inputs.find((x) => x.idx === issue.idx)
+  const code = issue?.code
+  const msg = Object.hasOwn(ISSUES, code ?? '') ? fill(ISSUES[code], issue) : `Problème à corriger (${code ?? 'inconnu'}).`
+  if (issue?.idx == null || !Array.isArray(inputs)) return msg
+  const i = inputs.find((x) => x?.idx === issue.idx)
   if (!i) return msg
   const tok = slotTokens(inputs)[i.idx]
   return `${inputTitle(i)}${tok ? ` ${tok}` : ''} : ${msg}`
@@ -106,7 +135,7 @@ export function templateError(err) {
   const body = err?.body ?? {}
   const issues = Array.isArray(body.issues) ? body.issues : []
   const code = body.error ?? err?.error
-  if (err?.status && err.status !== 401 && err.status !== 403 && ISSUES[code]) return { message: ISSUES[code], issues }
+  if (err?.status && err.status !== 401 && err.status !== 403 && Object.hasOwn(ISSUES, code ?? '')) return { message: fill(ISSUES[code], body), issues }
   return { message: adminError(err), issues }
 }
 
@@ -461,4 +490,38 @@ export function userNeeds(d) {
     rows.push({ label, value: `${of.length} : ${of.map((i) => (i.label?.trim() || '(sans nom)') + (i.optional ? ' (facultatif)' : '')).join(', ')}`, required: req.length })
   }
   return rows.length ? rows : [{ label: 'Fichiers', value: 'aucun' }]
+}
+
+/* ——— Enregistrements concurrents ——— */
+
+/**
+ * Brouillon à garder après un enregistrement réussi : `fresh` (le modèle renvoyé par l'API) si le brouillon courant `cur` est encore
+ * celui envoyé (`sent`) ; sinon `cur`, pour ne pas perdre ce qui a été saisi pendant l'envoi.
+ */
+export const draftAfterSave = (cur, sent, fresh) => (cur && sent && isDirty(cur, sent) ? cur : fresh)
+
+/**
+ * Envois en série, la dernière valeur gagne : un seul appel `run` à la fois ; les valeurs soumises pendant un appel sont fusionnées
+ * (seule la dernière part, après lui). Une erreur abandonne les valeurs en attente et passe à `onError`.
+ */
+export function serialLatest(run, onError = () => {}) {
+  let running = null
+  let next = null
+  return function submit(value) {
+    next = { value }
+    if (running) return running
+    running = (async () => {
+      try {
+        while (next) {
+          const { value: v } = next
+          next = null
+          await run(v)
+        }
+      } catch (e) {
+        next = null
+        onError(e)
+      } finally { running = null }
+    })()
+    return running
+  }
 }

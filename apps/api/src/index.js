@@ -327,8 +327,13 @@ function templateFiles(inputs, given, origin) {
   const trusted = []
   const elements = []
   const references = []
+  // Jetons « @Element2 », « @Image2 » : numérotés dans l'ordre de chaque famille. Une facultative omise ne doit être suivie d'aucune
+  // autre de sa famille (sinon les suivantes changeraient de numéro) : la première omise est alors demandée.
+  const family = (i) => (i.slot === 'element' ? 'element' : i.slot === 'reference' ? i.kind : null)
+  const skipped = {}
   for (const i of [...inputs].sort((a, b) => a.idx - b.idx)) {
     if (i.slot === 'source') continue
+    const f = family(i)
     let url
     if (i.mode === 'fixed') {
       if (!i.file) return { error: { error: 'template_input_missing', idx: i.idx } }
@@ -336,8 +341,9 @@ function templateFiles(inputs, given, origin) {
       trusted.push(url)
     } else {
       url = sent.get(i.idx)
-      if (!url) { if (i.mode === 'user' && i.optional) continue; return { error: { error: 'template_input_missing', idx: i.idx } } }
+      if (!url) { if (i.mode === 'user' && i.optional) { if (f) skipped[f] ??= i.idx; continue } return { error: { error: 'template_input_missing', idx: i.idx } } }
     }
+    if (f && skipped[f] != null) return { error: { error: 'template_input_missing', idx: skipped[f] } }
     if (i.slot === 'start') files.startImageUrl = url
     else if (i.slot === 'end') files.endImageUrl = url
     else if (i.slot === 'audio') files.audioUrl = url

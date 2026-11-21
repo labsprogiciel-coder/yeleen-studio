@@ -9,10 +9,10 @@ import {
 const kling = {
   id: 'pub', name: 'Pub', modelId: 'kling-3-pro', ratio: '9:16', plans: [{ text: '@Element1 danse', dur: 5 }],
   inputs: [
-    { idx: 2, slot: 'element', kind: 'image', mode: 'user', label: 'Votre produit', optional: true },
+    { idx: 3, slot: 'element', kind: 'image', mode: 'user', label: 'Votre produit', optional: true },
     { idx: 0, slot: 'source', kind: 'image', mode: 'user', label: 'Votre photo' },
     { idx: 1, slot: 'start', kind: 'image', mode: 'generated', prompt: 'La personne au marché', from: 0 },
-    { idx: 3, slot: 'element', kind: 'image', mode: 'fixed', url: 'https://x/files/templates/pub/a.png' },
+    { idx: 2, slot: 'element', kind: 'image', mode: 'fixed', url: 'https://x/files/templates/pub/a.png' },
   ],
 }
 const seed = {
@@ -66,6 +66,21 @@ test('ce qui manque : entrées obligatoires vides et images pas encore créées'
   assert.equal(blockerText([]), null)
 })
 
+test('une entrée facultative omise ne doit pas décaler les jetons des suivantes de sa famille', () => {
+  // le serveur ne garde que les fichiers envoyés, dans l'ordre : sans l'image 1, « @Image2 » deviendrait la première
+  const ins = [
+    { idx: 0, slot: 'reference', kind: 'image', mode: 'user', label: 'Votre logo', optional: true },
+    { idx: 1, slot: 'reference', kind: 'video', mode: 'user', label: 'Votre clip' },
+    { idx: 2, slot: 'reference', kind: 'image', mode: 'user', label: 'Votre fond', optional: true },
+    { idx: 3, slot: 'element', kind: 'image', mode: 'user', label: 'Votre produit', optional: true },
+    { idx: 4, slot: 'element', kind: 'image', mode: 'fixed', url: 'https://x/files/templates/t/a.png' },
+  ]
+  assert.deepEqual(missingInputs(ins, { 1: 'clip' }).map((m) => [m.idx, m.why]), [[3, 'order']]) // l'élément fixe suit le facultatif
+  assert.deepEqual(missingInputs(ins, { 1: 'clip', 2: 'fond', 3: 'produit' }).map((m) => [m.idx, m.why]), [[0, 'order']])
+  assert.equal(blockerText(missingInputs(ins, { 1: 'clip', 2: 'fond', 3: 'produit' })), 'Ajoutez aussi : votre logo (les entrées suivantes sont numérotées après elle).')
+  assert.deepEqual(missingInputs(ins, { 0: 'logo', 3: 'produit' }).map((m) => m.idx), [1]) // la vidéo est une autre famille
+})
+
 test('une image se crée avec sa consigne et, si elle part d’une photo, cette photo', () => {
   const g = tplInputs(kling)[1]
   assert.equal(canGenerate(g, {}), false)
@@ -76,8 +91,8 @@ test('une image se crée avec sa consigne et, si elle part d’une photo, cette 
 
 test('envoyé avec la vidéo : entrées de l’utilisateur et images créées, sans les photos source ni les fichiers fixes', () => {
   const ins = tplInputs(kling)
-  const given = { 0: 'photo', 1: 'image', 2: 'produit', 3: 'triche' }
-  assert.deepEqual(sentInputs(ins, given), [{ idx: 1, value: 'image' }, { idx: 2, value: 'produit' }])
+  const given = { 0: 'photo', 1: 'image', 2: 'triche', 3: 'produit' }
+  assert.deepEqual(sentInputs(ins, given), [{ idx: 1, value: 'image' }, { idx: 3, value: 'produit' }])
   assert.deepEqual(sentInputs(tplInputs(seed), { 0: 'visage' }), [{ idx: 0, value: 'visage' }])
 })
 

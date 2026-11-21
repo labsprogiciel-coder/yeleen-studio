@@ -105,13 +105,17 @@ export default function Cinema() {
   const [tin, setTin] = useState({})
   const [tprompts, setTprompts] = useState({})
   const [tgens, setTgens] = useState({})
+  // Chaque ouverture (ou fermeture) d'une vidéo à refaire change `tplAct` : une image demandée pour une autre ne part pas, ni ne remplit
+  // la case de celle-ci (la lecture de la photo peut finir après le changement).
+  const tplAct = useRef(0)
+  useEffect(() => { tplAct.current += 1 }, [startTpl])
   useEffect(() => {
     if (!tpl || vmodel.id !== tpl.modelId) return
     s.replacePlans((vmodel.caps.multiShot ? tpl.plans : tpl.plans.slice(0, 1)).map((p) => ({ text: p.text, dur: p.dur })))
     if (tpl.resolution && s.resolutions?.includes(tpl.resolution)) s.setRes(tpl.resolution)
     if (tpl.ratio && s.ratios?.includes(tpl.ratio)) s.setRatio(tpl.ratio)
     if (vmodel.caps.audio !== 'always') s.setSound(tpl.sound)
-    setStartTpl(tpl); setTin({}); setTgens({})
+    tplAct.current += 1; setStartTpl(tpl); setTin({}); setTgens({})
     setTprompts(Object.fromEntries(tplInputs(tpl).filter((i) => i.mode === 'generated').map((i) => [i.idx, i.prompt ?? ''])))
     toast(`« ${tpl.name} » est prêt. ${todoText(tpl)}`)
     setTpl(null)
@@ -160,6 +164,7 @@ export default function Cinema() {
   useEffect(() => {
     if (!linkId || linked.current === linkId) return
     let alive = true
+    let asking = false // aperçu demandé, réponse pas encore là : si le lien change, l'ancienne réponse est ignorée et le lien relu
     const usable = (t) => (t.genjutsu ? Boolean(findTool(t.genjutsu.tool)) : VIDEO_LIST.some((m) => m.id === t.modelId))
     const done = () => setParams((p) => { const n = new URLSearchParams(p); n.delete('tpl'); return n }, { replace: true })
     loadTemplates().then(async (all) => {
@@ -169,14 +174,17 @@ export default function Cinema() {
       if (!adminReady) return // on attend la réponse sur les droits avant de conclure
       linked.current = linkId
       if (!admin) { toast('Cette vidéo à refaire n’est pas disponible.'); return done() }
-      try {
-        const t = withInputs({ ...(await api.adminPreviewTemplate(linkId)).template, preview: true })
-        if (!usable(t)) toast('Le modèle de cette vidéo à refaire n’est plus au catalogue.')
-        else recreate(t)
-      } catch { toast('Impossible d’ouvrir l’aperçu de ce modèle.') }
+      asking = true
+      let t = null
+      try { t = withInputs({ ...(await api.adminPreviewTemplate(linkId)).template, preview: true }) } catch { /* dit plus bas */ }
+      asking = false
+      if (!alive) return // lien changé entre-temps : la réponse ne remplace pas la vidéo plus récente
+      if (!t) toast('Impossible d’ouvrir l’aperçu de ce modèle.')
+      else if (!usable(t)) toast('Le modèle de cette vidéo à refaire n’est plus au catalogue.')
+      else recreate(t)
       done()
     })
-    return () => { alive = false }
+    return () => { alive = false; if (asking && linked.current === linkId) linked.current = null }
   }, [linkId, adminReady, admin]) // eslint-disable-line react-hooks/exhaustive-deps
   // Changer d'onglet montre la liste de ses outils.
   const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null); setGenTpl(null) }
@@ -313,12 +321,14 @@ export default function Cinema() {
     const prompt = (tprompts[idx] ?? '').trim()
     if (!prompt) return setError(`Décrivez ${what}.`)
     const title = `${startTpl.name} · ${i.slot === 'end' ? 'image de fin' : 'image de début'}`
+    const act = tplAct.current
     let r
     if (i.from != null) {
       const photo = tin[i.from]
       if (!photo) return setError('Ajoutez d’abord la photo demandée dans Références.')
       let file
-      try { file = await getFile(photo) } catch { return setError('La photo est introuvable : choisissez-la de nouveau.') }
+      try { file = await getFile(photo) } catch { return tplAct.current === act && setError('La photo est introuvable : choisissez-la de nouveau.') }
+      if (tplAct.current !== act) return // autre vidéo à refaire entre-temps : rien n'est lancé (ni payé)
       r = submit({ kind: 'image', title, prompt, cost: tcosts[idx], meta: `Krea 3 · ${kRatio}`,
         live: { kind: 'tool', modelId: 'template-image', inputs: { model: 'krea-3', prompt, ratio: kRatio }, inputFiles: { images: [file] } } })
     } else {
@@ -326,17 +336,18 @@ export default function Cinema() {
         live: { kind: 'image', modelId: 'krea-3', prompt, resolution: '2K', ratio: kRatio, count: 1 } })
     }
     if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
-    setTgens((g) => ({ ...g, [idx]: { jobId: r.job.id, key: r.job.key } }))
+    setTgens((g) => ({ ...g, [idx]: { jobId: r.job.id, key: r.job.key, act } }))
   }
   // Image prête : elle remplit sa case. Vidéo à refaire quittée (ou changée) entre-temps : l'image reste dans Créations seulement.
-  const tready = Object.entries(tgens).map(([idx, g]) => [Number(idx), pool.find((a) => a.id === `${g.key}-0`)]).filter(([, a]) => a)
+  const tready = Object.entries(tgens).map(([idx, g]) => [Number(idx), pool.find((a) => a.id === `${g.key}-0`), g.act]).filter(([, a]) => a)
   const treadyKey = tready.map(([idx, a]) => `${idx}:${a.id}`).join(',')
   useEffect(() => {
     if (!tready.length) return
     setTgens((g) => Object.fromEntries(Object.entries(g).filter(([k]) => !tready.some(([idx]) => idx === Number(k)))))
-    if (!startTpl) return
-    setTin((x) => ({ ...x, ...Object.fromEntries(tready) }))
-    toast(tready.some(([idx]) => tplIn.find((i) => i.idx === idx)?.slot === 'end') ? 'Image de fin prête : elle est dans Références.' : 'Image de début prête : elle est dans Références.')
+    const fill = tready.filter(([, , act]) => act === tplAct.current) // demandée pour cette ouverture-ci de la vidéo à refaire
+    if (!startTpl || !fill.length) return
+    setTin((x) => ({ ...x, ...Object.fromEntries(fill.map(([idx, a]) => [idx, a])) }))
+    toast(fill.some(([idx]) => tplIn.find((i) => i.idx === idx)?.slot === 'end') ? 'Image de fin prête : elle est dans Références.' : 'Image de début prête : elle est dans Références.')
   }, [treadyKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const tfailed = Object.entries(tgens).map(([idx, g]) => [Number(idx), jobs.find((j) => j.id === g.jobId)]).filter(([, j]) => j && (j.status === 'FAILED' || j.status === 'CANCELED'))
   const tfailedKey = tfailed.map(([idx, j]) => `${idx}:${j.id}`).join(',')

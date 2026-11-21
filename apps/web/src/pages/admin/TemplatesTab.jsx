@@ -3,7 +3,7 @@ import Icon from '../../lib/icons.jsx'
 import { api } from '../../lib/api.js'
 import { caurisLabel } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
-import { NAME_MAX, fabrication, filterTemplates, issueText, moveBefore, moveStep, summarize, templateError, templatePrice } from '../../lib/adminTemplates.js'
+import { NAME_MAX, fabrication, filterTemplates, issueText, moveBefore, moveStep, serialLatest, summarize, templateError, templatePrice } from '../../lib/adminTemplates.js'
 import TemplateEditor from './TemplateEditor.jsx'
 import Switch from './Switch.jsx'
 
@@ -41,13 +41,18 @@ function TemplatesList({ open }) {
   const shown = filterTemplates(all, { q, filter })
   const sum = summarize(all)
 
-  // Nouvel ordre : affiché tout de suite, envoyé en entier ; en cas d'échec, la liste revient de l'API.
-  const reorder = async (ids) => {
+  // Nouvel ordre : affiché tout de suite, envoyé en entier ; un envoi à la fois, le dernier ordre demandé partant en dernier.
+  // En cas d'échec, la liste revient de l'API.
+  const sendOrder = useRef(null)
+  if (!sendOrder.current) {
+    sendOrder.current = serialLatest((ids) => api.adminOrderTemplates(ids), (e) => { setNotice({ text: `Ordre non enregistré : ${templateError(e).message}` }); load() })
+  }
+  const reorder = (ids) => {
     if (!ids) return
     const byId = new Map(all.map((t) => [t.id, t]))
     setList(ids.map((x) => byId.get(x)))
     setNotice(null)
-    try { await api.adminOrderTemplates(ids) } catch (e) { setNotice({ text: `Ordre non enregistré : ${templateError(e).message}` }); load() }
+    sendOrder.current(ids)
   }
   const ids = all.map((t) => t.id)
 

@@ -10,12 +10,14 @@ export default function TemplateInputs({ model, inputs, onChange, onPatch, uploa
   const tokens = slotTokens(inputs)
   const cards = [...inputs].filter((i) => i.slot !== 'source').sort((a, b) => a.idx - b.idx)
   const adds = allowedAdds(model, inputs)
+  // Pendant l'envoi d'un fichier d'entrée, les entrées ne sont ni retirées ni changées de mode : leurs numéros restent ceux de l'envoi.
+  const locked = Object.keys(uploading ?? {}).some((k) => k.startsWith('input-'))
   return (
     <section className="adm-card tm-sec" aria-labelledby="tm-in-t">
       <h3 id="tm-in-t">Entrées <small>{model ? `selon ${model.name}` : ''}</small></h3>
       {!cards.length && <p className="tm-note">Aucune entrée : le modèle vidéo ne reçoit que le texte des plans.</p>}
       {cards.map((i) => (
-        <InputCard key={i.idx} input={i} inputs={inputs} token={tokens[i.idx]} onChange={onChange} onPatch={onPatch} upload={upload} uploading={uploading === `input-${i.idx}`} />
+        <InputCard key={i.idx} input={i} inputs={inputs} token={tokens[i.idx]} onChange={onChange} onPatch={onPatch} upload={upload} uploading={Boolean(uploading?.[`input-${i.idx}`])} locked={locked} />
       ))}
       {adds.length > 0 && (
         <div className="tm-adds">
@@ -31,7 +33,7 @@ export default function TemplateInputs({ model, inputs, onChange, onPatch, uploa
 const MODE_LABEL = { fixed: 'Fixe', user: 'À fournir', generated: 'Créée (Krea 3)' }
 const ASK = { image: 'Photo de l’utilisateur', video: 'Vidéo de l’utilisateur', audio: 'Audio de l’utilisateur' }
 
-function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploading }) {
+function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploading, locked }) {
   const modes = i.slot === 'start' || i.slot === 'end' ? ['fixed', 'user', 'generated'] : ['fixed', 'user']
   const src = i.mode === 'generated' && i.from != null ? inputs.find((s) => s.idx === i.from) : null
   const set = (patch) => onChange(patchInput(inputs, i.idx, patch))
@@ -48,7 +50,7 @@ function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploadi
         </div>
         <div className="tm-modes" role="radiogroup" aria-label={`Origine : ${title}`}>
           {modes.map((m) => (
-            <button key={m} type="button" role="radio" aria-checked={i.mode === m} className={i.mode === m ? 'on' : ''} onClick={() => onChange(setMode(inputs, i.idx, m))}>{MODE_LABEL[m]}</button>
+            <button key={m} type="button" role="radio" aria-checked={i.mode === m} className={i.mode === m ? 'on' : ''} disabled={locked && i.mode !== m} onClick={() => onChange(setMode(inputs, i.idx, m))}>{MODE_LABEL[m]}</button>
           ))}
         </div>
         {i.mode === 'fixed' && (
@@ -64,7 +66,7 @@ function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploadi
                   upload('input', f, `input-${i.idx}`, (r) => {
                     // Un élément peut être une image ou une vidéo : la sorte suit le fichier déposé.
                     const kind = i.slot === 'element' ? (f.type.startsWith('video/') ? 'video' : 'image') : i.kind
-                    onPatch(i.idx, { file: r.key, url: r.url, kind }) // sur l'état du moment : la carte a pu changer pendant l'envoi
+                    onPatch(i.idx, { file: r.key, url: r.url, kind }) // sur l'état du moment ; numéros et modes sont bloqués pendant l'envoi
                   })
                 }} />
             </label>
@@ -86,7 +88,7 @@ function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploadi
               <textarea value={i.prompt ?? ''} maxLength={LIMITS.prompt} onChange={(e) => set({ prompt: e.target.value })} placeholder="Ex. : le produit de l’utilisateur posé sur un comptoir bleu, lumière de studio" />
             </label>
             <label className="adm-check">
-              <input type="checkbox" checked={i.from != null} onChange={(e) => onChange(toggleSource(inputs, i.idx, e.target.checked))} />
+              <input type="checkbox" checked={i.from != null} disabled={locked} onChange={(e) => onChange(toggleSource(inputs, i.idx, e.target.checked))} />
               À partir d’une photo de l’utilisateur
             </label>
             {src && (
@@ -98,7 +100,7 @@ function InputCard({ input: i, inputs, token, onChange, onPatch, upload, uploadi
           </>
         )}
       </div>
-      <button type="button" className="tm-icon" aria-label={`Retirer : ${title}${token ? ` ${token}` : ''}`} onClick={() => onChange(removeInput(inputs, i.idx))}>
+      <button type="button" className="tm-icon" aria-label={`Retirer : ${title}${token ? ` ${token}` : ''}`} disabled={locked} title={locked ? 'Attendez la fin de l’envoi du fichier' : undefined} onClick={() => onChange(removeInput(inputs, i.idx))}>
         <Icon name="close" size={16} />
       </button>
     </div>

@@ -62,6 +62,15 @@ export function priceJob(req, { secs, trusted } = {}) {
 
 const FAL_FILE = /^https:\/\/[a-z0-9.-]*fal\.media\//
 
+/** Durée (en secondes) refusée par les capacités `caps` d'un modèle vidéo : la règle du prix, reprise par les vidéos à refaire. */
+export function badDuration(c, secs, task = 'reference') {
+  if (!(secs > 0)) return true
+  if (c.duration.fromAudio) return secs < c.duration.fromAudio.min || secs > c.duration.fromAudio.max
+  if (c.duration.values) return !c.duration.values.includes(secs)
+  if (task === 'editing') return secs > 31 // durée imposée par la vidéo modifiée (fal : « auto »)
+  return secs < c.duration.min || secs > c.duration.max || Boolean(c.duration.integer && !Number.isInteger(secs))
+}
+
 function priceVideo(req, model, isFile) {
   const c = model.caps
   const plans = Array.isArray(req.plans) ? req.plans : []
@@ -84,14 +93,7 @@ function priceVideo(req, model, isFile) {
   if (needsText && !plans.some((p) => p.text?.trim()) && !refs.length) return { ok: false, error: 'invalid_text' }
 
   const secs = req.secs
-  if (!(secs > 0)) return { ok: false, error: 'invalid_duration' }
-  if (c.duration.fromAudio) {
-    if (secs < c.duration.fromAudio.min || secs > c.duration.fromAudio.max) return { ok: false, error: 'invalid_duration' }
-  } else if (c.duration.values) {
-    if (!c.duration.values.includes(secs)) return { ok: false, error: 'invalid_duration' }
-  } else if (task === 'editing') {
-    if (secs > 31) return { ok: false, error: 'invalid_duration' } // durée imposée par la vidéo modifiée (fal : « auto »)
-  } else if (secs < c.duration.min || secs > c.duration.max || (c.duration.integer && !Number.isInteger(secs))) return { ok: false, error: 'invalid_duration' }
+  if (badDuration(c, secs, task)) return { ok: false, error: 'invalid_duration' }
 
   if (c.resolutions && !c.resolutions.includes(req.resolution)) return { ok: false, error: 'unsupported_resolution' }
   if (c.fps && !c.fps.includes(req.fps)) return { ok: false, error: 'unsupported_fps' }

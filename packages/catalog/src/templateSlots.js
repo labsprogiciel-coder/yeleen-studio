@@ -71,20 +71,31 @@ export function inputIssues(model, inputs) {
     if (i.mode === 'generated') {
       if (i.slot !== 'start' && i.slot !== 'end') issues.push({ code: 'generated_only_frames', ...at })
       if (typeof i.prompt !== 'string' || !i.prompt.trim() || i.prompt.length > LIMITS.prompt) issues.push({ code: 'generated_needs_prompt', ...at })
-      if (i.from != null && !inputs.some((s) => s.idx === i.from && s.slot === 'source' && s.mode === 'user')) issues.push({ code: 'bad_from', ...at })
+      if (i.from != null && !inputs.some((s) => s?.idx === i.from && s.slot === 'source' && s.mode === 'user')) issues.push({ code: 'bad_from', ...at })
     }
     if (i.slot === 'source' && i.mode !== 'user') issues.push({ code: 'source_is_user', ...at })
-    if (i.slot === 'source' && !inputs.some((s) => s.mode === 'generated' && s.from === i.idx)) issues.push({ code: 'source_unused', ...at })
+    if (i.slot === 'source' && !inputs.some((s) => s?.mode === 'generated' && s.from === i.idx)) issues.push({ code: 'source_unused', ...at })
+    // Une image créée est toujours obligatoire : la photo dont elle part l'est donc aussi.
+    if (i.slot === 'source' && i.mode === 'user' && i.optional) issues.push({ code: 'cannot_be_optional', ...at })
   }
+  // Jetons (« @Element2 », « @Image2 ») : comptés dans l'ordre des entrées de chaque famille. Une entrée facultative omise décalerait
+  // les suivantes : elle doit donc venir après toutes les entrées obligatoires de sa famille (voir aussi templateFiles, dans l'API).
+  const families = {}
+  for (const i of [...inputs].filter((x) => x && Number.isInteger(x.idx) && (x.slot === 'element' || x.slot === 'reference')).sort((a, b) => a.idx - b.idx)) {
+    const f = (families[i.slot === 'element' ? 'element' : i.kind] ??= [])
+    if (!(i.mode === 'user' && i.optional)) for (const o of f) if (!o.flagged) { issues.push({ code: 'optional_not_last', idx: o.idx }); o.flagged = true }
+    if (i.mode === 'user' && i.optional) f.push({ idx: i.idx })
+  }
+  const optionalUser = (slot) => inputs.some((i) => i?.slot === slot && i.mode === 'user' && i.optional)
   const starts = count((i) => i?.slot === 'start')
   const ends = count((i) => i?.slot === 'end')
   if (starts > 1) issues.push({ code: 'one_start' })
   if (ends > 1) issues.push({ code: 'one_end' })
   if (!r.start && starts) issues.push({ code: 'start_unsupported' })
   if (r.start === 'required' && !starts) issues.push({ code: 'start_required' })
-  if (r.start === 'required' && inputs.some((i) => i?.slot === 'start' && i.mode === 'user' && i.optional)) issues.push({ code: 'start_required' })
+  if (r.start === 'required' && optionalUser('start')) issues.push({ code: 'start_required' })
   if (!r.end && ends) issues.push({ code: 'end_unsupported' })
-  if (r.end === 'withStart' && ends && !starts) issues.push({ code: 'end_needs_start' })
+  if (r.end === 'withStart' && ends && (!starts || optionalUser('start'))) issues.push({ code: 'end_needs_start' }) // sans début, la fin serait ignorée
   const elements = count((i) => i?.slot === 'element')
   if (elements > r.elements) issues.push({ code: r.elements ? 'too_many_elements' : 'elements_unsupported' })
   const refs = inputs.filter((i) => i?.slot === 'reference')
@@ -95,7 +106,7 @@ export function inputIssues(model, inputs) {
   const audios = count((i) => i?.slot === 'audio')
   if (audios > 1) issues.push({ code: 'one_audio' })
   if (!r.audio && audios) issues.push({ code: 'audio_unsupported' })
-  if (r.audio === 'required' && !audios) issues.push({ code: 'audio_required' })
+  if (r.audio === 'required' && (!audios || optionalUser('audio'))) issues.push({ code: 'audio_required' })
   return issues
 }
 

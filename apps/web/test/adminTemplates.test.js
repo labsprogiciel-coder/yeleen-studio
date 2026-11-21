@@ -231,3 +231,52 @@ test('message : champ refusé par l’API (invalid_field) nommé en clair', asyn
   assert.match(issueText({ code: 'invalid_field', field: 'category' }), /la catégorie/)
   assert.match(issueText({ code: 'invalid_field', field: 'zzz' }), /zzz/)
 })
+
+test('messages : nouveaux codes de l’API, détails facultatifs, codes inconnus sans plantage', async () => {
+  const { issueText, templateError } = await import('../src/lib/adminTemplates.js')
+  assert.match(issueText({ code: 'files_in_use', templates: ['Pub boisson', { name: 'Danse' }] }), /« Pub boisson », « Danse »/)
+  assert.doesNotMatch(issueText({ code: 'files_in_use' }), /\{templates\}|\(\)/)
+  assert.match(issueText({ code: 'missing_file', key: 'templates/pub/v.mp4' }), /introuvable.*\(v\.mp4\)/)
+  assert.doesNotMatch(issueText({ code: 'missing_file' }), /\{key\}/)
+  for (const code of ['bad_duration', 'kind_mismatch', 'plan_empty', 'unsupported_type', 'storage_unavailable']) {
+    assert.doesNotMatch(issueText({ code }), /Problème à corriger|\{/, code)
+  }
+  assert.match(templateError({ status: 409, body: { error: 'files_in_use', templates: ['A'] } }).message, /« A »/)
+  for (const bad of [undefined, null, {}, { code: 'toString' }, { code: 'constructor', idx: 1 }, { code: 'x', idx: 0 }]) {
+    assert.equal(typeof issueText(bad, [{ idx: 0, slot: 'start', kind: 'image', mode: 'user' }]), 'string')
+  }
+  assert.equal(typeof issueText({ code: 'x', idx: 0 }, null), 'string')
+})
+
+test('enregistrement : le brouillon saisi pendant l’envoi est gardé', async () => {
+  const { draftAfterSave, fromTemplate } = await import('../src/lib/adminTemplates.js')
+  const sent = fromTemplate(gen())
+  const fresh = fromTemplate(gen({ name: 'Pub boisson fraîche' }))
+  assert.equal(draftAfterSave(sent, sent, fresh), fresh)
+  assert.equal(draftAfterSave({ ...sent }, sent, fresh), fresh) // même contenu, autre objet
+  const typed = { ...sent, name: 'Nouveau nom' }
+  assert.equal(draftAfterSave(typed, sent, fresh), typed)
+})
+
+test('ordre : envois en série, le dernier ordre part en dernier', async () => {
+  const { serialLatest } = await import('../src/lib/adminTemplates.js')
+  const calls = []
+  let release
+  const run = (v) => { calls.push(v); return new Promise((r) => { release = r }) }
+  const submit = serialLatest(run)
+  const p = submit(['a'])
+  submit(['b'])
+  submit(['c'])
+  assert.deepEqual(calls, [['a']]) // un seul envoi à la fois
+  release(); await new Promise((r) => setImmediate(r))
+  assert.deepEqual(calls, [['a'], ['c']]) // les ordres intermédiaires sont fusionnés
+  release(); await p
+  assert.deepEqual(calls, [['a'], ['c']])
+
+  const errs = []
+  const failing = serialLatest(async (v) => { calls.push(v); throw new Error('boom') }, (e) => errs.push(e.message))
+  await failing(['x'])
+  assert.deepEqual(errs, ['boom'])
+  await failing(['y']) // de nouveau utilisable après une erreur
+  assert.deepEqual(errs, ['boom', 'boom'])
+})

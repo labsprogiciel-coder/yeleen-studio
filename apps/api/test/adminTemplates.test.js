@@ -41,6 +41,7 @@ function setup() {
       return { size: buf?.byteLength ?? 0 }
     },
     get: async (key) => { const o = objects.get(key); return o && { body: new Uint8Array(o.buf), size: o.buf.byteLength, httpMetadata: { contentType: o.type } } },
+    head: async (key) => { const o = objects.get(key); return o ? { key, size: o.buf?.byteLength ?? 0, httpMetadata: { contentType: o.type } } : null },
     delete: async (key) => { objects.delete(key) },
     // Pages de 2 objets : la suppression doit suivre le curseur.
     list: async ({ prefix, cursor }) => {
@@ -55,7 +56,7 @@ function setup() {
     ADMIN_USER_IDS: 'user_admin',
     ACCOUNT: { idFromName: (n) => n, get: (name) => ({ fetch: (url, init) => account(name).fetch(new Request(url, init)) }) },
   }
-  const t = { db, objects, sent: [] }
+  const t = { db, objects, bucket, sent: [] }
   const real = globalThis.fetch
   globalThis.fetch = async (url, init) => {
     const u = String(url)
@@ -123,7 +124,7 @@ test('création : identifiant tiré du nom, brouillon Seedance à la fin de la l
     assert.match(x.id, /^pub-de-maquis-[a-z0-9]{4}$/)
     assert.deepEqual([x.name, x.category, x.videoKey, x.video, x.modelId, x.plans, x.resolution, x.ratio, x.sound, x.sort, x.published, x.inputs, x.genjutsu],
       ['Pub de maquis', 'autres', '', null, 'seedance-2-5', [{ text: '', dur: 5 }], null, null, true, 8, false, [], null])
-    assert.deepEqual(x.issues, [{ code: 'no_video' }])
+    assert.deepEqual(x.issues, [{ code: 'no_video' }, { code: 'empty_plan' }])
     assert.deepEqual((await t.admin('/admin/templates')).body.templates.map((y) => y.id), ['ancien', x.id])
     assert.equal((await t.admin(`/admin/templates/${x.id}`)).body.template.id, x.id)
     assert.equal((await t.admin('/admin/templates/inconnu')).status, 404)
@@ -165,7 +166,7 @@ test('enregistrement : champs contrôlés, entrées inutilisables refusées, pro
       inputs: [{ idx: 0, slot: 'element', kind: 'image', mode: 'user', label: '  Votre   photo ', optional: true }, { idx: 1, slot: 'element', kind: 'image', mode: 'fixed' }] }))
     assert.equal(ok.status, 200, JSON.stringify(ok.body))
     const x = ok.body.template
-    assert.deepEqual(x.issues.map((i) => i.code).sort(), ['fixed_needs_file', 'no_video', 'start_required'])
+    assert.deepEqual(x.issues.map((i) => i.code).sort(), ['fixed_needs_file', 'no_video', 'optional_not_last', 'start_required']) // @Element1 facultatif avant @Element2
     assert.deepEqual(x.inputs, [
       { idx: 0, slot: 'element', kind: 'image', mode: 'user', label: 'Votre   photo', optional: true },
       { idx: 1, slot: 'element', kind: 'image', mode: 'fixed', optional: false },
@@ -185,6 +186,8 @@ test('publication : zéro problème et une vidéo ; un modèle publié ne s’en
   const t = setup()
   try {
     const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Pub' }))).body.template
+    t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'image/png' })
+    t.objects.set(`templates/${id}/aperçu.mp4`, { buf: new ArrayBuffer(1), type: 'video/mp4' })
     const publish = (published) => t.admin(`/admin/templates/${id}/publish`, json('POST', { published }))
     assert.equal((await publish('oui')).status, 400)
     await t.admin(`/admin/templates/${id}`, json('PUT', seedance()))
@@ -212,6 +215,7 @@ test('Genjutsu : enregistré dans template_genjutsu, incomplet signalé ; passer
   const t = setup()
   try {
     const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Duo' }))).body.template
+    for (const k of ['v.mp4', 'source.mp4']) t.objects.set(`templates/${id}/${k}`, { buf: new ArrayBuffer(1), type: 'video/mp4' })
     await t.admin(`/admin/templates/${id}`, json('PUT', seedance()))
     assert.equal(t.rows('SELECT * FROM template_inputs').length, 2)
     const g = { tool: 'motion-transfer', sourceKey: '', secs: 0, prompt: '', roles: [] }
@@ -292,7 +296,7 @@ test('dépôt de fichiers : rôle, type, longueur, tailles ; clé neuve sous tem
   try {
     insert(t, 'pub')
     const up = (q, body, type, length = body.length) => t.admin(`/admin/templates/pub/files?${q}`, { method: 'POST', headers: { 'content-type': type, 'content-length': String(length) }, body, duplex: 'half' })
-    const png = new Uint8Array([137, 80, 78, 71, 1])
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0])
     assert.equal((await up('role=autre', png, 'image/png')).body.error, 'invalid_role')
     assert.equal((await t.admin('/admin/templates/inconnu/files?role=input', { method: 'POST', headers: { 'content-type': 'image/png', 'content-length': '5' }, body: png, duplex: 'half' })).status, 404)
     assert.equal((await up('role=video', png, 'image/png')).status, 415) // l'aperçu est une vidéo
@@ -307,7 +311,7 @@ test('dépôt de fichiers : rôle, type, longueur, tailles ; clé neuve sous tem
     const one = await up('role=input&name=decor.png', png, 'image/png')
     assert.equal(one.status, 201)
     assert.match(one.body.key, /^templates\/pub\/[a-z0-9]{12}\.png$/)
-    assert.deepEqual([one.body.url, one.body.size, one.body.contentType, one.body.secs], [`http://api/files/${one.body.key}`, 5, 'image/png', undefined])
+    assert.deepEqual([one.body.url, one.body.size, one.body.contentType, one.body.secs], [`http://api/files/${one.body.key}`, 9, 'image/png', undefined])
     assert.equal(t.objects.get(one.body.key).type, 'image/png')
     const two = await up('role=input', png, 'image/png')
     assert.notEqual(two.body.key, one.body.key) // jamais réécrit : le fichier est gardé en cache un an
@@ -442,5 +446,194 @@ test('POST /jobs Genjutsu : un modèle non publié se lance pour un administrate
     // Une source sans durée (brouillon) ne se lance pas.
     t.db.raw.prepare("UPDATE template_genjutsu SET secs = 0").run()
     assert.equal((await t.admin('/jobs', json('POST', body))).body.error, 'unknown_template')
+  } finally { t.restore() }
+})
+
+test('publication : plans vides et durées hors des règles du modèle signalés ; brouillon enregistré quand même', async () => {
+  const t = setup()
+  try {
+    const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Durées' }))).body.template
+    const videoKey = `templates/${id}/v.mp4`
+    t.objects.set(videoKey, { buf: new ArrayBuffer(1), type: 'video/mp4' })
+    t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'image/png' })
+    const save = async (over) => { const r = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey, ...over }))); assert.equal(r.status, 200, JSON.stringify(r.body)); return r.body.template.issues.map((i) => i.code) }
+    assert.deepEqual(await save({ plans: [{ text: '   ', dur: 5 }] }), ['empty_plan'])
+    assert.deepEqual(await save({ plans: [{ text: 'a', dur: 3 }] }), ['bad_duration']) // Seedance : 4 s au moins
+    assert.deepEqual(await save({ plans: [{ text: 'a', dur: 5.5 }] }), ['bad_duration']) // secondes entières
+    const kling = { modelId: 'kling-3-pro', resolution: null, ratio: null, inputs: [{ idx: 0, slot: 'start', kind: 'image', mode: 'user', label: 'Votre photo' }] }
+    assert.deepEqual(await save({ ...kling, plans: [{ text: 'a', dur: 10 }, { text: 'b', dur: 10 }] }), ['bad_duration']) // somme > 15 s
+    assert.deepEqual(await save({ ...kling, plans: [{ text: 'a', dur: 2 }, { text: 'b', dur: 5 }] }), ['bad_duration']) // un plan trop court
+    assert.deepEqual(await save({ ...kling, plans: [{ text: 'a', dur: 5 }, { text: 'b', dur: 5 }] }), [])
+    await save({ plans: [{ text: '', dur: 5 }] })
+    const r = await t.admin(`/admin/templates/${id}/publish`, json('POST', { published: true }))
+    assert.equal(r.status, 422)
+    assert.deepEqual(r.body.issues, [{ code: 'empty_plan' }])
+  } finally { t.restore() }
+})
+
+test('publication : fichiers absents de R2 ou de la mauvaise sorte refusés (publication et enregistrement d’un publié), pas pour un brouillon', async () => {
+  const t = setup()
+  try {
+    const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Fichiers' }))).body.template
+    const videoKey = `templates/${id}/v.mp4`
+    const body = seedance({ videoKey })
+    const draft = await t.admin(`/admin/templates/${id}`, json('PUT', body))
+    assert.deepEqual(draft.body.template.issues, []) // brouillon : R2 n'est pas consulté
+    const publish = () => t.admin(`/admin/templates/${id}/publish`, json('POST', { published: true }))
+    const no = await publish()
+    assert.equal(no.status, 422)
+    assert.deepEqual(no.body.issues, [{ code: 'missing_file', key: videoKey }, { code: 'missing_file', key: 'templates/x/decor.png', idx: 0 }])
+    t.objects.set(videoKey, { buf: new ArrayBuffer(1), type: 'video/mp4' })
+    t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'audio/mpeg' })
+    assert.deepEqual((await publish()).body.issues, [{ code: 'kind_mismatch', key: 'templates/x/decor.png', kind: 'image', idx: 0 }])
+    t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'image/png' })
+    assert.equal((await publish()).status, 200)
+    // Publié : un fichier fixe absent refuse l'enregistrement.
+    const bad = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey, inputs: [{ ...body.inputs[0], file: `templates/${id}/absent.png` }, body.inputs[1]] })))
+    assert.equal(bad.status, 422)
+    assert.deepEqual(bad.body.issues, [{ code: 'missing_file', key: `templates/${id}/absent.png`, idx: 0 }])
+    // Genjutsu publié : la source doit exister.
+    const g = { tool: 'motion-transfer', sourceKey: `templates/${id}/source.mp4`, secs: 8, prompt: 'p', roles: ['A'] }
+    const gj = await t.admin(`/admin/templates/${id}`, json('PUT', { name: 'Fichiers', category: 'pub', videoKey, sound: true, genjutsu: g }))
+    assert.deepEqual(gj.body.issues, [{ code: 'missing_file', key: g.sourceKey }])
+  } finally { t.restore() }
+})
+
+test('publication concurrente : relue après l’écriture, une version à problèmes n’est jamais publiée', async () => {
+  const t = setup()
+  try {
+    const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Course' }))).body.template
+    const videoKey = `templates/${id}/v.mp4`
+    t.objects.set(videoKey, { buf: new ArrayBuffer(1), type: 'video/mp4' })
+    t.objects.set('templates/x/decor.png', { buf: new ArrayBuffer(1), type: 'image/png' })
+    // Un autre administrateur publie pendant l'enregistrement d'une version à problèmes (vue non publiée) : elle est retirée.
+    const batch = t.db.batch
+    t.db.batch = async (stmts) => { t.db.raw.prepare('UPDATE templates SET published = 1 WHERE id = ?').run(id); t.db.batch = batch; return batch(stmts) }
+    const r = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey, plans: [{ text: '', dur: 5 }] })))
+    assert.equal(r.status, 200)
+    assert.equal(r.body.template.published, false)
+    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
+    // Une version à problèmes enregistrée entre le contrôle et l'écriture de la publication : publication annulée (422).
+    await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ videoKey })))
+    const prepare = t.db.prepare
+    t.db.prepare = (sql) => {
+      if (sql.startsWith('UPDATE templates SET published = ?2')) { t.db.raw.prepare(`UPDATE templates SET plans = '[{"text":"","dur":5}]' WHERE id = ?`).run(id); t.db.prepare = prepare }
+      return prepare(sql)
+    }
+    const p = await t.admin(`/admin/templates/${id}/publish`, json('POST', { published: true }))
+    assert.equal(p.status, 422)
+    assert.deepEqual(p.body.issues, [{ code: 'empty_plan' }])
+    assert.equal(t.rows('SELECT published FROM templates WHERE id = ?', id)[0].published, 0)
+  } finally { t.restore() }
+})
+
+test('enregistrement et ordre atomiques : une requête refusée ne laisse rien à moitié écrit', async () => {
+  const t = setup()
+  try {
+    const { id } = (await t.admin('/admin/templates', json('POST', { name: 'Atome' }))).body.template
+    await t.admin(`/admin/templates/${id}`, json('PUT', seedance()))
+    const before = t.rows('SELECT * FROM template_inputs').map((r) => ({ ...r }))
+    t.db.failAt = 3 // la dernière requête (source Genjutsu), après la mise à jour et les entrées
+    const r = await t.admin(`/admin/templates/${id}`, json('PUT', seedance({ name: 'Autre nom', inputs: [seedance().inputs[1]] })))
+    assert.ok(r.status >= 500)
+    assert.deepEqual(t.rows('SELECT * FROM template_inputs').map((x) => ({ ...x })), before)
+    assert.equal(t.rows('SELECT name FROM templates')[0].name, 'Pub du marché')
+    insert(t, 'b', { sort: 5 })
+    t.db.failAt = 1
+    assert.ok((await t.admin('/admin/templates/order', json('POST', { ids: ['b', id] }))).status >= 500)
+    assert.deepEqual(t.rows('SELECT id FROM templates ORDER BY sort').map((x) => x.id), [id, 'b'])
+    t.db.failAt = null
+  } finally { t.restore() }
+})
+
+test('suppression : refusée si un autre modèle cite un fichier du dossier ; R2 d’abord, pour qu’un nouvel essai retrouve le modèle', async () => {
+  const t = setup()
+  try {
+    insert(t, 'a'); insert(t, 'b'); insert(t, 'c', { video: 'templates/a/video.mp4' })
+    t.db.raw.prepare("INSERT INTO template_inputs (template_id, idx, slot, kind, mode, file_key) VALUES ('b', 0, 'reference', 'image', 'fixed', 'templates/a/decor.png')").run()
+    for (const k of ['templates/a/video.mp4', 'templates/a/decor.png', 'templates/b/video.mp4']) t.objects.set(k, { buf: new ArrayBuffer(1) })
+    const r = await t.admin('/admin/templates/a', { method: 'DELETE' })
+    assert.equal(r.status, 409)
+    assert.deepEqual(r.body, { error: 'files_in_use', templates: ['b', 'c'] })
+    assert.equal(t.objects.size, 3)
+    t.db.raw.prepare("DELETE FROM templates WHERE id = 'c'").run()
+    t.db.raw.prepare("DELETE FROM template_inputs WHERE template_id = 'b'").run()
+    // Panne de R2 au milieu : le modèle reste, le nouvel essai finit le travail.
+    const del = t.bucket.delete
+    let n = 0
+    t.bucket.delete = async (k) => { if (n++ === 1) throw new Error('R2 indisponible'); return del(k) }
+    assert.ok((await t.admin('/admin/templates/a', { method: 'DELETE' })).status >= 500)
+    assert.equal(t.rows("SELECT * FROM templates WHERE id = 'a'").length, 1)
+    t.bucket.delete = del
+    assert.deepEqual((await t.admin('/admin/templates/a', { method: 'DELETE' })).body, { ok: true })
+    assert.deepEqual([...t.objects.keys()], ['templates/b/video.mp4'])
+    assert.equal(t.rows("SELECT * FROM templates WHERE id = 'a'").length, 0)
+  } finally { t.restore() }
+})
+
+test('dépôt : contenu contrôlé par ses premiers octets (415) ; modèle supprimé pendant le dépôt → fichier effacé, 404', async () => {
+  const t = setup()
+  try {
+    insert(t, 'pub')
+    const up = (q, body, type) => t.admin(`/admin/templates/pub/files?${q}`, { method: 'POST', headers: { 'content-type': type, 'content-length': String(body.length) }, body, duplex: 'half' })
+    const pad = (...b) => bytes(b, new Array(16).fill(0))
+    const riff = (tag) => pad(...ascii('RIFF'), 0, 0, 0, 0, ...ascii(tag))
+    const good = {
+      'image/png': pad(137, 80, 78, 71, 13, 10, 26, 10), 'image/jpeg': pad(0xff, 0xd8, 0xff, 0xe0), 'image/webp': riff('WEBP'),
+      'video/mp4': mp4(2), 'video/webm': pad(0x1a, 0x45, 0xdf, 0xa3), 'audio/mpeg': pad(...ascii('ID3')), 'audio/wav': riff('WAVE'), 'audio/x-wav': riff('WAVE'),
+      'audio/ogg': pad(...ascii('OggS')), 'audio/mp4': pad(0, 0, 0, 24, ...ascii('ftypM4A ')),
+    }
+    for (const [type, body] of Object.entries(good)) assert.equal((await up('role=input', body, type)).status, 201, type)
+    assert.equal((await up('role=input', pad(0xff, 0xfb, 0x90), 'audio/mpeg')).status, 201) // MP3 sans ID3 : synchronisation de trame
+    assert.equal((await up('role=video', pad(0, 0, 0, 8, ...ascii('moov')), 'video/quicktime')).status, 201)
+    const count = t.objects.size
+    for (const [type, body] of [['image/png', good['image/jpeg']], ['image/jpeg', good['image/png']], ['image/webp', good['audio/wav']], ['video/mp4', good['video/webm']],
+      ['audio/mpeg', good['audio/ogg']], ['audio/wav', good['image/webp']], ['audio/ogg', good['image/png']], ['video/webm', good['video/mp4']]]) {
+      const r = await up(type.startsWith('video/') ? 'role=video' : 'role=input', body, type)
+      assert.deepEqual([r.status, r.body.error], [415, 'unsupported_type'], type)
+    }
+    assert.equal(t.objects.size, count)
+    // Gros dépôt (en flux) : relu dans R2 après l'écriture, effacé s'il ne correspond pas.
+    const big = new Uint8Array(26 * 1024 * 1024)
+    assert.equal((await up('role=source', big, 'video/mp4')).status, 415)
+    assert.equal(t.objects.size, count)
+    big.set(mp4(2))
+    assert.equal((await up('role=source', big, 'video/mp4')).status, 201)
+    // Suppression du modèle pendant l'écriture : rien ne lui survit.
+    const put = t.bucket.put
+    t.bucket.put = async (...args) => { t.db.raw.prepare("DELETE FROM templates WHERE id = 'pub'").run(); return put(...args) }
+    const size = t.objects.size
+    assert.equal((await up('role=input', good['image/png'], 'image/png')).status, 404)
+    assert.equal(t.objects.size, size)
+  } finally { t.restore() }
+})
+
+test('forme publique : sans image de début créée, `photo` vient de l’image de début obligatoire à fournir (anciennes applications)', async () => {
+  const t = setup()
+  try {
+    insert(t, 'photo', { model: 'kling-3-pro' })
+    insert(t, 'facultatif', { model: 'kling-4', sort: 1 })
+    const add = t.db.raw.prepare('INSERT INTO template_inputs (template_id, idx, slot, kind, mode, label, optional) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    add.run('photo', 0, 'start', 'image', 'user', 'Votre portrait', 0)
+    add.run('facultatif', 0, 'start', 'image', 'user', 'Votre portrait', 1)
+    const list = (await t.public('/templates')).body.templates
+    assert.deepEqual(list.map((x) => [x.id, x.image, x.photo]), [['photo', null, 'Votre portrait'], ['facultatif', null, null]])
+  } finally { t.restore() }
+})
+
+test('POST /jobs : une entrée facultative omise ne décale pas les jetons des suivantes (la première omise est demandée)', async () => {
+  const t = setup()
+  try {
+    insert(t, 'danse', { model: 'kling-3-pro', plans: '[{"text":"@Element1 et @Element2 dansent","dur":5}]' })
+    const add = t.db.raw.prepare('INSERT INTO template_inputs (template_id, idx, slot, kind, mode, file_key, label, optional) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    add.run('danse', 0, 'start', 'image', 'user', null, 'Votre photo', 0)
+    add.run('danse', 1, 'element', 'image', 'user', null, 'Premier danseur', 1)
+    add.run('danse', 2, 'element', 'image', 'user', null, 'Second danseur', 1)
+    const job = { kind: 'video', modelId: 'kling-3-pro', template: 'danse', plans: [{ text: '@Element1 et @Element2 dansent', dur: 5 }], secs: 5, sound: true }
+    const send = (templateInputs, requestId) => t.as('user_alice', '/jobs', json('POST', { ...job, templateInputs, requestId }))
+    assert.deepEqual((await send([{ idx: 0, url: F(0) }, { idx: 2, url: F(2) }], 'danse-00001')).body, { error: 'template_input_missing', idx: 1 })
+    const ok = await send([{ idx: 0, url: F(0) }, { idx: 1, url: F(1) }], 'danse-00002')
+    assert.equal(ok.status, 202, JSON.stringify(ok.body))
+    assert.deepEqual(t.sent[0].body.inputs.elements.map((e) => [e.id, e.frontalImage]), [['element_1', F(1)]])
   } finally { t.restore() }
 })

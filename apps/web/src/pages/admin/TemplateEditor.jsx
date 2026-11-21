@@ -10,7 +10,7 @@ import { caurisLabel, cauris } from '../../lib/admin.js'
 import { categoryLabel } from '../../lib/templates.js'
 import {
   ACCEPT, BLURB_MAX, CATEGORIES, GENJUTSU_LIMITS, GENJUTSU_RATIOS, GENJUTSU_TOOLS, NAME_MAX, capChips, draftIssues, durationsFor, framesRefsWarning, fromTemplate, insertToken,
-  isCategory, isDirty, issueText, patchInput, soundChoice, templateError, templatePrice, toPayload, tokenList, userNeeds,
+  draftAfterSave, isCategory, isDirty, issueText, patchInput, soundChoice, templateError, templatePrice, toPayload, tokenList, userNeeds,
 } from '../../lib/adminTemplates.js'
 import TemplateInputs from './TemplateInputs.jsx'
 import Switch from './Switch.jsx'
@@ -33,7 +33,7 @@ export default function TemplateEditor({ id, onBack }) {
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [result, setResult] = useState(null) // { ok?, message, issues? }
-  const [uploading, setUploading] = useState(null)
+  const [uploading, setUploading] = useState({}) // envois en cours : { [emplacement]: true }
   const [uploadErr, setUploadErr] = useState(null)
   const [videoInfo, setVideoInfo] = useState(null) // { name, size } du dernier dépôt de la vidéo d'exemple
   const [sourceInfo, setSourceInfo] = useState(null)
@@ -70,22 +70,32 @@ export default function TemplateEditor({ id, onBack }) {
   const shownInputs = gen ? draft.inputs : []
 
   const upload = async (role, file, slot, done) => {
-    setUploading(slot)
+    setUploading((u) => ({ ...u, [slot]: true }))
     setUploadErr(null)
     try {
       const r = await api.adminUploadTemplateFile(id, file, role)
       done(r)
     } catch (e) {
       setUploadErr(`${file.name} : ${templateError(e).message}`)
-    } finally { setUploading(null) }
+    } finally { setUploading(({ [slot]: _, ...u }) => u) }
+  }
+
+  // Après un enregistrement : la réponse devient la référence ; le brouillon n'est remplacé que s'il n'a pas changé pendant l'envoi.
+  const settle = (tpl, sent) => {
+    const d = fromTemplate(tpl)
+    setT(tpl)
+    setSaved(d)
+    setDraft((cur) => draftAfterSave(cur, sent, d))
   }
 
   const save = async () => {
     setSaving(true)
     setResult(null)
     try {
-      const r = await api.adminSaveTemplate(id, toPayload(draft))
-      if (r?.template) apply(r.template); else load()
+      const sent = draft
+      const r = await api.adminSaveTemplate(id, toPayload(sent))
+      if (r?.template) settle(r.template, sent)
+      else api.adminTemplate(id).then((x) => settle(x.template, sent)).catch(() => {})
       setResult({ ok: true, message: 'Modifications enregistrées.' })
     } catch (e) {
       const err = templateError(e)
@@ -140,7 +150,7 @@ export default function TemplateEditor({ id, onBack }) {
                 {videoInfo && <span>{mo(videoInfo.size)}</span>}
                 <span className="tm-note">Montrée dans Modèles. Déposez un fichier déjà léger (20 Mo au plus) : il n’est pas recompressé.</span>
               </div>
-              <FileButton accept={ACCEPT.video} busy={uploading === 'video'} label={draft.videoKey ? 'Remplacer' : 'Déposer'}
+              <FileButton accept={ACCEPT.video} busy={Boolean(uploading.video)} label={draft.videoKey ? 'Remplacer' : 'Déposer'}
                 onFile={(f) => upload('video', f, 'video', (r) => { set({ videoKey: r.key, video: r.url }); setVideoInfo({ name: f.name, size: r.size ?? f.size }) })} />
             </div>
           </section>
@@ -205,7 +215,7 @@ export default function TemplateEditor({ id, onBack }) {
                 )}
               </>
             ) : (
-              <GenjutsuFields g={draft.genjutsu} setG={setG} ratio={draft.ratio} onRatio={(ratio) => set({ ratio })} uploading={uploading === 'source'} sourceInfo={sourceInfo}
+              <GenjutsuFields g={draft.genjutsu} setG={setG} ratio={draft.ratio} onRatio={(ratio) => set({ ratio })} uploading={Boolean(uploading.source)} sourceInfo={sourceInfo}
                 onSource={(f) => upload('source', f, 'source', (r) => { setG({ sourceKey: r.key, source: r.url, ...(r.secs ? { secs: Math.round(r.secs * 10) / 10 } : {}) }); setSourceInfo({ name: f.name, size: r.size ?? f.size, measured: Boolean(r.secs) }) })} />
             )}
           </section>

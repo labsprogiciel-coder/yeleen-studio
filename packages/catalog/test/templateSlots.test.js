@@ -66,3 +66,32 @@ test('anciens modèles : photo + consigne Krea → source à fournir et début g
   assert.deepEqual(legacyInputs({ image: 'p', photo: 'Votre photo' }).map((i) => [i.slot, i.mode, i.from]), [['source', 'user', undefined], ['start', 'generated', 0]])
   assert.deepEqual(codes('seedance-2-5', legacyInputs({ image: 'p', photo: 'Votre photo' })), [])
 })
+
+test('facultatif : après les obligatoires de sa famille (jetons stables), jamais pour une photo source, un début exigé ou un son exigé', () => {
+  const el = (idx, optional) => ({ idx, slot: 'element', kind: 'image', mode: 'user', label: 'x', optional })
+  const start = { idx: 0, slot: 'start', kind: 'image', mode: 'user', label: 'd' }
+  // Élément facultatif suivi d'un obligatoire : omis, il décalerait « @Element2 ».
+  assert.deepEqual(inputIssues(findVideoModel('kling-3-pro'), [start, el(1, true), el(2, false)]), [{ code: 'optional_not_last', idx: 1 }])
+  assert.deepEqual(codes('kling-3-pro', [start, el(1, false), el(2, true), el(3, true)]), [])
+  // Seedance : par type de référence ; un fixe après un facultatif compte aussi.
+  const ref = (idx, kind, mode, optional) => ({ idx, slot: 'reference', kind, mode, label: 'x', file: 'templates/a/b', optional })
+  assert.deepEqual(codes('seedance-2-5', [ref(0, 'image', 'user', true), ref(1, 'audio', 'user', false)]), [])
+  assert.deepEqual(inputIssues(findVideoModel('seedance-2-5'), [ref(0, 'image', 'user', true), ref(1, 'image', 'fixed')]), [{ code: 'optional_not_last', idx: 0 }])
+  // Photo source facultative : l'image créée (obligatoire) ne pourrait pas se faire.
+  const src = [{ idx: 0, slot: 'source', kind: 'image', mode: 'user', label: 'p', optional: true }, { idx: 1, slot: 'start', kind: 'image', mode: 'generated', prompt: 'x', from: 0 }]
+  assert.deepEqual(inputIssues(findVideoModel('seedance-2-5'), src), [{ code: 'cannot_be_optional', idx: 0 }])
+  // Fin « avec début » (Kling 4, Wan, Flux) : un début facultatif ne suffit pas.
+  const end = { idx: 1, slot: 'end', kind: 'image', mode: 'fixed', file: 'templates/a/f.png' }
+  for (const m of ['kling-4', 'wan-3', 'flux-3-max']) {
+    assert.ok(codes(m, [{ ...start, optional: true }, end]).includes('end_needs_start'), m)
+    assert.ok(!codes(m, [start, end]).includes('end_needs_start'), m)
+  }
+  // Son exigé : un son facultatif ne suffit pas.
+  assert.ok(codes('ltx-2-3-a2v', [{ idx: 0, slot: 'audio', kind: 'audio', mode: 'user', label: 's', optional: true }]).includes('audio_required'))
+  assert.ok(!codes('ltx-2-3-a2v', [{ idx: 0, slot: 'audio', kind: 'audio', mode: 'user', label: 's' }]).includes('audio_required'))
+})
+
+test('entrées nulles : signalées (bad_idx) sans faire échouer les recherches de source', () => {
+  const inputs = [null, { idx: 0, slot: 'source', kind: 'image', mode: 'user', label: 'p' }, { idx: 1, slot: 'start', kind: 'image', mode: 'generated', prompt: 'x', from: 0 }, null]
+  assert.deepEqual(codes('seedance-2-5', inputs), ['bad_idx', 'bad_idx'])
+})
