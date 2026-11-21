@@ -105,8 +105,9 @@ const onHiggsfield = (model) => model.provider === 'higgsfield' // Soul 2, Genju
 
 /**
  * Annulation chez le fournisseur, sans garantie (une erreur est journalisée) ; Runware ne sait pas annuler.
- * Rend true seulement si le fournisseur a confirmé l'annulation : une erreur, Runware ou une demande déjà commencée ou finie
- * (Higgsfield : 400, 409) rendent false, et l'annulation de l'utilisateur n'est alors pas remboursée.
+ * Rend true seulement si le fournisseur a confirmé l'annulation : Runware ou une demande déjà commencée ou finie
+ * (Higgsfield : 400, 409) rendent false, et l'annulation de l'utilisateur n'est alors pas remboursée. Une erreur rend null :
+ * l'issue est inconnue.
  */
 async function providerCancel(env, job) {
   if (job.provider === 'runware') return false
@@ -116,7 +117,7 @@ async function providerCancel(env, job) {
     return true
   } catch (e) {
     console.error(`annulation ${job.provider ?? 'fal'}`, e.message)
-    return false
+    return null
   }
 }
 
@@ -517,9 +518,12 @@ app.post('/jobs/:id/cancel', async (c) => {
     if (storing(job)) return c.json(view({ ...job, status: 'IN_PROGRESS' }, { balance: await balance() }))
   }
   const confirmed = await providerCancel(c.env, job)
+  // En file mais annulation en erreur chez le fournisseur : l'annuler ici ferait payer une génération jamais reçue. Elle reste
+  // active et suivie (ni remboursée ni perdue) ; l'utilisateur peut réannuler.
+  if (confirmed === null && job.status === 'IN_QUEUE') return c.json(view(job, { balance: await balance() }))
   // Vérification, remboursement et CANCELED en une requête du compte : terminée entre-temps (webhook, suivi), elle reste telle quelle.
   // Remboursée seulement si elle est encore en file et que le fournisseur a confirmé l'annulation.
-  const r = await call(c, '/job/cancel', { jobId: job.id, user: true, refundable: job.status === 'IN_QUEUE' && confirmed })
+  const r = await call(c, '/job/cancel', { jobId: job.id, user: true, refundable: job.status === 'IN_QUEUE' && confirmed === true })
   return c.json(view(r.job ?? job, { balance: r.balance ?? (await balance()) }))
 })
 

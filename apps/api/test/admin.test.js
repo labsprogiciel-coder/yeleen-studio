@@ -932,20 +932,39 @@ test('annulation de l\'utilisateur : encore en file chez fal et annulation confi
   } finally { t.restore() }
 })
 
-test('annulation de l\'utilisateur : fal ne confirme pas l\'annulation (erreur), pas de remboursement, même en file ou d\'état inconnu', async () => {
+test('annulation de l\'utilisateur : fal ne confirme pas l\'annulation (erreur), pas de remboursement ; en file, elle reste active et se réannule', async () => {
   const t = setup()
   try {
     const refused = () => { throw new Error('fal injoignable') }
-    // En file chez fal, mais l'annulation échoue : la génération peut encore s'y lancer.
+    const stored = (id) => t.stores.get('user_alice').get(`job:${id}`).status
+    // En file chez fal, mais l'annulation échoue : la génération peut encore s'y lancer. Ni remboursée ni perdue : elle reste suivie.
     const a = await t.as('user_alice', '/jobs', post(image))
     t.onCancel = refused
     const ra = await t.as('user_alice', `/jobs/${a.body.jobId}/cancel`, { method: 'POST' })
-    assert.deepEqual([ra.body.status, ra.body.refund], ['CANCELED', 0])
-    // État illisible et annulation en échec.
+    assert.deepEqual([ra.body.status, ra.body.refund ?? 0, ra.body.balance, stored(a.body.jobId)], ['IN_QUEUE', 0, 240 - a.body.cost, 'IN_QUEUE'])
+    // État illisible et annulation en échec : pareil.
     const b = await t.as('user_alice', '/jobs', post(image))
     t.fal = 'DOWN'
     const rb = await t.as('user_alice', `/jobs/${b.body.jobId}/cancel`, { method: 'POST' })
-    assert.deepEqual([rb.body.status, rb.body.refund], ['CANCELED', 0])
+    assert.deepEqual([rb.body.status, rb.body.refund ?? 0, stored(b.body.jobId)], ['IN_QUEUE', 0, 'IN_QUEUE'])
+    assert.equal(t.rows("SELECT COUNT(*) AS n FROM ledger WHERE kind = 'refund'")[0].n, 0)
+    // fal répond de nouveau : l'utilisateur réannule, l'annulation est confirmée, il est remboursé (une seule fois).
+    t.fal = 'IN_QUEUE'
+    t.onCancel = null
+    for (const j of [a, b]) {
+      const again = await t.as('user_alice', `/jobs/${j.body.jobId}/cancel`, { method: 'POST' })
+      assert.deepEqual([again.body.status, again.body.refund], ['CANCELED', j.body.cost])
+    }
+    assert.equal((await t.as('user_alice', `/jobs/${a.body.jobId}/cancel`, { method: 'POST' })).body.status, 'CANCELED') // déjà annulée : rien de plus
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, 240)
+    // Commencée d'après le dernier suivi et annulation en échec : annulée ici, sans remboursement (rien n'était dû).
+    t.fal = 'IN_PROGRESS'
+    const e = await t.as('user_alice', '/jobs', post(image))
+    await t.as('user_alice', `/jobs/${e.body.jobId}`)
+    t.fal = 'DOWN'
+    t.onCancel = refused
+    const re = await t.as('user_alice', `/jobs/${e.body.jobId}/cancel`, { method: 'POST' })
+    assert.deepEqual([re.body.status, re.body.refund], ['CANCELED', 0])
     // État illisible, commencée d'après le dernier suivi : pas de remboursement même si fal accepte l'annulation.
     t.fal = 'IN_PROGRESS'
     t.onCancel = null
@@ -954,7 +973,7 @@ test('annulation de l\'utilisateur : fal ne confirme pas l\'annulation (erreur),
     t.fal = 'DOWN'
     const rc = await t.as('user_alice', `/jobs/${c.body.jobId}/cancel`, { method: 'POST' })
     assert.deepEqual([rc.body.status, rc.body.refund], ['CANCELED', 0])
-    assert.equal((await t.as('user_alice', '/wallet')).body.balance, Math.round((240 - a.body.cost - b.body.cost - c.body.cost) * 10) / 10)
+    assert.equal((await t.as('user_alice', '/wallet')).body.balance, Math.round((240 - e.body.cost - c.body.cost) * 10) / 10)
     // État illisible, encore en file d'après le dernier suivi, annulation confirmée par fal : remboursée.
     const d = await t.as('user_alice', '/jobs', post(image))
     const rd = await t.as('user_alice', `/jobs/${d.body.jobId}/cancel`, { method: 'POST' })
