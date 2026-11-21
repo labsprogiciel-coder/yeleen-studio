@@ -89,7 +89,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
     : caps.endFrame === 'withStart' && files.end && !files.start ? 'Avec ce modèle, une image de fin demande aussi une image de départ.'
     : caps.audioRef === 'required' && !files.audio ? `Ce modèle exige un fichier audio${range ? ` de ${range.min} à ${range.max} s` : ''}.`
     : range && files.audio && !MEASURED_AUDIO.split(',').includes(files.audio.type) ? 'Ce modèle lit les fichiers audio MP3, WAV ou M4A.'
-    : range && files.audio && (Number.isNaN(audioSecs) ? true : audioSecs !== null && (audioSecs < range.min || audioSecs > range.max))
+    : range && files.audio && (Number.isNaN(audioSecs) ? true : audioSecs !== null && (audioSecs < range.min - 0.05 || audioSecs > range.max + 0.5)) // mêmes marges que le serveur
       ? (Number.isNaN(audioSecs) ? 'Ce fichier audio n’a pas pu être lu.' : `Votre audio dure ${String(audioSecs).replace('.', ',')} s : il doit durer entre ${range.min} et ${range.max} s.`)
       : null
   const needsText = !(caps.startFrame === 'optional' && caps.audioRef === 'required' && files.start) // avec une image, le prompt devient facultatif
