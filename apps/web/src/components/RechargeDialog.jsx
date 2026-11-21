@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../lib/icons.jsx'
-import Segment from './Segment.jsx'
 import { api, apiEnabled } from '../lib/api.js'
 import { jetonLabel, jetons, useJobs } from '../lib/jobs.jsx'
 import { useToast } from '../lib/toasts.jsx'
@@ -26,6 +25,9 @@ const POLL_MS = 3500
 const POLL_HIDDEN_MS = 20_000 // onglet caché : on s'en tient à un sondage espacé, et on se remet à jour dès le retour sur l'onglet
 const STEPS = ['Pack', 'Opérateur', 'Numéro', 'Paiement']
 const FORM = 'rc-form' // les boutons du pied de fenêtre soumettent le formulaire de l'étape
+// Opérateurs de tous les pays ouverts (sans doublon) ; le pays se choisit ensuite avec le numéro, parmi ceux où l'opérateur existe.
+const OPERATOR_LIST = [...new Set(COUNTRY_LIST.flatMap((k) => TOPUP_COUNTRIES[k].operators))]
+const countriesFor = (op) => COUNTRY_LIST.filter((k) => TOPUP_COUNTRIES[k].operators.includes(op))
 const perJeton = (p) => Math.round(p.fcfa / p.jetons)
 const BEST = PACKS.reduce((a, p) => (perJeton(p) < perJeton(a) ? p : a)).id
 // Ce que l'utilisateur aura à faire, pour choisir en connaissance de cause. Les consignes exactes viennent de paygate à l'étape 4.
@@ -53,25 +55,61 @@ function Progress({ step }) {
   return <div className="rc-prog" aria-hidden="true"><i style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} /></div>
 }
 
-/** Rappel des choix déjà faits, chacun modifiable tant que le paiement n'est pas lancé. */
-function Summary({ pack, operator, phone, country, step, onGo }) {
+/** Rappel du pack choisi (et de l'opérateur, puis du numéro), chaque choix modifiable tant que le paiement n'est pas lancé. */
+function PackCard({ pack, operator, phone, country, step, onGo }) {
   const c = TOPUP_COUNTRIES[country]
-  const items = [
-    step > 0 && { k: 0, label: 'Pack', value: <><Amount n={pack.jetons} word /> · {fcfa(pack.fcfa)}</> },
-    step > 1 && operator && { k: 1, label: 'Opérateur', value: `${OPERATORS[operator]}${COUNTRY_LIST.length > 1 ? ` · ${COUNTRIES[country]}` : ''}` },
-    step > 2 && phone && { k: 2, label: 'Numéro', value: `+${c.dial} ${localNumber(phone, c)}` },
-  ].filter(Boolean)
-  if (!items.length) return null
+  const edit = step < 3
   return (
-    <dl className="rc-sum">
-      {items.map((x) => (
-        <div key={x.k}>
-          <dt>{x.label}</dt>
-          <dd>{x.value}</dd>
-          {step < 3 && <button type="button" onClick={() => onGo(x.k)} aria-label={`Modifier : ${x.label}`}>Modifier</button>}
-        </div>
-      ))}
-    </dl>
+    <section className="rc-card" aria-label="Votre recharge">
+      <Cauri size={40} className="rc-card-cw" />
+      <div className="rc-card-main">
+        <p className="rc-card-qty"><b>{jetons(pack.jetons)}</b> cauris
+          {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(0)} aria-label="Changer de pack">Changer</button>}
+        </p>
+        {step > 1 && operator && (
+          <p className="rc-card-op">
+            <i className={`rc-logo rc-op-${operator}`} aria-hidden="true">{OPERATORS[operator].charAt(0)}</i>
+            <span>{OPERATORS[operator]}{step > 2 && phone ? ` · +${c.dial} ${localNumber(phone, c)}` : ''}</span>
+            {edit && <button type="button" className="rc-card-edit" onClick={() => onGo(1)} aria-label="Changer d’opérateur">Changer</button>}
+          </p>
+        )}
+      </div>
+      <p className="rc-card-price"><b>{fcfa(pack.fcfa)}</b><small>≈ {perJeton(pack)} FCFA le cauri</small></p>
+    </section>
+  )
+}
+
+/** Drapeaux dessinés (les drapeaux emoji ne s'affichent pas sous Windows). Décoratifs : le nom du pays est dans la liste. */
+const FLAGS = {
+  BF: <><rect width="24" height="8" fill="#ef2b2d" /><rect y="8" width="24" height="8" fill="#009e49" /><path d="M12 4.6l1 3h3.2l-2.6 1.9 1 3-2.6-1.9-2.6 1.9 1-3L7.8 7.6H11z" fill="#fcd116" /></>,
+  CI: <><rect width="8" height="16" fill="#f77f00" /><rect x="8" width="8" height="16" fill="#fff" /><rect x="16" width="8" height="16" fill="#009e60" /></>,
+  SN: <><rect width="8" height="16" fill="#00853f" /><rect x="8" width="8" height="16" fill="#fdef42" /><rect x="16" width="8" height="16" fill="#e31b23" /><path d="M12 5.2l.8 2.3h2.4l-2 1.4.8 2.3-2-1.4-2 1.4.8-2.3-2-1.4h2.4z" fill="#00853f" /></>,
+}
+const Flag = ({ k }) => <svg className="rc-flag" viewBox="0 0 24 16" aria-hidden="true">{FLAGS[k]}</svg>
+const PLACEHOLDER = { BF: '70 12 34 56', CI: '07 12 34 56 78', SN: '77 123 45 67' }
+
+/** Champ téléphone : pays (drapeau et indicatif) puis numéro local. Seuls les pays où l'opérateur est proposé sont listés. */
+function PhoneField({ countries, country, onCountry, phone, onPhone, operator, amount }) {
+  const c = TOPUP_COUNTRIES[country]
+  const pick = countries.length > 1
+  return (
+    <div className="rc-field">
+      <label htmlFor="rc-phone">Le paiement de {amount} sera demandé sur ce numéro.</label>
+      <div className="rc-tel">
+        <span className={`rc-cc${pick ? ' pick' : ''}`}>
+          <Flag k={country} /><span>+{c.dial}</span>
+          {pick && <Icon name="chevD" size={14} />}
+          {pick && (
+            <select value={country} onChange={(e) => onCountry(e.target.value)} aria-label="Pays du numéro">
+              {countries.map((k) => <option key={k} value={k}>{COUNTRIES[k]} (+{TOPUP_COUNTRIES[k].dial})</option>)}
+            </select>
+          )}
+        </span>
+        <input id="rc-phone" type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => onPhone(e.target.value)}
+          placeholder={PLACEHOLDER[country] ?? ''} aria-describedby="rc-phone-n" />
+      </div>
+      <small id="rc-phone-n">Numéro {OPERATORS[operator]} {pick ? '' : `au ${COUNTRIES[country]} `}: {c.digits} chiffres, sans l’indicatif +{c.dial}.</small>
+    </div>
   )
 }
 
@@ -325,12 +363,9 @@ export default function RechargeDialog({ open, request, onClose }) {
     body = (
       <div className="rc-panel">
         {title('Avec quel opérateur ?')}
-        {COUNTRY_LIST.length > 1 && (
-          <Segment label="Pays" value={country} onChange={(k) => { setCountry(k); setOperator(null) }} options={COUNTRY_LIST.map((k) => ({ id: k, label: COUNTRIES[k] }))} />
-        )}
         <div className="rc-ops" role="group" aria-label="Opérateur Mobile Money">
-          {c.operators.map((o) => (
-            <button key={o} type="button" aria-pressed={operator === o} className={`rc-op rc-op-${o}${operator === o ? ' on' : ''}`} onClick={() => { setOperator(o); go(2) }}>
+          {OPERATOR_LIST.map((o) => (
+            <button key={o} type="button" aria-pressed={operator === o} className={`rc-op rc-op-${o}${operator === o ? ' on' : ''}`} onClick={() => { setOperator(o); if (!TOPUP_COUNTRIES[country].operators.includes(o)) setCountry(countriesFor(o)[0]); go(2) }}>
               <i aria-hidden="true">{OPERATORS[o].charAt(0)}</i>
               <span><b>{OPERATORS[o]}</b><small>{how(o, country)}</small></span>
             </button>
@@ -343,15 +378,8 @@ export default function RechargeDialog({ open, request, onClose }) {
     body = (
       <form id={FORM} className="rc-panel" onSubmit={checkNumber} noValidate>
         {title(`Votre numéro ${OPERATORS[operator]}`)}
-        <label className="rc-field">
-          <span>Le paiement de {fcfa(selected.fcfa)} sera demandé sur ce numéro.</span>
-          <div>
-            <em aria-hidden="true">+{c.dial}</em>
-            <input type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => { setPhone(e.target.value); setError(null) }}
-              placeholder={country === 'BF' ? '70 12 34 56' : ''} aria-describedby="rc-phone-n" aria-label={`Numéro ${OPERATORS[operator]}, sans l’indicatif +${c.dial}`} />
-          </div>
-          <small id="rc-phone-n">{c.digits} chiffres, sans l’indicatif.</small>
-        </label>
+        <PhoneField countries={countriesFor(operator)} country={country} onCountry={(k) => { setCountry(k); setError(null) }}
+          phone={phone} onPhone={(v) => { setPhone(v); setError(null) }} operator={operator} amount={fcfa(selected.fcfa)} />
         {err}
       </form>
     )
@@ -407,7 +435,7 @@ export default function RechargeDialog({ open, request, onClose }) {
       </header>
       <div className="rc-body">
         {view === 'buy' && step > 0 && (
-          <Summary pack={PACKS.find((p) => p.id === pack) ?? selected} operator={operator} phone={phone} country={country} step={step} onGo={go} />
+          <PackCard pack={PACKS.find((p) => p.id === pack) ?? selected} operator={operator} phone={phone} country={country} step={step} onGo={go} />
         )}
         {body}
       </div>
