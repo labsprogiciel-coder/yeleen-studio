@@ -51,13 +51,17 @@ export const canGenerate = (input, given = {}, prompt = input.prompt) => Boolean
 /**
  * Ce qui manque pour lancer la vidéo, dans l'ordre des entrées : chaque entrée `user` obligatoire vide (`source` comprise, tant que
  * son image n'est pas faite), chaque image `generated` pas encore créée et chaque entrée facultative dont l'absence décalerait la
- * numérotation des suivantes (`order`, voir `shifts`). [{ idx, why: 'user' | 'generated' | 'order', title }].
+ * numérotation des suivantes (`order`, voir `shifts`), et chaque facultative omise que le texte cite (`cited`, avec `token`).
+ * [{ idx, why: 'user' | 'generated' | 'order' | 'cited', title, token? }].
  */
-export function missingInputs(inputs, given = {}) {
+export function missingInputs(inputs, given = {}, texts = []) {
   const out = []
+  const tokens = slotTokens(inputs)
+  const joined = texts.filter((x) => typeof x === 'string').join('\n')
   for (const i of inputs) {
     if (given[i.idx]) continue
-    if (i.mode === 'user' && i.optional && shifts(i, inputs, given)) out.push({ idx: i.idx, why: 'order', title: inputTitle(i, inputs) })
+    if (i.mode === 'user' && i.optional && tokens[i.idx] && new RegExp(`${tokens[i.idx]}(?!\\d)`).test(joined)) out.push({ idx: i.idx, why: 'cited', token: tokens[i.idx], title: inputTitle(i, inputs) })
+    else if (i.mode === 'user' && i.optional && shifts(i, inputs, given)) out.push({ idx: i.idx, why: 'order', title: inputTitle(i, inputs) })
     else if (i.mode === 'user' && !i.optional) {
       if (i.slot === 'source' && inputs.some((g) => g.mode === 'generated' && g.from === i.idx && given[g.idx])) continue // l'image est faite : la photo ne sert plus
       out.push({ idx: i.idx, why: 'user', title: inputTitle(i, inputs) })
@@ -80,6 +84,7 @@ function shifts(input, inputs, given) {
 export function blockerText(missing) {
   const m = missing[0]
   if (!m) return null
+  if (m.why === 'cited') return `Ajoutez : ${lower(m.title)}, ou retirez « ${m.token} » du texte.`
   if (m.why === 'order') return `Ajoutez aussi : ${lower(m.title)} (les entrées suivantes sont numérotées après elle).`
   return m.why === 'generated' ? `Créez d’abord l’${lower(m.title)}.` : `Ajoutez : ${lower(m.title)}.`
 }

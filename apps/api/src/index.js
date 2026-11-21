@@ -7,6 +7,7 @@ import { buildInput, endpointFor, runwareInput } from './inputs.js'
 import { STORING, advanceJob, isActive, sameToken, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { findTool } from '@studio/catalog/tools'
+import { slotTokens } from '@studio/catalog/template-slots'
 import { addFavorite, assetView, catalog, deleteAsset, getAsset, insertUpload, ITEM_ID, listAssets, listFavorites, listTemplates, removeFavorite, SCOPES, templateSource, videoTemplate } from './library.js'
 import { mediaInfo } from './media.js'
 import { ENHANCE_ENDPOINT, ENHANCE_MODEL, MAX_CHARS, MIN_CHARS, cleanOutput, enhanceInput, parseShots, shotModel, today } from './enhance.js'
@@ -321,7 +322,7 @@ app.post('/enhance', notBlocked, async (c) => {
  * du modèle (sûre), fournies ou créées → adresse envoyée par l'application pour cet `idx`. Rend { files, trusted } ou { error }
  * (`template_input_missing` et son `idx` : entrée obligatoire absente).
  */
-function templateFiles(inputs, given, origin) {
+function templateFiles(inputs, given, origin, texts = []) {
   const sent = new Map((Array.isArray(given) ? given : []).filter((x) => Number.isInteger(x?.idx) && typeof x.url === 'string').map((x) => [x.idx, x.url]))
   const files = {}
   const trusted = []
@@ -331,6 +332,9 @@ function templateFiles(inputs, given, origin) {
   // autre de sa famille (sinon les suivantes changeraient de numéro) : la première omise est alors demandée.
   const family = (i) => (i.slot === 'element' ? 'element' : i.slot === 'reference' ? i.kind : null)
   const skipped = {}
+  const tokens = slotTokens(inputs)
+  const joined = texts.filter((x) => typeof x === 'string').join('\n')
+  const cites = (tok) => new RegExp(`${tok}(?!\\d)`).test(joined)
   for (const i of [...inputs].sort((a, b) => a.idx - b.idx)) {
     if (i.slot === 'source') continue
     const f = family(i)
@@ -341,7 +345,13 @@ function templateFiles(inputs, given, origin) {
       trusted.push(url)
     } else {
       url = sent.get(i.idx)
-      if (!url) { if (i.mode === 'user' && i.optional) { if (f) skipped[f] ??= i.idx; continue } return { error: { error: 'template_input_missing', idx: i.idx } } }
+      if (!url) {
+        if (!(i.mode === 'user' && i.optional)) return { error: { error: 'template_input_missing', idx: i.idx } }
+        // Omise mais citée par le texte (« @Element2 ») : le fournisseur recevrait un jeton sans fichier.
+        if (tokens[i.idx] && cites(tokens[i.idx])) return { error: { error: 'template_input_missing', idx: i.idx } }
+        if (f) skipped[f] ??= i.idx
+        continue
+      }
     }
     if (f && skipped[f] != null) return { error: { error: 'template_input_missing', idx: skipped[f] } }
     if (i.slot === 'start') files.startImageUrl = url
@@ -377,7 +387,7 @@ app.post('/jobs', async (c) => {
     const vt = await videoTemplate(c.env.DB, req.template, { unpublished: isAdmin(c) })
     if (!vt) return c.json({ error: 'unknown_template' }, 400)
     if (req.modelId !== vt.modelId) return c.json({ error: 'template_model_mismatch' }, 400)
-    const built = templateFiles(vt.inputs, req.templateInputs, new URL(c.req.url).origin)
+    const built = templateFiles(vt.inputs, req.templateInputs, new URL(c.req.url).origin, Array.isArray(req.plans) ? req.plans.map((p) => p?.text) : [])
     if (built.error) return c.json(built.error, 400)
     const { templateInputs, startImageUrl, endImageUrl, audioUrl, elements, references, task, ...rest } = req
     req = { ...rest, ...built.files }

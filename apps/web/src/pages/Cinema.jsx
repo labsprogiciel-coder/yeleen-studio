@@ -208,7 +208,7 @@ export default function Cinema() {
   const tplIn = useMemo(() => tplInputs(startTpl), [startTpl])
   const hasIn = video && tool === 'video-refs' && tplIn.length > 0 && vmodel.id === startTpl.modelId
   const tplTokens = useMemo(() => tokenItems(tplIn), [tplIn])
-  const missing = hasIn ? missingInputs(tplIn, tin) : []
+  const missing = hasIn ? missingInputs(tplIn, tin, s.plans.map((p) => p.text)) : []
   const roles = hasIn ? {} : Object.fromEntries(ref.items.map((i) => [i.token, i.role]))
   const items = hasIn
     ? tplTokens.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: tin[x.idx] }))

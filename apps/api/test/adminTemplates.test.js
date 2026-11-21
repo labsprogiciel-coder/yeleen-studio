@@ -664,8 +664,12 @@ test('POST /jobs : une entrée facultative omise ne décale pas les jetons des s
     const job = { kind: 'video', modelId: 'kling-3-pro', template: 'danse', plans: [{ text: '@Element1 et @Element2 dansent', dur: 5 }], secs: 5, sound: true }
     const send = (templateInputs, requestId) => t.as('user_alice', '/jobs', json('POST', { ...job, templateInputs, requestId }))
     assert.deepEqual((await send([{ idx: 0, url: F(0) }, { idx: 2, url: F(2) }], 'danse-00001')).body, { error: 'template_input_missing', idx: 1 })
-    const ok = await send([{ idx: 0, url: F(0) }, { idx: 1, url: F(1) }], 'danse-00002')
+    // Omise mais citée par le texte : refusée avant tout débit (le fournisseur recevrait « @Element2 » sans fichier).
+    assert.deepEqual((await send([{ idx: 0, url: F(0) }, { idx: 1, url: F(1) }], 'danse-00002')).body, { error: 'template_input_missing', idx: 2 })
+    assert.equal(t.sent.length, 0)
+    const ok = await t.as('user_alice', '/jobs', json('POST', { ...job, plans: [{ text: '@Element1 danse', dur: 5 }], templateInputs: [{ idx: 0, url: F(0) }, { idx: 1, url: F(1) }], requestId: 'danse-00003' }))
     assert.equal(ok.status, 202, JSON.stringify(ok.body))
     assert.deepEqual(t.sent[0].body.inputs.elements.map((e) => [e.id, e.frontalImage]), [['element_1', F(1)]])
+    assert.doesNotMatch(t.sent[0].body.inputs.prompt ?? JSON.stringify(t.sent[0].body.inputs), /element_2/)
   } finally { t.restore() }
 })

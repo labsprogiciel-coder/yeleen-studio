@@ -144,8 +144,10 @@ test('Vidéos à refaire : publiques, publiées seulement, dans l’ordre, fichi
     ins.run('fete', 'Tabaski', null, 'fete', 'templates/fete/video.mp4', 'wan-3', '[{"text":"Une famille réunie","dur":8}]', '720p', 'auto', 0, null, 0, 1)
     ins.run('brouillon', 'Pas prêt', null, 'pub', 'templates/b/video.mp4', 'wan-3', '[{"text":"x","dur":5}]', null, null, 1, null, 2, 0)
     ins.run('casse', 'Plans illisibles', null, 'pub', 'templates/c/video.mp4', 'wan-3', 'pas du json', null, null, 1, null, 3, 1)
+    const calls = t.db.calls
     const res = await t.json('/templates')
     assert.equal(res.status, 200)
+    assert.equal(t.db.calls - calls, 1) // modèles et entrées lus dans un seul batch (même instantané)
     assert.match(res.headers.get('cache-control'), /max-age=300/)
     assert.deepEqual(res.body.templates.map((x) => x.id), ['fete', 'maquis'])
     assert.deepEqual(res.body.templates[1], {

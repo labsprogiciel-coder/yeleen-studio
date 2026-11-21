@@ -118,3 +118,17 @@ test('lien ?tpl= : identifiant lu s’il est sain', () => {
   assert.equal(tplParam('?tpl=../x'), null)
   assert.equal(tplParam(''), null)
 })
+
+test('missingInputs : une facultative omise que le texte cite est due (« cited ») ; sans citation elle reste facultative', () => {
+  const ins = [
+    { idx: 0, slot: 'start', kind: 'image', mode: 'user', label: 'Votre photo' },
+    { idx: 1, slot: 'element', kind: 'image', mode: 'user', label: 'Premier danseur', optional: true },
+    { idx: 2, slot: 'element', kind: 'image', mode: 'user', label: 'Second danseur', optional: true },
+  ]
+  const given = { 0: 'a', 1: 'b' }
+  const m = missingInputs(ins, given, ['@Element1 et @Element2 dansent'])
+  assert.deepEqual(m.map((x) => [x.idx, x.why, x.token]), [[2, 'cited', '@Element2']])
+  assert.equal(blockerText(m), 'Ajoutez : second danseur, ou retirez « @Element2 » du texte.')
+  assert.deepEqual(missingInputs(ins, given, ['@Element1 danse']), [])
+  assert.deepEqual(missingInputs(ins, given, ['@Element12 danse']), []) // @Element12 ne cite pas @Element1… ni @Element2
+})

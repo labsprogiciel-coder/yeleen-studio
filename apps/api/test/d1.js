@@ -17,7 +17,10 @@ export function testD1() {
       const stmt = db.prepare(sql)
       return {
         bind: (...args) => ({
-          exec: () => { const r = stmt.run(...args); return { success: true, results: [], meta: { changes: Number(r.changes) } } }, // pour batch()
+          exec: () => { // pour batch() : une lecture rend ses lignes, comme D1
+            if (/^\s*(SELECT|WITH)\b/i.test(sql)) return { success: true, results: stmt.all(...args) }
+            const r = stmt.run(...args); return { success: true, results: [], meta: { changes: Number(r.changes) } }
+          },
           run: async () => { d1.calls++; if (d1.failing) throw new Error('D1 indisponible'); const r = stmt.run(...args); return { success: true, meta: { changes: Number(r.changes) } } },
           first: async () => { d1.calls++; if (d1.failing) throw new Error('D1 indisponible'); return stmt.get(...args) ?? null },
           all: async () => { d1.calls++; return { results: stmt.all(...args) } },

@@ -97,6 +97,14 @@ export const publicInputs = (inputs, origin) => inputs.map(({ file, optional, ..
 export const TEMPLATE_COLS = `t.id, t.name, t.blurb, t.category, t.video_key, t.image, t.model_id, t.plans, t.resolution, t.ratio, t.sound, t.photo, t.sort, t.published, t.created_at,
   g.tool AS g_tool, g.source_key AS g_source_key, g.secs AS g_secs, g.prompt AS g_prompt, g.roles AS g_roles`
 /** Une ligne de `templates` (publiée ou non) avec sa source Genjutsu éventuelle (colonnes g_…), ou null. */
+/** Un modèle et ses entrées lus ensemble (batch : même instantané) : { t, rows } (t = null s'il n'existe pas). */
+export async function templateSnapshot(db, id) {
+  const [a, b] = await db.batch([
+    db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id WHERE t.id = ?1`).bind(id),
+    db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i WHERE i.template_id = ?1 ORDER BY i.idx`).bind(id),
+  ])
+  return { t: a.results[0] ?? null, rows: b.results }
+}
 export const templateRow = (db, id) => db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id WHERE t.id = ?1`).bind(id).first()
 
 /**
@@ -134,10 +142,13 @@ export function publicTemplate(t, rows, origin) {
  * ratio, sound, photo, inputs }] }. Les adresses sont celles de l'API (/files/templates/…). Une ligne aux plans illisibles est ignorée.
  */
 export async function listTemplates(db, origin) {
-  const { results } = await db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id
-    WHERE t.published = 1 ORDER BY t.sort, t.created_at`).bind().all()
+  // Une seule lecture (batch : même instantané) : un enregistrement concurrent ne mêle pas l'ancien modèle et les nouvelles entrées.
+  const [{ results }, { results: all }] = await db.batch([
+    db.prepare(`SELECT ${TEMPLATE_COLS} FROM templates t LEFT JOIN template_genjutsu g ON g.template_id = t.id
+      WHERE t.published = 1 ORDER BY t.sort, t.created_at`).bind(),
+    db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i JOIN templates t ON t.id = i.template_id WHERE t.published = 1 ORDER BY i.template_id, i.idx`).bind(),
+  ])
   const rows = new Map()
-  const all = (await db.prepare(`SELECT ${INPUT_COLS} FROM template_inputs i JOIN templates t ON t.id = i.template_id WHERE t.published = 1 ORDER BY i.template_id, i.idx`).bind().all()).results
   for (const r of all) rows.set(r.template_id, [...(rows.get(r.template_id) ?? []), r])
   return { templates: results.flatMap((t) => publicTemplate(t, rows.get(t.id) ?? [], origin) ?? []) }
 }
@@ -163,7 +174,7 @@ export async function templateSource(db, id, { unpublished = false } = {}) {
  */
 export async function videoTemplate(db, id, { unpublished = false } = {}) {
   if (typeof id !== 'string' || !TEMPLATE_ID.test(id)) return null
-  const t = await templateRow(db, id)
+  const { t, rows } = await templateSnapshot(db, id)
   if (!t || t.g_tool || (!t.published && !unpublished)) return null
-  return { id: t.id, modelId: t.model_id, inputs: inputsOf(t, await inputRows(db, id)) }
+  return { id: t.id, modelId: t.model_id, inputs: inputsOf(t, rows) }
 }

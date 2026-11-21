@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { VIDEO_MODELS } from '@studio/catalog'
 import { LIMITS, findVideoModel, inputIssues } from '@studio/catalog/template-slots'
-import { INPUT_COLS, TEMPLATE_COLS, inputRows, inputsOf, publicTemplate, templateRow } from './library.js'
+import { INPUT_COLS, TEMPLATE_COLS, inputRows, inputsOf, publicTemplate, templateRow, templateSnapshot } from './library.js'
 import { mediaInfo } from './media.js'
 import { badDuration } from './pricing.js'
 import { templateKey } from './storage.js'
@@ -204,7 +204,7 @@ export function adminTemplatesApp() {
     return t ? { t } : { error: c.json({ error: 'not_found' }, 404) }
   }
   /** Le modèle `id` tel que l'administration le reçoit, ou null s'il a été supprimé entre-temps. */
-  const view = async (c, id) => { const t = await templateRow(c.env.DB, id); return t ? adminView(t, await inputRows(c.env.DB, id), origin(c)) : null }
+  const view = async (c, id) => { const { t, rows } = await templateSnapshot(c.env.DB, id); return t ? adminView(t, rows, origin(c)) : null }
   const gone = (c) => c.json({ error: 'not_found' }, 404)
   const reply = (c, v, status = 200) => (v ? c.json({ template: v }, status) : gone(c))
 
