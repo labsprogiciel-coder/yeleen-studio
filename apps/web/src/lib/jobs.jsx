@@ -98,6 +98,9 @@ export const FAILURES = {
   },
 }
 
+// Solde encore inconnu (null : pas encore lu sur le serveur, ou illisible) : il le reste, aucun calcul ne l'invente.
+const plus = (balance, delta) => (balance == null ? null : balance + delta)
+
 function tick(state, now) {
   let balance = state.balance
   const notes = []
@@ -109,7 +112,7 @@ function tick(state, now) {
     const fresh = j.steps.filter(([p, msg]) => p <= progress && !j.logs.some((l) => l.msg === msg)).map(([, msg]) => ({ msg }))
     const logs = fresh.length ? j.logs.concat(fresh) : j.logs
     if (j.failure && progress >= j.failAt) {
-      balance += j.cost
+      balance = plus(balance, j.cost)
       notes.push(`Échec : ${j.title}. ${jetons(j.cost)} cauris remboursés.`)
       return { ...j, status: 'FAILED', progress: j.failAt, finishedAt: now, refund: j.cost, logs: logs.concat({ msg: `Erreur : ${FAILURES[j.failure].message}`, error: true }) }
     }
@@ -148,10 +151,10 @@ function reducer(state, action) {
     case 'TICK':
       return tick(state, action.now)
     case 'SUBMIT':
-      return tick({ ...state, balance: action.job.live ? state.balance : state.balance - action.job.cost, jobs: [...state.jobs, action.job], message: `${action.job.title} : en file d’attente.` }, action.now)
+      return tick({ ...state, balance: action.job.live ? state.balance : plus(state.balance, -action.job.cost), jobs: [...state.jobs, action.job], message: `${action.job.title} : en file d’attente.` }, action.now)
     case 'RETRY': {
       const jobs = state.jobs.filter((j) => j.id !== action.replaces).concat(action.job)
-      return tick({ ...state, balance: action.job.live ? state.balance : state.balance - action.job.cost, jobs, message: `${action.job.title} : nouvelle tentative.` }, action.now)
+      return tick({ ...state, balance: action.job.live ? state.balance : plus(state.balance, -action.job.cost), jobs, message: `${action.job.title} : nouvelle tentative.` }, action.now)
     }
     case 'CANCEL': {
       const j = state.jobs.find((x) => x.id === action.id)
@@ -165,20 +168,23 @@ function reducer(state, action) {
       // En file : tout est remboursé. En cours : seule la part non consommée l'est.
       const refund = j.status === 'IN_QUEUE' ? j.cost : Math.round(j.cost * (1 - j.progress / 100) * 10) / 10
       const jobs = state.jobs.map((x) => (x.id === j.id ? { ...x, status: 'CANCELED', finishedAt: action.now, refund, logs: x.logs.concat({ msg: 'Annulé par l’utilisateur' }) } : x))
-      return tick({ ...state, jobs, balance: state.balance + refund, message: `${j.title} annulée. ${jetons(refund)} cauris remboursés.` }, action.now)
+      return tick({ ...state, jobs, balance: plus(state.balance, refund), message: `${j.title} annulée. ${jetons(refund)} cauris remboursés.` }, action.now)
     }
     case 'SYNC_WALLET':
-      return { ...state, balance: action.balance, serverBalance: action.balance }
+      return { ...state, balance: action.balance, serverBalance: action.balance, wallet: 'ready' }
+    case 'WALLET':
+      return state.wallet === 'ready' ? state : { ...state, wallet: action.wallet }
     case 'REMOTE': {
       // Résultat d'un appel à l'API : on met la génération à jour, et le solde du serveur n'ajoute que sa variation
       // (les dépenses du moteur simulé, que le serveur ignore, restent comptées).
       let { balance, serverBalance } = state
       if (action.balance != null) {
-        if (serverBalance != null) balance += action.balance - serverBalance
+        if (serverBalance != null) balance = plus(balance, action.balance - serverBalance)
+        else if (balance == null) balance = action.balance // premier solde connu : celui que le serveur vient de rendre
         serverBalance = action.balance
       }
       const jobs = state.jobs.map((j) => (j.id === action.id ? { ...j, ...action.patch, logs: action.patch.logs ? j.logs.concat(action.patch.logs) : j.logs } : j))
-      return { ...state, jobs, balance, serverBalance, message: action.message ?? state.message }
+      return { ...state, jobs, balance, serverBalance, wallet: balance == null ? state.wallet : 'ready', message: action.message ?? state.message }
     }
     case 'DISMISS':
       return { ...state, jobs: state.jobs.filter((j) => j.id !== action.id) }
@@ -193,7 +199,14 @@ const Ctx = createContext(null)
 export const useJobs = () => useContext(Ctx)
 
 export function JobsProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, { jobs: [], balance: START_BALANCE, serverBalance: null, message: '' })
+  const [state, dispatch] = useReducer(reducer, {
+    jobs: [],
+    // Avec l'API, le solde est inconnu tant que le serveur ne l'a pas rendu : jamais de chiffre inventé (le moteur simulé garde ses cauris de démonstration).
+    balance: apiEnabled ? null : START_BALANCE,
+    wallet: apiEnabled ? 'loading' : 'ready', // 'loading' | 'ready' | 'error'
+    serverBalance: null,
+    message: '',
+  })
   const ref = useRef(state)
   ref.current = state
   const seq = useRef(0)
@@ -320,7 +333,8 @@ export function JobsProvider({ children }) {
       if (!j || (j.status !== 'FAILED' && j.status !== 'CANCELED')) { sent.current = first.sent; return first }
       guard.current.drop(key, first)
     }
-    const missing = spec.cost - ref.current.balance
+    // Solde inconnu : pas de refus local, le serveur vérifie de toute façon (et la carte dit « Solde insuffisant » s'il refuse).
+    const missing = ref.current.balance == null ? 0 : spec.cost - ref.current.balance
     if (missing > 0) return { ok: false, missing }
     const attempt = replaces ? (ref.current.jobs.find((j) => j.id === replaces)?.attempt ?? 1) + 1 : 1
     const job = make(spec, attempt)
@@ -365,10 +379,23 @@ export function JobsProvider({ children }) {
 
   // Solde réel au démarrage (et à la connexion : sans session, l'API refuse).
   const { ready, signedIn } = useAuthState()
-  useEffect(() => {
+  const loadWallet = useCallback(() => {
     if (!apiEnabled || !ready || !signedIn) return
-    api.wallet().then((w) => dispatch({ type: 'SYNC_WALLET', balance: w.balance })).catch(() => { /* API éteinte : le solde simulé reste affiché */ })
+    dispatch({ type: 'WALLET', wallet: 'loading' })
+    api.wallet()
+      .then((w) => (typeof w?.balance === 'number' ? dispatch({ type: 'SYNC_WALLET', balance: w.balance }) : dispatch({ type: 'WALLET', wallet: 'error' })))
+      .catch(() => dispatch({ type: 'WALLET', wallet: 'error' })) // illisible : « — » et une flèche pour réessayer, jamais un chiffre inventé
   }, [ready, signedIn])
+  useEffect(() => { loadWallet() }, [loadWallet])
+  // Solde illisible : nouvel essai quand la fenêtre revient au premier plan (réseau revenu, téléphone rallumé).
+  const walletState = state.wallet
+  useEffect(() => {
+    if (walletState !== 'error') return
+    const again = () => { if (document.visibilityState === 'visible') loadWallet() }
+    document.addEventListener('visibilitychange', again)
+    window.addEventListener('online', again)
+    return () => { document.removeEventListener('visibilitychange', again); window.removeEventListener('online', again) }
+  }, [walletState, loadWallet])
 
   // Suivi des générations réelles : on interroge l'API tant qu'une génération est active.
   const polling = useRef(new Set())
@@ -426,7 +453,9 @@ export function JobsProvider({ children }) {
 
   const value = useMemo(() => ({
     jobs: state.jobs,
-    balance: state.balance,
+    balance: state.balance, // null tant que le serveur ne l'a pas rendu (voir `wallet`)
+    wallet: state.wallet,
+    reloadWallet: loadWallet,
     running: state.jobs.filter((j) => j.status === 'IN_PROGRESS').length,
     queued: state.jobs.filter((j) => j.status === 'IN_QUEUE').length,
     submit,
@@ -437,7 +466,7 @@ export function JobsProvider({ children }) {
     dismiss: (id) => dispatch({ type: 'DISMISS', id }),
     clearDone: (kind) => dispatch({ type: 'CLEAR_DONE', kind }),
     syncBalance: (balance) => { if (typeof balance === 'number') dispatch({ type: 'SYNC_WALLET', balance }) }, // solde réel rendu par l'API (recharges)
-  }), [state.jobs, state.balance, submit, cancel])
+  }), [state.jobs, state.balance, state.wallet, loadWallet, submit, cancel])
 
   return (
     <Ctx.Provider value={value}>

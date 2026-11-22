@@ -5,11 +5,12 @@ import Icon from '../../lib/icons.jsx'
 import { useAccount } from '../../lib/auth.jsx'
 import { helpLink, initials, placeAccountMenu } from '../../lib/accountMenu.js'
 import { CONTACT } from '../../lib/contact.js'
-import { jetons, useJobs } from '../../lib/jobs.jsx'
+
 import { useRecharge } from '../../lib/rechargeDialog.jsx'
 import { useTheme } from '../../lib/theme.jsx'
 import useIsAdmin from '../../lib/useIsAdmin.jsx'
 import Cauri from '../Cauri.jsx'
+import { BalanceNumber, useBalance } from '../BalanceValue.jsx'
 
 const HELP = helpLink(CONTACT)
 
@@ -28,7 +29,7 @@ function Avatar({ account, size }) {
  */
 export default function AccountPopover({ collapsed, onPick }) {
   const account = useAccount()
-  const { balance } = useJobs()
+  const bal = useBalance()
   const { openRecharge } = useRecharge()
   const { isDark, toggleTheme } = useTheme()
   const { admin } = useIsAdmin()
@@ -135,10 +136,10 @@ export default function AccountPopover({ collapsed, onPick }) {
               {account.email && <small>{account.email}</small>}
             </span>
           </div>
-          <div className="cx-am-bal" role="group" aria-label={`Solde : ${jetons(balance)} cauris`}>
+          <div className="cx-am-bal" role="group" aria-label={`Solde : ${bal.spoken}`}>
             <span className="cx-am-bal-tx" aria-hidden="true">
               <small>Solde</small>
-              <span className="cx-am-bal-n"><Cauri size={18} /><b>{jetons(balance)}</b> cauris</span>
+              <span className="cx-am-bal-n"><Cauri size={18} /><b><BalanceNumber view={bal} /></b> cauris</span>
             </span>
             <button type="button" role="menuitem" tabIndex={-1} className="cx-am-top" aria-haspopup="dialog" onClick={pick(() => openRecharge())}>Recharger</button>
           </div>

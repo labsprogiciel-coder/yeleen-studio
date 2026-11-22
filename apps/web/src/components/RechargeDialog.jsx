@@ -434,9 +434,9 @@ export default function RechargeDialog({ open, request, onClose }) {
         <div>
           <h2 id="rc-title">Recharger</h2>
           {flow ? (
-            <p><b className="rc-now">{STEPS[step]}</b> · étape {step + 1} sur {STEPS.length} · solde <b><Amount n={balance} word /></b></p>
+            <p><b className="rc-now">{STEPS[step]}</b> · étape {step + 1} sur {STEPS.length} · solde <b>{balance == null ? '…' : <Amount n={balance} word />}</b></p>
           ) : (
-            <p>Solde : <b><Amount n={balance} word /></b></p>
+            <p>Solde : <b>{balance == null ? '…' : <Amount n={balance} word />}</b></p>
           )}
         </div>
         <button type="button" className="rc-x" onClick={onClose} aria-label="Fermer"><Icon name="close" size={18} /></button>
