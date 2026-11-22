@@ -31,7 +31,7 @@ const NORMALIZATION = [
   { id: 'off', title: 'Texte brut' },
 ]
 
-export default function AudioPanel({ tool = 'voice-generator', onTool }) {
+export default function AudioPanel({ tool = 'voice-generator', onTool, onDone }) {
   const currentTool = tool || 'voice-generator'
   const tInfo = TOOLS.audio.find((x) => x.id === currentTool) ?? TOOLS.audio[0]
 
@@ -119,7 +119,8 @@ export default function AudioPanel({ tool = 'voice-generator', onTool }) {
       voice: voice.id,
       meta: `${voice.label} · ${script.length} caractères${language === 'auto' ? '' : ` · ${lang?.title ?? language}`}`,
     })
-    if (!r.ok) setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    onDone?.()
   }
 
   return (

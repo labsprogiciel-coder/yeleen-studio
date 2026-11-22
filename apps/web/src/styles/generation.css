@@ -52,7 +52,7 @@
 /* Vidéo : une scène plein panneau */
 .vs{display:flex;flex-direction:column;gap:12px;flex:1;min-height:0}
 .vs-wrap{flex:1 1 0;min-height:260px;container-type:size;display:flex;align-items:center;justify-content:center}
-.vs-canvas{position:relative;isolation:isolate;overflow:hidden;display:grid;grid-template-rows:auto 1fr auto;width:min(100cqw,calc(100cqh*var(--ar)));aspect-ratio:var(--ar);border-radius:16px;background:#0b0c0e;color:#fff}
+.vs-canvas{position:relative;isolation:isolate;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr auto;width:min(100cqw,calc(100cqh*var(--ar)));aspect-ratio:var(--ar);border-radius:16px;background:#0b0c0e;color:#fff}
 .vs-art{position:absolute;inset:-8%;z-index:-3;transition:filter .3s linear}
 .vs-glow{position:absolute;inset:-30%;z-index:-2;mix-blend-mode:screen;background:radial-gradient(circle at 30% 40%,rgba(255,90,31,.3),transparent 38%),radial-gradient(circle at 72% 62%,rgba(255,255,255,.16),transparent 44%);animation:vsdrift 7s ease-in-out infinite alternate}
 @keyframes vsdrift{from{transform:translate(-4%,-2%) rotate(0)}to{transform:translate(5%,3%) rotate(14deg)}}
@@ -140,3 +140,30 @@
 .vs-canvas .vs-mid{pointer-events:none}
 .vs-th .art{overflow:hidden}
 .vs-th .art video{width:100%;height:100%;object-fit:cover}
+/* L'échec garde ses boutons cliquables (Recharger) alors que le milieu de la scène laisse passer les clics vers le lecteur. */
+.vs-canvas .vs-fail{pointer-events:auto}
+/* Sur la scène, toujours sombre, le remboursement s'écrit en blanc : l'encre d'accent du thème clair y est illisible. */
+.vs-fail .gx-refund{color:#fff}
+
+/*
+ * Téléphone : la scène n'est plus un écran 16:9 à hauteur fixe, où le texte et les actions se chevauchaient, mais une carte qui suit
+ * son contenu : le titre sur trois lignes au plus, la vidéo (ou l'avancement, ou l'échec), puis les actions en ligne, de 44 px au moins.
+ */
+@media (max-width:640px){
+  .vs-wrap{flex:none;min-height:0;container-type:inline-size;display:block}
+  .vs-canvas{display:flex;flex-direction:column;width:100%;aspect-ratio:auto;min-height:calc(100cqw/var(--ar))}
+  .vs-canvas:has(.vs-video) .vs-art{display:none}
+  .vs-top{order:1;align-items:flex-start;padding:12px 12px 10px}
+  .vs-prompt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;white-space:normal;line-height:1.4;overflow-wrap:anywhere}
+  .vs-video{order:2;position:relative;inset:auto;flex:none;height:auto;aspect-ratio:var(--ar)}
+  .vs-mid{order:3;flex:1;padding:8px 12px}
+  .vs-mid:empty{display:none} /* vidéo prête : rien au milieu, pas de bande vide entre le lecteur et les actions */
+  .vs-pct{font-size:56px}
+  .vs-fail{align-self:stretch;max-width:none;padding:0;background:none;text-align:left}
+  .vs-lanes{width:100%}
+  .vs-bot{order:4}
+  .vs-chap{padding:10px 12px 4px}
+  .vs-done{padding:8px 12px 0}
+  .vs-act{order:5;position:static;flex-direction:row;flex-wrap:wrap;justify-content:flex-end;padding:8px 12px 12px}
+  .vs-act button{min-width:44px;height:44px}
+}

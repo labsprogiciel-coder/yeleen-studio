@@ -47,8 +47,8 @@ const modelFor = (slot, current) => {
   return { start: 'ltx-2-5-fast', end: 'ltx-2-3-pro', audio: 'ltx-2-3-a2v' }[slot]
 }
 
-/** Panneau de création vidéo. `banner` : la carte du preset en tête (l'écran Vidéo) ; Cinéma a son propre en-tête d'outil. */
-export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel = 'Plus' }) {
+/** Panneau de création vidéo. `banner` : la carte du preset en tête (l'écran Vidéo) ; Cinéma a son propre en-tête d'outil. `onDone` : après l'envoi. */
+export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel = 'Plus', onDone }) {
   const cfg = PANEL_MODES[mode]
   const models = useMemo(() => VIDEO_MODELS.filter(cfg.modelFilter ?? (() => true)), [cfg])
 
@@ -149,6 +149,7 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
         brand
         secs={mode === 'edit' ? Math.max(4, Math.ceil(sourceSecs || 0)) : s.total}
         live={{ model, files, source: files.source, sourceSecs: sourceSecs || 0, task: mode === 'edit' ? 'editing' : undefined, style: styleId ?? undefined }}
+        onDone={onDone}
       />
     </div>
   )

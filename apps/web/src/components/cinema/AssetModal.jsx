@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import useEdgeFade from '../../lib/useEdgeFade.js'
 import Icon from '../../lib/icons.jsx'
 import Menu from '../Menu.jsx'
 import AssetThumb from '../AssetThumb.jsx'
@@ -92,6 +93,9 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
     if (!open && d.open) d.close()
   }, [open, initialSub, view, onlyKind]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Rangée de filtres qui défile de côté (fenêtre étroite) : un bord s'estompe seulement s'il reste des filtres de ce côté-là.
+  const [strip, fade] = useEdgeFade([open, tab])
+
   // Fichier à montrer (« Voir dans la bibliothèque ») : amené au centre et encadré.
   useEffect(() => {
     if (!open || !focus) return
@@ -172,14 +176,14 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
 
       <div className="am-panel" id="am-main" role="tabpanel" aria-labelledby={`am-tab-${tab}`}>
         <div className="am-sub">
-          <div className="am-subs" role="tablist" aria-label="Type" onKeyDown={onTabKeys}>
+          <div ref={strip} className="am-subs" role="tablist" aria-label="Type" onKeyDown={onTabKeys} onScroll={fade}>
             {tabs.find((t) => t.id === tab).subs.filter((t) => !rule || !KIND_IDS.includes(t.id) || rule.kinds.has(t.id)).map((t) => (
               <button key={t.id} type="button" role="tab" aria-selected={sub === t.id} tabIndex={sub === t.id ? 0 : -1} className={sub === t.id ? 'on' : undefined} onClick={() => setSub(t.id)}>{t.label}</button>
             ))}
           </div>
           <div className="am-end">
             {tab === 'library' && (
-              <Menu items={ORIGINS} value={origin} onChange={setOrigin} label="Origine" menuWidth={180} className="am-sort">
+              <Menu items={ORIGINS} value={origin} onChange={setOrigin} label={origin === 'all' ? 'Origine' : `Origine : ${ORIGINS.find((o) => o.id === origin).title}`} menuWidth={180} className={`am-sort${origin === 'all' ? '' : ' on'}`}>
                 <Icon name="filter" size={16} /><span>{origin === 'all' ? 'Origine' : ORIGINS.find((o) => o.id === origin).title}</span>
               </Menu>
             )}
@@ -252,7 +256,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
 
         {(undo || picked.size > 0) && (
           <div className="am-bar" role="region" aria-label={undo ? 'Suppression' : 'Sélection'} aria-live="polite">
-            {undo && <div className="am-undo"><span>« {undo.name} » supprimé</span><button type="button" onClick={cancelDelete}>Annuler</button></div>}
+            {undo && <div className="am-undo"><span><span className="am-un">« {undo.name} »</span> supprimé</span><button type="button" onClick={cancelDelete}>Annuler</button></div>}
             {picked.size > 0 && <button type="button" className="am-add" onClick={add}>Ajouter {picked.size} fichier{picked.size > 1 ? 's' : ''}</button>}
           </div>
         )}

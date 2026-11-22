@@ -79,6 +79,30 @@ test('téléphone étroit : la fenêtre rétrécit pour tenir entre les marges',
   inside(p, menu, vp, 16)
 })
 
+test('téléphone, bouton en bas du volet : la fenêtre s’ouvre au-dessus de lui, dans l’écran', () => {
+  const vp = { width: 390, height: 844 }
+  const menu = { width: 300, height: 420 }
+  const p = placeAccountMenu({ trigger: { left: 14, top: 780, right: 278, bottom: 828 }, railRight: 292, menu, viewport: vp })
+  assert.deepEqual(p, { left: 16, top: 352, width: 300, maxHeight: 756, side: 'above' })
+  inside(p, menu, vp, 16)
+})
+
+test('téléphone, dans le volet : la fenêtre a la largeur des entrées et ne dépasse pas sur le fond', () => {
+  const vp = { width: 390, height: 844 }
+  const trigger = { left: 14, top: 780, right: 278, bottom: 828 }
+  const p = placeAccountMenu({ trigger, within: trigger, railRight: 292, menu: { width: 300, height: 420 }, viewport: vp })
+  assert.deepEqual(p, { left: 14, top: 352, width: 264, maxHeight: 756, side: 'above' })
+})
+
+test('téléphone, écran bas : au-dessus du bouton, la fenêtre défile sans sortir de l’écran', () => {
+  const vp = { width: 360, height: 400 }
+  const menu = { width: 300, height: 420 }
+  const p = placeAccountMenu({ trigger: { left: 14, top: 336, right: 278, bottom: 384 }, menu, viewport: vp })
+  assert.equal(p.side, 'above')
+  assert.equal(p.top, 16)
+  assert.equal(p.maxHeight, 312)
+})
+
 test('900 px compte comme téléphone, 901 px comme grand écran', () => {
   const args = { trigger: { left: 800, top: 10, right: 844, bottom: 54 }, menu: { width: 300, height: 300 } }
   assert.equal(placeAccountMenu({ ...args, viewport: { width: 900, height: 800 } }).side, 'below')

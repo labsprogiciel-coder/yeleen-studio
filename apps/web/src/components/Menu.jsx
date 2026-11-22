@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Icon from '../lib/icons.jsx'
 import ModelLogo from './ModelLogo.jsx'
 import '../styles/menu.css'
@@ -16,6 +16,7 @@ export default function Menu({ items, value, onChange, label, heading, menuWidth
   const [q, setQ] = useState('')
   const btn = useRef(null)
   const list = useRef(null)
+  const vw = useRef(0)
   const open = pos !== null
 
   const close = (refocus = false) => {
@@ -27,15 +28,27 @@ export default function Menu({ items, value, onChange, label, heading, menuWidth
   const toggle = () => {
     if (open) return close()
     const r = btn.current.getBoundingClientRect()
-    const width = Math.max(menuWidth, r.width)
+    // Jamais plus large que l'écran (téléphone) : sinon la colonne des prix sort de la fenêtre.
+    vw.current = window.innerWidth
+    const width = Math.min(Math.max(menuWidth, r.width), vw.current - 16)
     const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8))
-    const below = window.innerHeight - r.bottom
+    // Une barre collée en bas de l'écran (Générer, au téléphone) borne la place sous le bouton : le menu s'arrête au-dessus d'elle.
+    const bar = window.innerWidth <= 900 && [...document.querySelectorAll('.ep-gen')].map((e) => (/fixed|sticky/.test(getComputedStyle(e).position) ? e.getBoundingClientRect() : null)).find((b) => b && b.height > 0 && b.top >= r.bottom && b.top < window.innerHeight)
+    const below = (bar ? bar.top : window.innerHeight) - r.bottom
     const above = r.top
     // Ouvre vers le haut quand le bas manque de place (ex. barre de prompt collée en bas de l'écran).
     setPos(below < 300 && above > below
       ? { bottom: window.innerHeight - r.top + 6, left, width, maxHeight: Math.max(160, above - 18) }
       : { top: r.bottom + 6, left, width, maxHeight: Math.max(160, below - 18) })
   }
+
+  // Un ancêtre transformé (barre flottante) décale un élément `fixed` : on ramène le menu dans l'écran s'il en sort.
+  useLayoutEffect(() => {
+    if (!open) return
+    const r = list.current.getBoundingClientRect()
+    const dx = r.left < 8 ? 8 - r.left : Math.min(0, vw.current - 8 - r.right)
+    if (Math.abs(dx) > 0.5) setPos((p) => p && { ...p, left: p.left + dx })
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -44,7 +57,9 @@ export default function Menu({ items, value, onChange, label, heading, menuWidth
     document.addEventListener('pointerdown', onDown)
     window.addEventListener('resize', onAway)
     window.addEventListener('scroll', onAway, true)
-    if (search) list.current?.querySelector('.mn-search input')?.focus()
+    // Écran tactile : pas de focus automatique sur la recherche, il ouvrirait le clavier par-dessus la liste.
+    const touch = window.matchMedia?.('(pointer: coarse)').matches
+    if (search && !touch) list.current?.querySelector('.mn-search input')?.focus()
     else list.current?.querySelector('[aria-selected="true"]')?.focus()
     return () => {
       document.removeEventListener('pointerdown', onDown)

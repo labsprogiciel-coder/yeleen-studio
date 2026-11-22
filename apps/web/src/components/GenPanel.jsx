@@ -361,6 +361,8 @@ export function GenerateButton({ price, disabled, error, title, onClick }) {
   return (
     <div className="ep-gen">
       {error && <p className="ep-gerr" role="alert">{error}</p>}
+      {/* Au téléphone (Cinéma), la raison du bouton éteint s'écrit ici : l'infobulle `title` n'existe pas au doigt. */}
+      {disabled && title && <p className="ep-gwhy">{title}</p>}
       <button type="button" className="gen" disabled={disabled} title={title} onClick={onClick}>
         Générer<span><Cauri size={18} />{jetons(price)}</span>
       </button>
@@ -370,9 +372,9 @@ export function GenerateButton({ price, disabled, error, title, onClick }) {
 
 /**
  * Bouton Générer collé en bas du panneau défilant : soumet une génération vidéo et affiche le coût en jetons.
- * `blocker` : raison pour laquelle le modèle choisi ne peut pas encore générer (ex. image de départ requise).
+ * `blocker` : raison pour laquelle le modèle choisi ne peut pas encore générer (ex. image de départ requise). `onDone` : après l'envoi.
  */
-export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText = true, secs = s.total, brand = false, live = null }) {
+export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText = true, secs = s.total, brand = false, live = null, onDone }) {
   const { submit } = useJobs()
   const { brand: kit, style } = useBrand()
   const styled = brand && kit.apply && Boolean(style) // style visuel de la marque, ajouté à la description
@@ -417,6 +419,7 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
     }
     const r = submit({ kind: 'video', title, prompt, cost: price, secs, brandStyle: styled ? style : undefined, live: liveSpec, meta: styled ? `${base} · style de la marque` : base })
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    if (r.ok) onDone?.()
   }
   return (
     <GenerateButton price={price} error={error} title={blocker ?? undefined} disabled={(needsText && !s.ready) || Boolean(blocker)} onClick={onClick} />

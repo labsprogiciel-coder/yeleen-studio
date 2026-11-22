@@ -62,6 +62,7 @@
 .ep-gen .gen span{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
 @media (max-width:900px){.ep-gen{position:static}}
 .ep>.mc{flex:none}
+.ep-gwhy{display:none}
 .ep-gerr{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:var(--danger-bg);color:var(--danger-ink);font-size:13px}
 
 .ep-tile.off{border-style:dashed;border-color:var(--line);background:var(--bg);color:var(--ink-4);cursor:not-allowed}

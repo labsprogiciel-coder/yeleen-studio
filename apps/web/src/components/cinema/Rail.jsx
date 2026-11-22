@@ -25,14 +25,17 @@ const FILES = [
   { view: { tab: 'favs' }, icon: 'star', label: 'Mes favoris' },
 ]
 
-/** Solde de cauris (et générations en cours) : ouvre la recharge. Compact quand la barre est réduite. */
-function RailBalance() {
+/**
+ * Solde de cauris (et générations en cours) : ouvre la recharge. Compact quand la barre est réduite, et dans la barre du projet
+ * sur téléphone. `onPick` : appelé avant d'ouvrir la recharge (le volet du téléphone se ferme).
+ */
+export function RailBalance({ onPick }) {
   const { balance, running, queued } = useJobs()
   const { openRecharge } = useRecharge()
   const busy = running + queued
   const label = `Solde : ${jetons(balance)} cauris${busy ? `, ${busy} génération${busy > 1 ? 's' : ''} en cours` : ''}. Recharger`
   return (
-    <button type="button" className="cx-bal" aria-haspopup="dialog" aria-label={label} title={label} onClick={() => openRecharge()}>
+    <button type="button" className="cx-bal" aria-haspopup="dialog" aria-label={label} title={label} onClick={() => { onPick?.(); openRecharge() }}>
       <span className="cx-bal-ic"><Cauri size={18} />{busy > 0 && <i className="cx-bal-dot" aria-hidden="true" />}</span>
       <b>{jetons(balance)}</b>
       <span className="cx-lbl">cauris{busy > 0 ? ` · ${busy} en cours` : ''}</span>
@@ -44,9 +47,12 @@ function RailBalance() {
  * Barre latérale du studio : la seule barre de l'écran. En haut le logo et « Nouvelle création », au milieu les types de création et
  * les fichiers, en bas le solde et le compte (AccountPopover : solde, gestion du compte, administration, thème, aide, déconnexion).
  * `collapsed` vient de Cinéma (le bouton de repli est dans la barre du projet). Réduite, elle ne montre
- * que les icônes (libellés en infobulle) ; agrandie, l'icône et le libellé. Sur téléphone, elle devient une barre horizontale en haut.
+ * que les icônes (libellés en infobulle) ; agrandie, l'icône et le libellé. Sur téléphone, elle s'ouvre en volet (RailDrawer.jsx) :
+ * `onClose` ferme ce volet ; il est appelé par le bouton × de l'en-tête et avant chaque choix.
  */
-export default function Rail({ tab, onTab, onNew, collapsed }) {
+export default function Rail({ tab, onTab, onNew, collapsed, onClose }) {
+  const drawer = Boolean(onClose)
+  const pick = (fn) => () => { onClose?.(); fn() }
   const { openLibrary } = useLibrary()
   const { isDark } = useTheme()
   // Réduite, un libellé seul (title) aide la souris ; agrandie, il est déjà écrit : pas d'infobulle en double.
@@ -59,30 +65,31 @@ export default function Rail({ tab, onTab, onNew, collapsed }) {
     </li>
   )
   return (
-    <nav className={`cx-rail${collapsed ? ' is-collapsed' : ''}`} aria-label="Espace de travail">
+    <nav className={`cx-rail${drawer ? ' is-drawer' : collapsed ? ' is-collapsed' : ''}`} aria-label="Espace de travail">
       <div className="cx-rh">
-        <Link to={features.home ? '/' : '/cinema'} className="cx-logo" aria-label="Qreativ, accueil">
+        <Link to={features.home ? '/' : '/cinema'} className="cx-logo" aria-label="Qreativ, accueil" onClick={onClose}>
           {/* Fond de la barre : blanc en thème clair (logo Plum), Plum foncé en thème sombre (logo inversé). */}
           <img className="cx-logo-mark" src={isDark ? markReversed : markPlain} alt="" width="32" height="32" />
           <img className="cx-logo-full" src={isDark ? lockupReversed : lockupPlain} alt="" height="26" />
         </Link>
+        {drawer && <button type="button" className="cx-fold cx-rail-x" aria-label="Fermer le menu" onClick={onClose}><Icon name="close" size={20} /></button>}
       </div>
-      <button type="button" className="cx-new" aria-label="Nouvelle création" title={tip('Nouvelle création')} onClick={onNew}>
+      <button type="button" className="cx-new" aria-label="Nouvelle création" title={tip('Nouvelle création')} onClick={pick(onNew)}>
         <Icon name="plus" size={17} /><span className="cx-lbl" aria-hidden="true">Nouvelle création</span>
       </button>
       <div className="cx-rs">
         <ul className="cx-rl" aria-label="Type de création">
-          {TABS.map((t) => item(t.id, t.label, t.icon, { 'aria-current': tab === t.id ? 'true' : undefined, onClick: () => onTab(t.id) }))}
+          {TABS.map((t) => item(t.id, t.label, t.icon, { 'aria-current': tab === t.id ? 'true' : undefined, onClick: pick(() => onTab(t.id)) }))}
         </ul>
         <i className="cx-sep" aria-hidden="true" />
         <ul className="cx-rl" aria-label="Mes fichiers">
-          {FILES.map((f) => item(f.label, f.label, f.icon, { 'aria-haspopup': 'dialog', onClick: () => openLibrary(f.view) }))}
-          {item('lib', 'Bibliothèque', 'folder', { 'aria-haspopup': 'dialog', onClick: () => openLibrary() })}
+          {FILES.map((f) => item(f.label, f.label, f.icon, { 'aria-haspopup': 'dialog', onClick: pick(() => openLibrary(f.view)) }))}
+          {item('lib', 'Bibliothèque', 'folder', { 'aria-haspopup': 'dialog', onClick: pick(() => openLibrary()) })}
         </ul>
       </div>
       <div className="cx-rf">
-        <RailBalance />
-        <AccountPopover collapsed={collapsed} />
+        <RailBalance onPick={onClose} />
+        <AccountPopover collapsed={collapsed} onPick={onClose} />
       </div>
     </nav>
   )

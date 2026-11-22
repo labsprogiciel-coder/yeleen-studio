@@ -74,8 +74,9 @@ function Tour({ tool }) {
  * et Modèles (les vidéos à refaire, puis les workflows en cartes). `top` : bandeau au-dessus des créations (avancement d'un modèle
  * lancé). `templates` : les vidéos à refaire ; `onRecreate` en ouvre une dans le générateur. `picked` : la vidéo à refaire choisie,
  * lue en tête de Créations ; tant qu'il y en a une, les cartes « Commencer à créer » et « Modèles en vedette » s'effacent.
+ * `hideModels` (téléphone, génération en file ou en cours) : la section « Modèles » de Créations laisse la place aux générations.
  */
-export default function Showcase({ view, onView, tool, onPickTemplate, templates = [], onRecreate, picked = null, onUnpick, top = null }) {
+export default function Showcase({ view, onView, tool, hideModels = false, onPickTemplate, templates = [], onRecreate, picked = null, onUnpick, top = null }) {
   const { jobs } = useJobs()
   const { openLibrary } = useLibrary()
   const onTabKeys = useTabKeys()
@@ -103,7 +104,7 @@ export default function Showcase({ view, onView, tool, onPickTemplate, templates
             {top}
             {picked && <PickedTemplate t={picked} onClear={onUnpick} />}
             {kinds.length > 0 ? kinds.map((k) => <GenerationTray key={k} kind={k} className="cx-tray" />) : !picked && <Tour tool={tool} />}
-            {!picked && <section className="cx-sec" aria-labelledby="cx-new-h">
+            {!picked && !hideModels && <section className="cx-sec" aria-labelledby="cx-new-h">
               <div className="cx-sec-h">
                 <h2 id="cx-new-h">{kinds.length ? 'Modèles' : 'Commencer à créer'}</h2>
                 <button type="button" className="cx-all" onClick={() => onView('templates')}>Tout voir<Icon name="chevR" size={14} /></button>
