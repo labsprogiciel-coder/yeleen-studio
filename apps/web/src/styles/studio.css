@@ -152,7 +152,7 @@
 
 /* Zone principale */
 .cx-main{min-height:0;min-width:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:18px;background:var(--panel);overflow:hidden}
-.cx-main:focus{outline:0}
+.cx-main:focus,.cx-panel:focus{outline:0}
 .cx-mbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px}
 .cx-views{display:flex;gap:4px}
 .cx-views button{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border:0;border-radius:12px;background:none;color:var(--ink-3);font-size:15px;font-weight:600;cursor:pointer}
@@ -249,33 +249,99 @@
 .cx-view .rc-runbar{width:100%}
 
 @media (max-width:1100px){.cx-body{grid-template-columns:340px minmax(0,1fr)}}
-/* Téléphone et tablette : une seule colonne qui défile ; la barre d'icônes passe en haut, à l'horizontale. */
+/*
+ * Volet de la barre latérale (RailDrawer.jsx, téléphone et tablette) : fenêtre modale à gauche, sur toute la hauteur, par-dessus la
+ * page assombrie. La barre y est agrandie (logo complet, libellés) ; seul le milieu défile, le solde et le compte restent en bas.
+ */
+dialog.cx-drawer{position:fixed;inset:0 auto 0 0;width:min(292px,calc(100vw - 48px));height:100vh;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0 20px 20px 0;background:var(--panel);color:var(--ink);box-shadow:0 0 40px rgba(0,0,0,.25);overflow:hidden}
+dialog.cx-drawer::backdrop{background:rgba(20,8,32,.5)}
+dialog.cx-drawer[open]{animation:cx-drawer-in .2s ease-out}
+dialog.cx-drawer[open]::backdrop{animation:cx-drawer-fade .2s ease-out}
+@keyframes cx-drawer-in{from{transform:translateX(-100%)}}
+@keyframes cx-drawer-fade{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){dialog.cx-drawer[open],dialog.cx-drawer[open]::backdrop{animation:none}}
+.cx-rail.is-drawer{width:auto;height:100%;padding:max(16px,env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));border-radius:0;transition:none}
+.cx-rail.is-drawer .cx-rh{margin-bottom:8px;padding:0 4px}
+.cx-rail.is-drawer .cx-logo{padding:0}
+.cx-rail-x{width:44px;height:44px;border-radius:12px;background:var(--card);color:var(--ink)}
+.cx-rail.is-drawer .cx-new{height:46px;margin-bottom:8px;border-radius:12px;font-size:14px}
+.cx-rail.is-drawer .cx-rs{overscroll-behavior:contain}
+.cx-rail.is-drawer .cx-ri{height:46px;font-size:15px}
+.cx-rail.is-drawer .cx-rf{gap:6px;padding-top:10px}
+.cx-rail.is-drawer .cx-bal{height:48px;gap:10px}
+.cx-rail.is-drawer .cx-acct{height:48px;margin:0;padding:0 12px}
+/* Créer / Créations (téléphone et tablette) : les deux vues de l'écran, sous la barre du projet ; le compteur dit les générations en cours. */
+.cx-seg{flex:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin:0 10px 10px;padding:4px;border:1px solid var(--edge);border-radius:14px;background:var(--card)}
+.cx-seg button{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border:0;border-radius:10px;background:none;color:var(--ink-3);font-size:15px;font-weight:600;cursor:pointer}
+.cx-seg button[aria-selected="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.cx-seg-n{display:grid;place-items:center;box-sizing:border-box;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--lime);color:var(--on-lime);font-style:normal;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* Téléphone et tablette : une seule colonne qui défile ; la barre latérale s'ouvre en volet depuis la barre du projet. */
 @media (max-width:900px){
   .cx-page{height:auto;min-height:100dvh}
   .cx{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;flex:none;gap:8px;padding:8px}
-  /* Barre du haut sur deux lignes : logo, puis solde, thème et compte ; dessous, « Nouvelle création » et la liste qui défile. */
-  .cx-rail,.cx-rail.is-collapsed{width:auto;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"logo foot" "new list";align-items:center;gap:6px 8px;padding:8px 10px;transition:none}
-  .cx-rh{grid-area:logo;margin:0;min-height:0}
-  .cx-rail .cx-logo-mark{display:block}
-  .cx-rail .cx-logo-full,.cx-fold{display:none}
-  .cx-rail .cx-logo{padding:0}
-  .cx-lbl,.cx-rail .cx-bal .cx-lbl{display:none}
-  .cx-new,.cx-rail .cx-new,.cx-rail.is-collapsed .cx-new{grid-area:new;width:38px;height:38px;margin:0;padding:0;justify-content:center;align-self:center}
-  .cx-rs{grid-area:list;flex-direction:row;align-items:center;overflow-x:auto;overflow-y:hidden}
-  .cx-rl{flex-direction:row}
-  .cx-ri{width:44px;padding:0;justify-content:center}
-  .cx-sep{width:1px;height:28px;margin:0 4px}
-  .cx-rf{grid-area:foot;flex-direction:row;align-items:center;justify-content:flex-end;padding:0;border:0}
-  .cx-rail .cx-bal,.cx-rail.is-collapsed .cx-bal{flex-direction:row;width:auto;height:44px;gap:6px;padding:0 10px}
-  .cx-rail .cx-bal b,.cx-rail.is-collapsed .cx-bal b{margin:0;font-size:14px}
-  .cx-acct,.cx-rail.is-collapsed .cx-acct{width:44px;height:44px;margin:0;padding:0;justify-content:center}
+  /* Barre du projet : le bouton du menu, le projet (son nom se tronque) et, à droite, le solde. */
+  .cx-top{gap:8px;padding:0 8px}
+  .cx-top-l{flex:1 1 0}
+  .cx-fold{width:44px;height:44px}
+  .cx-proj{min-width:0}
+  .cx-proj>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cx-top>.cx-bal{width:auto;gap:6px;padding:0 10px}
+  .cx-top>.cx-bal b{margin:0;font-size:14px}
+  .cx-top>.cx-bal .cx-lbl{display:none}
+  .cx-top>.cx-bal .cx-bal-dot{box-shadow:0 0 0 2px var(--shell)}
+  /* Une vue à la fois : « Créer » montre le panneau d'outils, « Créations » la zone principale (l'autre garde son état). */
+  .cx-body.is-creer>.cx-main,.cx-body.is-creations>.cx-panel{display:none}
+  /* Liste des outils : la description tient sur une ligne. */
+  .cx-list button>span:last-child{min-width:0}
+  .cx-list small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* « Ajouter des références » : libellé sur une ligne, et seulement les trois premiers types puis le « + ». */
+  .cx-panel .ep-add>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cx-panel .ep-chips>i:nth-child(n+4):not(:last-child){display:none}
+  /* Réglages sous le texte : toujours une ligne. Puces resserrées, sans chevron, style de la marque en icône seule ; si la ligne
+     déborde encore (360 px, sixième réglage), elle défile de côté et son bord s'estompe du côté où il reste des réglages (useEdgeFade).
+     La marge intérieure laisse voir l'anneau de focus. */
+  .cx-panel .ep-opts.auto{flex-wrap:nowrap;gap:5px;margin:-4px;padding:4px;overflow-x:auto;scrollbar-width:none}
+  .cx-panel .ep-opts.auto::-webkit-scrollbar{display:none}
+  .cx-panel .ep-opts.auto[data-fade="r"]{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
+  .cx-panel .ep-opts.auto[data-fade="l"]{-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent)}
+  .cx-panel .ep-opts.auto[data-fade="lr"]{-webkit-mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)}
+  /* Un menu ouvert dans la rangée (Format, Résolution, Durée) serait masqué avec elle : le fondu s'efface le temps du menu. */
+  .cx-panel .ep-opts.auto:has(.mn-btn.open){-webkit-mask-image:none;mask-image:none}
+  .cx-panel .ep-opts.auto .ep-chip{flex:1 0 auto;gap:5px;padding:0 8px}
+  .cx-panel .ep-opts.auto .mn-btn>svg:last-child{display:none}
+  .cx-panel .ep-opts.auto .ep-chip-ic{flex:0 0 40px;padding:0}
   .cx-body{grid-template-columns:minmax(0,1fr)}
   .cx-shell{overflow:visible}
   .cx-panel,.cx-main{overflow:visible}
   .cx-tool,.cx-view{overflow:visible}
+  /* Le panneau suit son contenu : plus de hauteur imposée (flex:1, min-height:100 %) qui faisait déborder la fin du formulaire sur la carte suivante. */
+  .cx-panel{min-height:auto;padding-bottom:12px}
+  .cx-tool{flex:none;min-height:auto;padding-bottom:0}
+  .cx-panel .ep{flex:none;min-height:0}
+  /* Générer et son prix restent collés en bas de l'écran tant que le formulaire est à l'écran (sticky), et s'en vont avec lui : sous les
+     modèles et les vidéos à refaire, plus de bouton qui dépense des cauris d'un toucher égaré. */
+  .cx-panel{padding-bottom:0}
+  .cx-panel .ep-gen{position:sticky;bottom:0;z-index:var(--z-sticky);margin:0 -12px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--edge);border-radius:0 0 17px 17px;background:var(--panel)}
+  .cx-panel .ep-gen .ep-gerr{margin-bottom:10px}
+  /* Bouton éteint : sa raison s'écrit au-dessus (au doigt, l'infobulle `title` ne s'affiche jamais) ; le rappel du formulaire, juste avant, ferait doublon. */
+  .cx-panel .ep-gwhy{display:block;margin:0 2px 8px;font-size:13px;line-height:1.35;color:var(--ink-2)}
+  .cx-panel .tf-hint[role="status"]:has(+.ep-gen .ep-gwhy){display:none}
+  .cx-page{box-sizing:border-box}
+  /* Créations / Modèles et les deux boutons tiennent sur une ligne : marges resserrées, et sans les icônes des onglets sous 420 px. */
+  .cx-mbar{gap:8px;padding:10px 12px}
+  .cx-views{min-width:0}
+  .cx-views button{padding:0 12px;min-height:44px}
+  .cx-ib{width:44px;height:44px}
+  /* Image / Vidéo / Audio / Modèles : les quatre onglets se partagent la largeur du panneau, aucun ne touche le bord à 360 px. */
+  .cx-tabs{gap:2px}
+  .cx-tabs button{flex:1 1 auto;min-width:0;padding:0 8px;min-height:44px}
   .cx-card{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:14px}
   .cx-cards{grid-template-columns:minmax(0,1fr)}
 }
+/* Téléphone : la scène vidéo suit son contenu (generation.css), sans hauteur minimale autour d'elle. */
+@media (max-width:640px){.cx-view>.vs{min-height:0}}
+@media (max-width:420px){.cx-views button>svg{display:none}}
 
 /* Formulaire d'un outil (ToolForm) : compteur de caractères, découpe en secondes et raison du bouton Générer éteint. */
 .cx-panel .tf-count{margin-right:auto;font-size:12.5px;color:var(--ink-4);font-variant-numeric:tabular-nums}

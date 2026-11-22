@@ -104,7 +104,7 @@ export function HomeHeader() {
   )
 }
 
-/** Lien d'évitement : premier élément focalisable, mène au contenu principal (`id="main"`). */
-export function SkipLink() {
-  return <a className="skip" href="#main">Aller au contenu</a>
+/** Lien d'évitement : premier élément focalisable, mène au contenu principal (`id="main"`, ou `to` quand un autre panneau est seul à l'écran). */
+export function SkipLink({ to = 'main' }) {
+  return <a className="skip" href={`#${to}`}>Aller au contenu</a>
 }

@@ -3,7 +3,7 @@
 .mn-btn.open{border-color:var(--line-strong)}
 .mn-btn>svg:last-child{margin-left:auto;flex:none;color:var(--ink-3);transition:transform .15s}
 .mn-btn.open>svg:last-child{transform:rotate(180deg)}
-.mn-list{position:fixed;z-index:var(--z-menu);box-sizing:border-box;overflow-y:auto;background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:var(--shadow-pop)}
+.mn-list{position:fixed;z-index:var(--z-menu);box-sizing:border-box;max-width:calc(100vw - 16px);overflow-y:auto;background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:var(--shadow-pop)}
 .mn-head{padding:8px 12px 6px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .mn-opt{display:flex;gap:12px;align-items:flex-start;width:100%;padding:10px 12px;border:0;border-radius:10px;background:none;color:var(--ink);text-align:left;cursor:pointer;font:inherit}
 .mn-opt:hover,.mn-opt:focus-visible{background:var(--fill)}
@@ -36,6 +36,12 @@
 .mn-price b{display:flex;align-items:center;gap:5px;font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap}
 .mn-price b svg{color:var(--lime-ink)}
 .mn-price small{font-size:11px;color:var(--ink-3)}
+/* Téléphone : le nom du modèle se tronque sur une ligne, le prix reste toujours visible */
+@media (max-width:560px){
+  .mn-opt.model{gap:10px}
+  .mn-opt.model .mn-tx b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mn-opt.model .mn-tx em{display:inline-block;margin-left:8px;vertical-align:2px}
+}
 
 /* Logos de modèles : monochromes en blanc cassé, en couleur tels quels */
 .ml{display:inline-block;flex:none;width:var(--s,20px);height:var(--s,20px)}

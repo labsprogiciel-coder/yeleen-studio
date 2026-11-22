@@ -12,7 +12,7 @@ export default function ToolPanel({ tab, onTab, tool, onTool, onTemplates, video
   const tabs = Object.keys(TOOLS)
   const open = tool ? toolById(tool) : null
   return (
-    <aside className="cx-panel" aria-label="Outils">
+    <aside className="cx-panel" id="cx-outils" aria-label="Outils" tabIndex={-1}>
       <div className="cx-tabs" role="tablist" aria-label="Type de création" onKeyDown={onTabKeys}>
         {tabs.map((t) => (
           <button key={t} type="button" role="tab" id={`cx-tab-${t}`} aria-selected={tab === t} aria-controls="cx-tool" tabIndex={tab === t ? 0 : -1} onClick={() => onTab(t)}>{TAB_LABEL[t]}</button>

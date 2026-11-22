@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import useEdgeFade from '../../lib/useEdgeFade.js'
+import useMedia from '../../lib/useMedia.js'
 import Icon from '../../lib/icons.jsx'
 import Menu from '../Menu.jsx'
 import AssetThumb from '../AssetThumb.jsx'
@@ -92,6 +94,11 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
     if (!open && d.open) d.close()
   }, [open, initialSub, view, onlyKind]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Rangée de filtres qui défile de côté (fenêtre étroite) : un bord s'estompe seulement s'il reste des filtres de ce côté-là.
+  const [strip, fade] = useEdgeFade([open, tab])
+  // Au téléphone les bibliothèques sont en rangée (même seuil que assetModal.css) : l'orientation annoncée suit.
+  const sideRow = useMedia('(max-width:640px)')
+
   // Fichier à montrer (« Voir dans la bibliothèque ») : amené au centre et encadré.
   useEffect(() => {
     if (!open || !focus) return
@@ -159,7 +166,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   return (
     <dialog ref={ref} className="am-dlg" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()} aria-label={tab === 'styles' ? 'Choisir un style' : browse ? 'Bibliothèque' : 'Ajouter des références'}>
       <nav className="am-side" aria-label="Bibliothèques">
-        <div role="tablist" aria-orientation="vertical" aria-label="Bibliothèque" onKeyDown={onTabKeys}>
+        <div role="tablist" aria-orientation={sideRow ? 'horizontal' : 'vertical'} aria-label="Bibliothèque" onKeyDown={onTabKeys}>
           {tabs.map((t) => (
             <button key={t.id} type="button" role="tab" id={`am-tab-${t.id}`} aria-selected={tab === t.id} aria-controls="am-main" title={t.label} tabIndex={tab === t.id ? 0 : -1} className={tab === t.id ? 'on' : undefined} onClick={() => setTab(t.id)}>
               <Icon name={t.icon} size={18} />
@@ -172,14 +179,14 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
 
       <div className="am-panel" id="am-main" role="tabpanel" aria-labelledby={`am-tab-${tab}`}>
         <div className="am-sub">
-          <div className="am-subs" role="tablist" aria-label="Type" onKeyDown={onTabKeys}>
+          <div ref={strip} className="am-subs" role="tablist" aria-label="Type" onKeyDown={onTabKeys} onScroll={fade}>
             {tabs.find((t) => t.id === tab).subs.filter((t) => !rule || !KIND_IDS.includes(t.id) || rule.kinds.has(t.id)).map((t) => (
               <button key={t.id} type="button" role="tab" aria-selected={sub === t.id} tabIndex={sub === t.id ? 0 : -1} className={sub === t.id ? 'on' : undefined} onClick={() => setSub(t.id)}>{t.label}</button>
             ))}
           </div>
           <div className="am-end">
             {tab === 'library' && (
-              <Menu items={ORIGINS} value={origin} onChange={setOrigin} label="Origine" menuWidth={180} className="am-sort">
+              <Menu items={ORIGINS} value={origin} onChange={setOrigin} label={origin === 'all' ? 'Origine' : `Origine : ${ORIGINS.find((o) => o.id === origin).title}`} menuWidth={180} className={`am-sort${origin === 'all' ? '' : ' on'}`}>
                 <Icon name="filter" size={16} /><span>{origin === 'all' ? 'Origine' : ORIGINS.find((o) => o.id === origin).title}</span>
               </Menu>
             )}
@@ -252,7 +259,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
 
         {(undo || picked.size > 0) && (
           <div className="am-bar" role="region" aria-label={undo ? 'Suppression' : 'Sélection'} aria-live="polite">
-            {undo && <div className="am-undo"><span>« {undo.name} » supprimé</span><button type="button" onClick={cancelDelete}>Annuler</button></div>}
+            {undo && <div className="am-undo"><span><span className="am-un">« {undo.name} »</span> supprimé</span><button type="button" onClick={cancelDelete}>Annuler</button></div>}
             {picked.size > 0 && <button type="button" className="am-add" onClick={add}>Ajouter {picked.size} fichier{picked.size > 1 ? 's' : ''}</button>}
           </div>
         )}

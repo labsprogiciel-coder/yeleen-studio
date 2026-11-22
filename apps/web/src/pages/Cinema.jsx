@@ -15,7 +15,8 @@ import { findStyle } from '@studio/catalog/styles'
 import BrandToggle from '../components/BrandToggle.jsx'
 import { features } from '../lib/features.js'
 import ModelLogo from '../components/ModelLogo.jsx'
-import Rail from '../components/cinema/Rail.jsx'
+import Rail, { RailBalance } from '../components/cinema/Rail.jsx'
+import RailDrawer from '../components/cinema/RailDrawer.jsx'
 import { readRail, saveRail } from '../lib/railPrefs.js'
 import ToolPanel from '../components/cinema/ToolPanel.jsx'
 import Showcase from '../components/cinema/Showcase.jsx'
@@ -37,6 +38,10 @@ import { modelItem } from '../lib/modelItem.js'
 import { useToast } from '../lib/toasts.jsx'
 import useDocumentTitle from '../lib/useDocumentTitle.js'
 import useGenSettings from '../lib/useGenSettings.js'
+import useMedia from '../lib/useMedia.js'
+import useEdgeFade from '../lib/useEdgeFade.js'
+import useTabKeys from '../lib/useTabKeys.js'
+import { PHONE_MAX } from '../lib/accountMenu.js'
 import { loadTemplates, useTemplates, withInputs } from '../lib/templates.js'
 import { TOKEN_PATTERN, blockerText, generatedCost, missingInputs, sentInputs, todoText, tokenItems, tplInputs, tplParam, tplRatio } from '../lib/templateRun.js'
 import TemplateInputs from '../components/cinema/TemplateInputs.jsx'
@@ -63,12 +68,16 @@ const MODES = [
   { id: 'prev', icon: 'revert', title: 'Avant' },
   { id: 'edit', icon: 'wand', title: 'Modifier la vidéo' },
 ]
+// Téléphone et tablette : les deux vues de l'écran (une seule à la fois), choisies sous la barre du projet.
+const PHONE = `(max-width:${PHONE_MAX}px)`
+const PVIEWS = [{ id: 'creer', label: 'Créer', pane: 'cx-outils' }, { id: 'creations', label: 'Créations', pane: 'main' }] // `pane` : le panneau montré
 const nextOf = (list, v) => list[(list.indexOf(v) + 1) % list.length]
 
 export default function Cinema() {
   useDocumentTitle('Studio cinéma')
   const toast = useToast()
-  const { jobs, submit, balance } = useJobs()
+  const { jobs, submit, balance, running, queued } = useJobs()
+  const busy = running + queued // générations en file ou en cours
   const { assets, pool, adopt, getFile } = useAssets()
   const { pending, sendTo, take } = useHandoff()
   const { brand: kit, style } = useBrand()
@@ -80,6 +89,29 @@ export default function Cinema() {
   // Barre latérale réduite ou agrandie : enregistré seulement quand la personne clique (sinon la largeur de la fenêtre décide).
   const [railCollapsed, setRailCollapsed] = useState(readRail)
   const toggleRail = () => setRailCollapsed((v) => { const next = !v; saveRail(next); return next })
+  // Téléphone et tablette (colonne unique) : la barre latérale s'ouvre en volet (`menuOpen`), et l'écran montre soit le panneau
+  // d'outils (« Créer »), soit la zone principale (« Créations »). Sur grand écran, les deux colonnes restent côte à côte.
+  const phone = useMedia(PHONE)
+  const onTabKeys = useTabKeys()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [pview, setPview] = useState('creer')
+  useEffect(() => { if (!phone) setMenuOpen(false) }, [phone])
+  const shown = useRef(pview)
+  useEffect(() => { // chaque vue s'ouvre par son début
+    if (shown.current === pview) return
+    shown.current = pview
+    if (!phone) return
+    // Vue changée sans toucher à l'onglet (Générer, « Refaire », un modèle) : le bouton qui avait le focus vient de disparaître avec
+    // son panneau. Le focus va à l'onglet de la vue montrée, qui l'annonce, plutôt que de se perdre en haut de la page.
+    const at = document.activeElement
+    if (!at || at === document.body || at.closest('#cx-outils, #main')?.id === PVIEWS.find((v) => v.id !== pview).pane) {
+      document.getElementById(`cx-pv-${pview}`)?.focus({ preventScroll: true })
+    }
+    window.scrollTo(0, 0)
+  }, [pview]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Génération lancée : sur téléphone, on la suit dans Créations (sur grand écran, elle est déjà sous les yeux).
+  const launched = () => { if (phone) { setView('creations'); setPview('creations') } }
+  const showTemplates = () => { setView('templates'); setPview('creations') }
   const mode = tab === 'recipe' ? 'recipe' : tool === 'image' ? 'image' : 'video'
   const [itext, setItext] = useState('') // texte de l'image ; en vidéo, chaque plan porte le sien (s.plans)
   const [error, setError] = useState('')
@@ -144,6 +176,7 @@ export default function Cinema() {
     setError('')
     if (id !== 'video-refs') setStartTpl(null) // l'image de départ d'une vidéo à refaire ne vaut que pour elle
     setGenTpl(null) // une vidéo à refaire par Genjutsu ne vaut que tant que son outil est ouvert (recreate la remet)
+    setPview('creer') // la liste des outils comme un formulaire sont dans le panneau
     if (!id) return setTool(null)
     const t = tabOf(id)
     setTab(t); setTool(id)
@@ -187,7 +220,7 @@ export default function Cinema() {
     return () => { alive = false; if (asking && linked.current === linkId) linked.current = null }
   }, [linkId, adminReady, admin]) // eslint-disable-line react-hooks/exhaustive-deps
   // Changer d'onglet montre la liste de ses outils.
-  const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null); setGenTpl(null) }
+  const openTab = (t) => { setError(''); setTab(t); setTool(null); setStartTpl(null); setGenTpl(null); setPview('creer') }
   useEffect(() => { // « Envoyer vers » un modèle : l'image arrive comme photo de départ, même si Cinéma est déjà ouvert
     if (pending?.target !== 'cinema.recipe') return
     const h = take('cinema.recipe')
@@ -215,6 +248,8 @@ export default function Cinema() {
     : attached.map((x) => ({ key: x.id, token: x.token, label: x.token, sub: x.asset.name, asset: x.asset }))
   const native = Boolean(caps.references) // le modèle prolonge ou modifie lui-même une vidéo jointe
   const activeTask = native && !hasIn ? task : 'refs' // une vidéo à refaire part de ses entrées
+  // Réglages sous le texte (téléphone) : la rangée défile de côté quand elle déborde ; son bord s'estompe du côté où il en reste.
+  const [optsRef, fadeOpts] = useEdgeFade([phone, pview, tool, vmodel.id, imodel.id, activeTask])
   // Suite, Avant et Modifier d'un modèle sans prise en charge native passent par l'écran Vidéo : sans lui, seul « Références » reste (et le menu disparaît).
   const modeItems = native ? MODES.filter((m) => m.id !== 'prev') : features.video ? MODES : MODES.filter((m) => m.id === 'refs')
   const clipSecs = hasIn // durée des vidéos jointes (ou fournies pour le modèle) : facturée en entrée
@@ -249,6 +284,7 @@ export default function Cinema() {
     if (!video) {
       const live = { kind: 'image', modelId: imodel.id, prompt: text.trim(), resolution: iRes2, ratio: iRatio2, count: iN, style: look?.id, brandStyle: styled ? style : undefined }
       const r = submit({ kind: 'image', title: imodel.name, prompt: text.trim(), count: iN, cost, live, brandStyle: styled ? style : undefined, meta: `${iN} × ${iRes2}${iRatio2 === 'Auto' ? '' : ` · ${iRatio2}`}${look ? ` · ${look.label}` : ''}${styled ? ' · style de la marque' : ''}` })
+      if (r.ok) launched()
       return setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     }
     if (hasIn) return generateTemplate()
@@ -277,6 +313,7 @@ export default function Cinema() {
     }
     const base = `${vmodel.name}${activeTask === 'next' ? ' · suite' : activeTask === 'edit' ? ' · modification' : ''} · ${String(total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}${look ? ` · ${look.label}` : ''}`
     const r = submit({ kind: 'video', title: vmodel.name, prompt: s.plans.map((p) => p.text.trim()).join(' / '), cost, secs: total, live, brandStyle: styled ? style : undefined, meta: styled ? `${base} · style de la marque` : base })
+    if (r.ok) launched()
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
   }
 
@@ -300,6 +337,7 @@ export default function Cinema() {
     }
     const base = `${startTpl.name} · ${vmodel.name} · ${String(total).replace('.', ',')} s${s.resolutions ? ` · ${s.res}` : ''}${look ? ` · ${look.label}` : ''}`
     const r = submit({ kind: 'video', title: startTpl.name, prompt: s.plans.map((p) => p.text.trim()).join(' / '), cost, secs: total, live, brandStyle: styled ? style : undefined, meta: styled ? `${base} · style de la marque` : base })
+    if (r.ok) launched()
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
   }
 
@@ -383,6 +421,7 @@ export default function Cinema() {
     const res = submit({ kind: 'video', title: r.name, prompt: Object.values(inputs).filter(Boolean).join(' → ') || r.blurb, cost, live, recipe: { runId: id, step: 0, label: r.name }, meta: r.name })
     if (!res.ok) return setRerror(`Solde insuffisant : il manque ${jetons(res.missing)} cauris.`)
     setRun({ id, recipeId })
+    launched()
   }
 
   const modelItems = video ? VIDEO_ITEMS : IMAGE_ITEMS
@@ -467,7 +506,7 @@ export default function Cinema() {
         </PromptBox>
       </section>
 
-      <div className="ep-opts auto">
+      <div className="ep-opts auto" ref={optsRef} onScroll={fadeOpts}>
         {video ? (
           <>
             {s.ratios ? (
@@ -496,7 +535,7 @@ export default function Cinema() {
             </span>
           </>
         )}
-        {features.brand && <BrandToggle />}
+        {features.brand && <BrandToggle className={phone ? 'ep-chip ep-chip-ic' : undefined} iconOnly={phone} />}
       </div>
       {video && s.multi && <p className="tf-hint">{Math.round(s.total * 10) / 10} s au total</p>}
 
@@ -508,30 +547,50 @@ export default function Cinema() {
   const runBusy = recipe && Boolean(run)
   return (
     <div className="cx-page">
-      <SkipLink />
+      <SkipLink to={phone ? PVIEWS.find((v) => v.id === pview).pane : undefined} />
       {/* Pas de barre Plum ici : la barre latérale (Rail) porte le logo, le solde, le thème et le compte. */}
     <div className="cx cn">
-      <Rail tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} collapsed={railCollapsed} />
+      {phone
+        ? <RailDrawer open={menuOpen} onClose={() => setMenuOpen(false)} tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} />
+        : <Rail tab={tab} onTab={openTab} onNew={() => { openTool(null); setView('creations') }} collapsed={railCollapsed} />}
 
       <div className="cx-shell">
       <header className="cx-top">
         <div className="cx-top-l">
-          {/* Bouton de repli de la barre latérale, à gauche du projet (absent sur téléphone, où la barre est en haut). */}
-          <button type="button" className="cx-fold" aria-expanded={!railCollapsed} aria-label={railCollapsed ? 'Agrandir le menu' : 'Réduire le menu'} title={railCollapsed ? 'Agrandir le menu' : 'Réduire le menu'} onClick={toggleRail}>
-            <Icon name="sidebar" size={18} />
-          </button>
+          {/* À gauche du projet : sur grand écran, le bouton réduit ou agrandit la barre latérale ; sur téléphone, il l'ouvre en volet. */}
+          {phone ? (
+            <button type="button" className="cx-fold" aria-haspopup="dialog" aria-expanded={menuOpen} aria-label="Ouvrir le menu" onClick={() => setMenuOpen(true)}>
+              <Icon name="sidebar" size={18} />
+            </button>
+          ) : (
+            <button type="button" className="cx-fold" aria-expanded={!railCollapsed} aria-label={railCollapsed ? 'Agrandir le menu' : 'Réduire le menu'} title={railCollapsed ? 'Agrandir le menu' : 'Réduire le menu'} onClick={toggleRail}>
+              <Icon name="sidebar" size={18} />
+            </button>
+          )}
           <ProjectPicker />
         </div>
+        {phone && <RailBalance />}
       </header>
 
-      <div className="cx-body">
-      <ToolPanel tab={tab} onTab={openTab} tool={tool} onTool={openTool} onTemplates={() => setView('templates')} videoTemplates={templates.length}>
-      {tool === 'video-gen'   && <CreateLeft key="generate" mode="generate" banner={false} addLabel="Ajouter un média" />}
-      {tool === 'modify-video' && <CreateLeft key="edit"    mode="edit"     banner={false} />}
-      {tool === 'voice-generator' && <AudioPanel key={tool} tool={tool} onTool={openTool} />}
+      {phone && (
+        <div className="cx-seg" role="tablist" aria-label="Vue" onKeyDown={onTabKeys}>
+          {PVIEWS.map((v) => (
+            <button key={v.id} type="button" role="tab" id={`cx-pv-${v.id}`} aria-selected={pview === v.id} aria-controls="cx-vue" tabIndex={pview === v.id ? 0 : -1}
+              aria-label={v.id === 'creations' && busy > 0 ? `Créations, ${busy} génération${busy > 1 ? 's' : ''} en cours` : undefined} onClick={() => setPview(v.id)}>
+              {v.label}{v.id === 'creations' && busy > 0 && <i className="cx-seg-n" aria-hidden="true">{busy}</i>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={`cx-body${phone ? ` is-${pview}` : ''}`} {...(phone ? { id: 'cx-vue', role: 'tabpanel', 'aria-labelledby': `cx-pv-${pview}` } : {})}>
+      <ToolPanel tab={tab} onTab={openTab} tool={tool} onTool={openTool} onTemplates={showTemplates} videoTemplates={templates.length}>
+      {tool === 'video-gen'   && <CreateLeft key="generate" mode="generate" banner={false} addLabel="Ajouter un média" onDone={launched} />}
+      {tool === 'modify-video' && <CreateLeft key="edit"    mode="edit"     banner={false} onDone={launched} />}
+      {tool === 'voice-generator' && <AudioPanel key={tool} tool={tool} onTool={openTool} onDone={launched} />}
       {tool && genTpl?.genjutsu.tool === tool
-        ? <GenjutsuForm key={genTpl.id} template={genTpl} onClose={() => setGenTpl(null)} onDone={() => setView('creations')} />
-        : tool && toolJobs(tool) && <ToolForm key={tool} tool={tool} onDone={() => setView('creations')} />}
+        ? <GenjutsuForm key={genTpl.id} template={genTpl} onClose={() => setGenTpl(null)} onDone={() => { setView('creations'); launched() }} />
+        : tool && toolJobs(tool) && <ToolForm key={tool} tool={tool} onDone={() => { setView('creations'); launched() }} />}
       {(tool === 'image' || tool === 'video-refs') && composer}
         {recipe && recipeId && (runBusy
           ? <p className="cx-note">Le modèle « {recipeById(recipeId).name} » est en cours : suivez-le dans Créations.</p>
@@ -542,6 +601,7 @@ export default function Cinema() {
         view={view}
         onView={setView}
         tool={tool}
+        hideModels={phone && busy > 0}
         onPickTemplate={(id) => { openTool(id); setView('creations') }}
         templates={templates}
         onRecreate={recreate}

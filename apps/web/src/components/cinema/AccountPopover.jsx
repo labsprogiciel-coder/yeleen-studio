@@ -23,9 +23,10 @@ function Avatar({ account, size }) {
 /**
  * Compte, en bas de la barre latérale du studio Cinéma : l'avatar (et le nom quand la barre est agrandie) ouvre une fenêtre avec le
  * compte, le solde et « Recharger », puis gérer le compte, l'administration, le thème, l'aide et la déconnexion. La fenêtre s'ouvre à
- * droite de la barre (sous le bouton sur téléphone) et reste dans l'écran (placeAccountMenu). Clavier : flèches, Début/Fin, Échap.
+ * droite de la barre (au-dessus du bouton dans le volet du téléphone) et reste dans l'écran (placeAccountMenu). Clavier : flèches,
+ * Début/Fin, Échap. `onPick` : appelé à chaque choix (le volet du téléphone se ferme).
  */
-export default function AccountPopover({ collapsed }) {
+export default function AccountPopover({ collapsed, onPick }) {
   const account = useAccount()
   const { balance } = useJobs()
   const { openRecharge } = useRecharge()
@@ -45,8 +46,10 @@ export default function AccountPopover({ collapsed }) {
   const place = useCallback(() => {
     if (!btn.current || !pop.current) return
     const rail = btn.current.closest('.cx-rail')
+    const trigger = btn.current.getBoundingClientRect()
     const p = placeAccountMenu({
-      trigger: btn.current.getBoundingClientRect(),
+      trigger,
+      within: btn.current.closest('dialog') ? trigger : undefined, // volet du téléphone : pas plus large que ses entrées
       railRight: rail?.getBoundingClientRect().right,
       menu: { width: 300, height: pop.current.scrollHeight },
       viewport: { width: document.documentElement.clientWidth, height: window.innerHeight },
@@ -92,7 +95,7 @@ export default function AccountPopover({ collapsed }) {
   }
 
   // Chaque choix ferme la fenêtre (le focus revient au bouton), puis agit.
-  const pick = (fn) => () => { close(true); fn?.() }
+  const pick = (fn) => () => { close(true); onPick?.(); fn?.() }
 
   const label = account.demo ? 'Compte de démonstration' : `Compte : ${account.name}`
   const item = (key, iconName, text, props, Tag = 'button') => (
@@ -141,11 +144,11 @@ export default function AccountPopover({ collapsed }) {
           </div>
           <div className="cx-am-list">
             {account.manage && item('manage', 'user', 'Gérer mon compte', { onClick: pick(account.manage) })}
-            {admin && item('admin', 'gauge', 'Administration', { to: '/admin', onClick: () => close() }, Link)}
+            {admin && item('admin', 'gauge', 'Administration', { to: '/admin', onClick: () => { close(); onPick?.() } }, Link)}
             {item('theme', isDark ? 'sun' : 'moon', isDark ? 'Mode clair' : 'Mode sombre', { onClick: pick(toggleTheme) })}
             {HELP && item('help', 'help', 'Aide', {
               href: HELP.href,
-              onClick: () => close(),
+              onClick: () => { close(); onPick?.() },
               title: `Écrire au support (${HELP.via})`,
               ...(HELP.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
             }, 'a')}
@@ -157,7 +160,7 @@ export default function AccountPopover({ collapsed }) {
             </>
           )}
         </div>,
-        document.body,
+        btn.current?.closest('dialog') ?? document.body, // dans le volet du téléphone (fenêtre modale), elle reste avec lui au premier plan
       )}
     </>
   )
