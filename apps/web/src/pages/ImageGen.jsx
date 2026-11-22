@@ -18,6 +18,8 @@ import ModelLogo from '../components/ModelLogo.jsx'
 import '../styles/shell.css'
 import '../styles/image.css'
 import Cauri from '../components/Cauri.jsx'
+import BusySpin from '../components/BusySpin.jsx'
+import { busyProps, useLaunch } from '../lib/useLaunch.js'
 import { EnhanceButton } from '../components/GenPanel.jsx'
 
 const g = (i) => gradient(i, 'image')
@@ -55,7 +57,9 @@ export default function ImageGen() {
     const look = styleById(styleId)
     const r = submit({ kind: 'image', title: model.name, prompt: prompt.trim(), brandStyle: styled ? style : undefined, styleHint: look.prompt || undefined, count: n, cost, live: { kind: 'image', modelId: model.id, prompt: prompt.trim(), resolution, ratio, count: n, styleHint: look.prompt || undefined, brandStyle: styled ? style : undefined }, meta: `${n} × ${resolution}${ratio === 'Auto' ? '' : ` · ${ratio}`}${look.prompt ? ` · ${look.label}` : ''}${styled ? ' · style de la marque' : ''}` })
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    return r.ok
   }
+  const [sending, launch] = useLaunch(generate) // un double appui ne lance pas deux générations payantes
 
   return (
     <div className="pg shell image">
@@ -116,7 +120,7 @@ export default function ImageGen() {
                 <b style={{ fontWeight: 600 }}>{n}/{caps.maxImages}</b>
                 <button type="button" onClick={() => setCount((c) => Math.min(caps.maxImages, c + 1))} aria-label="Plus">+</button>
               </span>
-              <button type="button" className="gen2" disabled={!prompt.trim()} onClick={generate}>Générer<small><Cauri size={15} />{jetons(cost)}</small></button>
+              <button type="button" className="gen2" disabled={!prompt.trim()} {...busyProps(sending)} onClick={() => launch()}>{sending ? <span className="gen-send"><BusySpin />Envoi…</span> : 'Générer'}<small><Cauri size={15} />{jetons(cost)}</small></button>
             </div>
           </div>
         </div>

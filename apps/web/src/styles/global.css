@@ -10,8 +10,13 @@ button{font:inherit;color:inherit}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
   /* Les indicateurs de chargement restent animés, plus lentement : ils signalent un travail en cours. */
   .gx-spin{animation:gxspin 1.6s linear infinite!important}
+  .busy-spin{animation:busyspin 1.6s linear infinite!important}
 }
 @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+/* Bouton qui envoie une génération (lib/useLaunch.js) : une roue et « Envoi… » à la place du libellé, le prix reste à droite. */
+.busy-spin{flex:none;display:inline-block;width:18px;height:18px;border-radius:50%;border:2.5px solid currentColor;border-right-color:transparent;animation:busyspin .8s linear infinite}
+@keyframes busyspin{to{transform:rotate(360deg)}}
+.gen .gen-send,.gen2 .gen-send{display:flex;align-items:center;gap:10px}
 :root{--badge-pink:#d02470} /* blanc dessus : 5,0:1 (AA) */
 .route-fallback{min-height:100vh;background:var(--bg)}
 /* Droits d'administration non vérifiés (lib/useIsAdmin.jsx) : message et « Réessayer », hors de la page d'administration. */

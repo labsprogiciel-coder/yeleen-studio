@@ -6,6 +6,8 @@ import { useToast } from '../../lib/toasts.jsx'
 import Menu from '../Menu.jsx'
 import SendToMenu, { downloadAsset } from '../SendToMenu.jsx'
 import { AssetActions, FailureNotice, RefundNote, StatusLine, isActive } from './shared.jsx'
+import { busyProps, useLaunch } from '../../lib/useLaunch.js'
+import BusySpin from '../BusySpin.jsx'
 
 /**
  * Une demande d'image, sans cadre autour : la description, une ligne d'état animée, puis les images à leur
@@ -16,6 +18,7 @@ export default function ImageBatch({ job }) {
   const { running, rerun, dismiss } = useJobs()
   const lib = useAssets()
   const toast = useToast()
+  const [sending, regenerate] = useLaunch(() => rerun(job)) // génération payante : un double appui n'en lance qu'une
   const done = job.status === 'COMPLETED'
   const outputs = done ? lib.byJob(job.key) : []
   const n = job.seeds.length
@@ -66,7 +69,7 @@ export default function ImageBatch({ job }) {
             <div className="ib-react" role="group" aria-label="Réactions">
               <button type="button" aria-pressed={reaction === 'up'} aria-label="J’aime" title="J’aime" onClick={() => react('up')}><Icon name="thumbUp" size={19} fill={reaction === 'up' ? 'currentColor' : 'none'} /></button>
               <button type="button" aria-pressed={reaction === 'down'} aria-label="Je n’aime pas" title="Je n’aime pas" onClick={() => react('down')}><Icon name="thumbDown" size={19} fill={reaction === 'down' ? 'currentColor' : 'none'} /></button>
-              <button type="button" aria-label={`Régénérer (${jetonLabel(job.cost)})`} title={`Régénérer · ${jetonLabel(job.cost)}`} onClick={() => rerun(job)}><Icon name="revert" size={19} /></button>
+              <button type="button" aria-label={`Régénérer (${jetonLabel(job.cost)})`} title={`Régénérer · ${jetonLabel(job.cost)}`} {...busyProps(sending)} onClick={() => regenerate()}>{sending ? <><BusySpin /><span className="sr-only">Envoi…</span></> : <Icon name="revert" size={19} />}</button>
               {n === 1 && outputs[0] && <SendToMenu asset={outputs[0]} iconOnly icon="share" title="Envoyer vers" className="ib-rb" />}
               <Menu items={moreItems} value={null} onChange={onMore} label="Plus d’options" menuWidth={240} className="send icon ib-rb">
                 <Icon name="dots" size={19} />

@@ -156,6 +156,7 @@ export default function ToolForm({ tool: uiTool, onDone }) {
     })
     if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     onDone?.()
+    return true
   }
 
   const fileFields = fields.filter(isFileField)

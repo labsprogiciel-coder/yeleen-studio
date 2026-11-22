@@ -121,6 +121,7 @@ export default function AudioPanel({ tool = 'voice-generator', onTool, onDone })
     })
     if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     onDone?.()
+    return true
   }
 
   return (

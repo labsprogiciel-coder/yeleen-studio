@@ -110,7 +110,18 @@ export default function Cinema() {
     window.scrollTo(0, 0)
   }, [pview]) // eslint-disable-line react-hooks/exhaustive-deps
   // Génération lancée : sur téléphone, on la suit dans Créations (sur grand écran, elle est déjà sous les yeux).
-  const launched = () => { if (phone) { setView('creations'); setPview('creations') } }
+  // La vue change sous le doigt : le second appui d'un double appui sur Générer tomberait sur une carte de Créations (une vidéo à
+  // refaire, par exemple). Un voile transparent l'absorbe pendant un instant.
+  const [shield, setShield] = useState(false)
+  const shieldT = useRef(null)
+  useEffect(() => () => clearTimeout(shieldT.current), [])
+  const launched = () => {
+    if (!phone) return
+    setView('creations'); setPview('creations')
+    setShield(true)
+    clearTimeout(shieldT.current)
+    shieldT.current = setTimeout(() => setShield(false), 500)
+  }
   const showTemplates = () => { setView('templates'); setPview('creations') }
   const mode = tab === 'recipe' ? 'recipe' : tool === 'image' ? 'image' : 'video'
   const [itext, setItext] = useState('') // texte de l'image ; en vidéo, chaque plan porte le sien (s.plans)
@@ -286,7 +297,8 @@ export default function Cinema() {
       const live = { kind: 'image', modelId: imodel.id, prompt: text.trim(), resolution: iRes2, ratio: iRatio2, count: iN, style: look?.id, brandStyle: styled ? style : undefined }
       const r = submit({ kind: 'image', title: imodel.name, prompt: text.trim(), count: iN, cost, live, brandStyle: styled ? style : undefined, meta: `${iN} × ${iRes2}${iRatio2 === 'Auto' ? '' : ` · ${iRatio2}`}${look ? ` · ${look.label}` : ''}${styled ? ' · style de la marque' : ''}` })
       if (r.ok) launched()
-      return setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+      setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+      return r.ok // « vrai » : la génération est partie, le bouton reste éteint un instant (voir GenerateButton)
     }
     if (hasIn) return generateTemplate()
     // Vidéo : les pièces jointes deviennent références (Seedance), image de départ, image de fin, audio ou éléments selon le modèle.
@@ -316,6 +328,7 @@ export default function Cinema() {
     const r = submit({ kind: 'video', title: vmodel.name, prompt: s.plans.map((p) => p.text.trim()).join(' / '), cost, secs: total, live, brandStyle: styled ? style : undefined, meta: styled ? `${base} · style de la marque` : base })
     if (r.ok) launched()
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    return r.ok
   }
 
   // Vidéo à refaire avec des entrées : le serveur place les fichiers selon le modèle (et ajoute ceux fournis par Qreativ) ; on n'envoie
@@ -340,6 +353,7 @@ export default function Cinema() {
     const r = submit({ kind: 'video', title: startTpl.name, prompt: s.plans.map((p) => p.text.trim()).join(' / '), cost, secs: total, live, brandStyle: styled ? style : undefined, meta: styled ? `${base} · style de la marque` : base })
     if (r.ok) launched()
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    return r.ok
   }
 
   // Images créées d'abord (entrées `generated`) : Krea 3 retouche la photo de leur entrée `source` au format de la vidéo, ou crée
@@ -351,7 +365,7 @@ export default function Cinema() {
   const makeImage = async (idx) => {
     if (sending.current.has(idx) || tgens[idx]) return
     sending.current.add(idx)
-    try { await sendImage(idx) } finally { sending.current.delete(idx) }
+    try { return await sendImage(idx) } finally { sending.current.delete(idx) } // rend le lancement : le bouton reste occupé pendant l'envoi
   }
   const sendImage = async (idx) => {
     setError('')
@@ -376,6 +390,7 @@ export default function Cinema() {
     }
     if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     setTgens((g) => ({ ...g, [idx]: { jobId: r.job.id, key: r.job.key, act } }))
+    return r
   }
   // Image prête : elle remplit sa case. Vidéo à refaire quittée (ou changée) entre-temps : l'image reste dans Créations seulement.
   const tready = Object.entries(tgens).map(([idx, g]) => [Number(idx), pool.find((a) => a.id === `${g.key}-0`), g.act]).filter(([, a]) => a)
@@ -421,8 +436,9 @@ export default function Cinema() {
     const live = { kind: 'workflow', modelId: r.workflow.id, inputs, inputFiles }
     const res = submit({ kind: 'video', title: r.name, prompt: Object.values(inputs).filter(Boolean).join(' → ') || r.blurb, cost, live, recipe: { runId: id, step: 0, label: r.name }, meta: r.name })
     if (!res.ok) return setRerror(`Solde insuffisant : il manque ${jetons(res.missing)} cauris.`)
-    setRun({ id, recipeId })
+    setRun({ id: res.job.spec.recipe.runId, recipeId }) // l'identifiant de la génération réellement lancée (une demande répétée rend la première)
     launched()
+    return true
   }
 
   const modelItems = video ? VIDEO_ITEMS : IMAGE_ITEMS
@@ -548,6 +564,7 @@ export default function Cinema() {
   const runBusy = recipe && Boolean(run)
   return (
     <div className="cx-page">
+      {shield && <div className="cx-shield" aria-hidden="true" />}
       <SkipLink to={phone ? PVIEWS.find((v) => v.id === pview).pane : undefined} />
       {/* Pas de barre Plum ici : la barre latérale (Rail) porte le logo, le solde, le thème et le compte. */}
     <div className="cx cn">

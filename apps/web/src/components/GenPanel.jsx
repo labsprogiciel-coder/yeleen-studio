@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Icon from '../lib/icons.jsx'
 import Menu from './Menu.jsx'
 import { jetons, useJobs } from '../lib/jobs.jsx'
+import { busyProps, useLaunch } from '../lib/useLaunch.js'
 import { CAMERA_MOTIONS, videoCost } from '@studio/catalog'
 import { useAssets } from '../lib/assets.jsx'
 import AssetModal from './cinema/AssetModal.jsx'
@@ -16,6 +17,7 @@ import { useBrand } from '../lib/brand.jsx'
 import { DURATIONS, QUALITY, MODES, next } from '../lib/useGenSettings.js'
 import '../styles/edit-panel.css'
 import Cauri from './Cauri.jsx'
+import BusySpin from './BusySpin.jsx'
 import { StyleChip } from './StyleChip.jsx'
 import { findStyle } from '@studio/catalog/styles'
 
@@ -357,14 +359,20 @@ export function OptionChips({ s, fixedSecs = null }) {
   )
 }
 
+/**
+ * Bouton « Générer » avec son prix. `onClick` lance la génération (il peut être asynchrone) et rend `true` quand elle est partie :
+ * dès le premier appui le bouton s'éteint et montre « Envoi… » (le prix reste), pendant tout l'envoi puis un court délai, pour
+ * qu'un double appui ne lance pas deux générations payantes (voir lib/useLaunch.js). Un refus le rallume tout de suite.
+ */
 export function GenerateButton({ price, disabled, error, title, onClick }) {
+  const [busy, run] = useLaunch(onClick)
   return (
     <div className="ep-gen">
       {error && <p className="ep-gerr" role="alert">{error}</p>}
       {/* Au téléphone (Cinéma), la raison du bouton éteint s'écrit ici : l'infobulle `title` n'existe pas au doigt. */}
       {disabled && title && <p className="ep-gwhy">{title}</p>}
-      <button type="button" className="gen" disabled={disabled} title={title} onClick={onClick}>
-        Générer<span><Cauri size={18} />{jetons(price)}</span>
+      <button type="button" className={`gen${busy ? ' busy' : ''}`} disabled={disabled} {...busyProps(busy)} title={title} onClick={() => run()}>
+        {busy ? <span className="gen-send"><BusySpin />Envoi…</span> : 'Générer'}<span><Cauri size={18} />{jetons(price)}</span>
       </button>
     </div>
   )
@@ -402,7 +410,7 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
         extra = { start, end, audio, elements, references }
       } catch {
         setError('Un asset cité est introuvable : réimportez-le ou retirez la référence.')
-        return
+        return false
       }
     }
     const references = [...(live?.source ? [{ kind: 'video', file: live.source }] : []), ...(extra.references ?? [])]
@@ -420,6 +428,7 @@ export function GenerateBar({ s, title, meta, blocker, cost = s.cost, needsText 
     const r = submit({ kind: 'video', title, prompt, cost: price, secs, brandStyle: styled ? style : undefined, live: liveSpec, meta: styled ? `${base} · style de la marque` : base })
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     if (r.ok) onDone?.()
+    return r.ok
   }
   return (
     <GenerateButton price={price} error={error} title={blocker ?? undefined} disabled={(needsText && !s.ready) || Boolean(blocker)} onClick={onClick} />

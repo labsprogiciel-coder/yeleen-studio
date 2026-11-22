@@ -20,6 +20,8 @@ import ModelLogo from '../components/ModelLogo.jsx'
 import '../styles/shell.css'
 import '../styles/audio.css'
 import Cauri from '../components/Cauri.jsx'
+import BusySpin from '../components/BusySpin.jsx'
+import { busyProps, useLaunch } from '../lib/useLaunch.js'
 
 // Avatar d'une voix : un dégradé de teinte propre à chaque voix (repère visuel, pas un portrait).
 const avatar = (i) => `radial-gradient(circle at 40% 30%,hsl(${(i * 47 + 18) % 360} 55% 72%),hsl(${(i * 47 + 18) % 360} 45% 26%) 72%)`
@@ -73,7 +75,9 @@ export default function Audio() {
     const live = { kind: 'audio', modelId: model.id, prompt: script.trim(), voice: voice.id, language, stability, normalization, timestamps }
     const r = submit({ kind: 'audio', title: model.name, prompt: script.trim(), count: Math.min(count, maxOut), cost, live, secs: Math.max(1, Math.round(script.length / 14)), voice: voice.id, meta: `${voice.label} · ${script.length} caractères${language === 'auto' ? '' : ` · ${lang.title}`}` })
     setError(r.ok ? '' : `Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
+    return r.ok
   }
+  const [sending, launch] = useLaunch(generate) // un double appui ne lance pas deux générations payantes
 
   return (
     <div className="pg shell audio">
@@ -124,7 +128,7 @@ export default function Audio() {
             </span>
           </div>
           {error && <p className="ep-gerr" role="alert">{error}</p>}
-          <button type="button" className="gen" disabled={!script.trim()} onClick={generate}>Générer<span className="gcost"><Cauri size={18} />{jetons(cost)}</span></button>
+          <button type="button" className="gen" disabled={!script.trim()} {...busyProps(sending)} onClick={() => launch()}>{sending ? <span className="gen-send"><BusySpin />Envoi…</span> : 'Générer'}<span className="gcost"><Cauri size={18} />{jetons(cost)}</span></button>
           </div>
         </aside>
 
