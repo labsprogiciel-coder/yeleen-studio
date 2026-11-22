@@ -101,7 +101,7 @@ const fal = (c) => falClient({ key: c.env.FAL_KEY })
 const runware = (c) => runwareClient({ key: c.env.RUNWARE_KEY })
 const onRunware = (model) => model.provider === 'runware' // voir le catalogue : Seedance 2.5, Kling 3.0, Veo 3.1 Lite
 const higgsfield = (c) => higgsfieldClient({ key: c.env.HIGGSFIELD_KEY })
-const onHiggsfield = (model) => model.provider === 'higgsfield' // Soul 2, Genjutsu (outils)
+const onHiggsfield = (model) => model.provider === 'higgsfield' // Soul 2, Soul Cinema, Soul Standard (image), Cinema Studio 4.0 (vidéo), Genjutsu et Genjutsu Light (outils)
 
 // Compte bloqué par un administrateur (voir account-do.js) : plus de recharge, d'import ni d'« Améliorer ». Les générations sont
 // refusées par le Durable Object lui-même (`/job/reserve`).

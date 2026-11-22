@@ -35,6 +35,11 @@ test('chaînes : les modèles Runware y gardent leur point d’accès et leur pr
   assert.equal(vid('veo-3-1-lite'), undefined)
   assert.equal(vid('kling-3-std'), undefined)
   for (const e of ENTRIES) assert.ok(e.model.endpoint, e.id)
+  // Higgsfield (image comme vidéo) : pas de point d'accès fal, donc absent des chaînes ; les images fal y restent.
+  for (const e of ENTRIES) assert.equal(e.model.provider === 'higgsfield', false, e.id)
+  for (const id of ['soul-2', 'soul-cinema', 'soul-standard']) assert.equal(ENTRIES.some((e) => e.id === `img:${id}`), false, id)
+  assert.deepEqual(ENTRIES.filter((e) => e.kind === 'image').map((e) => e.model.id), IMAGE_MODELS.filter((m) => !m.provider).map((m) => m.id))
+  assert.ok(ENTRIES.some((e) => e.kind === 'image'))
 })
 
 test('les coûts sont positifs et croissent avec la quantité', () => {
@@ -169,4 +174,74 @@ test('audio vers vidéo : secondes facturées = durée mesurée arrondie à la s
   const { audioBilledSecs } = await import('../src/models.js')
   const range = { min: 2, max: 10 }
   assert.deepEqual([5, 5.04, 7.3, 0, 1.9, 10.04, 30].map((s) => audioBilledSecs(range, s)), [5, 5, 8, 2, 2, 10, 10])
+})
+
+test('Cinema Studio 4.0 (Higgsfield) : dans la liste vidéo, options du schéma documenté, prix par résolution, absent des chaînes fal', async () => {
+  const { ENTRIES } = await import('../src/chainDefs.js')
+  const { slotRules } = await import('../src/templateSlots.js')
+  const { durationOptions, priceLabel, lowestRate } = await import('../src/models.js')
+  const m = VIDEO_MODELS.find((x) => x.id === 'cinema-studio-4')
+  assert.deepEqual([m.provider, m.endpoint, m.verified, m.input], ['higgsfield', 'higgsfield/cinema-studio/4.0', false, 'text'])
+  assert.deepEqual(m.caps.resolutions, ['480p', '720p'])
+  assert.deepEqual(m.caps.ratios, ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
+  assert.deepEqual(durationOptions(m.caps, '720p'), [4, 5, 6, 8, 10, 12, 15, 20, 25]) // l'API accepte 30 s : plafonné à 25 s
+  assert.equal(m.caps.strictFiles, true)
+  assert.match(m.tagline, /25 s/)
+  assert.ok(m.tags.includes('Jusqu’à 25 s') && !m.tags.some((t) => /30 s/.test(t)))
+  assert.deepEqual([m.caps.audio, m.caps.startFrame, m.caps.endFrame, m.caps.multiShot, m.caps.tasks], ['toggle', 'none', false, false, undefined])
+  // Références : images et audio seulement (une vidéo de référence changerait le tarif), pas d'image de départ ni de fin.
+  assert.deepEqual(slotRules(m), { start: null, end: false, elements: 0, references: { image: 30, video: 0, audio: 10 }, audio: null, multiShot: false })
+  assert.equal(videoCost(m, 5, '720p'), toJetons(0.607 * 5))
+  assert.equal(videoCost(m, 5, '480p', { sound: false }), toJetons(0.27 * 5))
+  assert.equal(videoCost(m, m.caps.duration.max, '720p'), 545.9) // la plus longue vidéo proposée passe sous le plafond d'une génération
+  assert.ok(videoCost(m, m.caps.duration.max, '720p') <= 600) // MAX_JOB_COST par défaut ; 30 s (655 cauris) ne passeraient pas
+  assert.deepEqual(lowestRate(m), { usd: 0.27, from: true })
+  assert.match(priceLabel(m), /^dès ≈ 9,7 cauris \/ s$/)
+  // Une chaîne s'exécute chez fal : un modèle vidéo servi par Higgsfield n'y figure pas.
+  assert.equal(ENTRIES.some((e) => e.id === 'vid:cinema-studio-4'), false)
+  for (const e of ENTRIES.filter((x) => x.kind === 'video')) assert.notEqual(e.model.provider, 'higgsfield', e.id)
+})
+
+test('Genjutsu Light : deux outils Higgsfield, 4 à 15 s, trois résolutions, facturés à la seconde de la source', async () => {
+  const { findTool, toolCost, toolEndpoint } = await import('../src/tools.js')
+  for (const [id, path] of [['motion-transfer-light', 'higgsfield/genjutsu-light/motion-transfer/v1.0'], ['object-swap-light', 'higgsfield/genjutsu-light/object-swap/v1.0']]) {
+    const t = findTool(id)
+    assert.deepEqual([t.provider, toolEndpoint(t, {}), t.output, t.minSecs, t.maxSecs, t.bySecs], ['higgsfield', path, 'video', 4, 15, 'video'])
+    assert.deepEqual(t.inputs.find((f) => f.key === 'resolution').options.map((o) => o.id), ['480p', '720p', '1080p'])
+    assert.equal(toolCost(t, { resolution: '480p' }, 5), toJetons(0.0739 * 5))
+    assert.equal(toolCost(t, { resolution: '1080p' }), toJetons(0.2936 * 15)) // sans mesure : la durée maximale
+  }
+  // Changement de version : un choix que l'autre version n'offre pas est oublié (sinon le serveur refuserait la demande).
+  const { toolCarry, toolInputIssue } = await import('../src/tools.js')
+  const full = findTool('motion-transfer')
+  const typed = { prompt: 'garder le décor', resolution: '1080p' }
+  assert.equal(toolInputIssue(full, { video: 'v', images: ['i'], ...typed }), 'invalid_resolution')
+  assert.deepEqual(toolCarry(full, typed), { prompt: 'garder le décor' })
+  assert.deepEqual(toolCarry(findTool('motion-transfer-light'), typed), typed)
+  assert.deepEqual(toolCarry(full, { prompt: 'a', resolution: '720p' }), { prompt: 'a', resolution: '720p' })
+})
+
+test('images Higgsfield : Soul Cinema et Soul Standard, sur le modèle de Soul 2', async () => {
+  const { priceLabel, lowestRate } = await import('../src/models.js')
+  const soul = ['9:16', '16:9', '4:3', '3:4', '1:1', '2:3', '3:2']
+  const want = {
+    'soul-2': ['higgsfield-ai/soul/v2/standard', soul, { '720p': 0.004, '1080p': 0.006 }],
+    'soul-cinema': ['higgsfield-ai/soul/cinema', soul, { '720p': 0.004, '1080p': 0.006 }],
+    'soul-standard': ['higgsfield-ai/soul/standard', soul, { '720p': 0.094, '1080p': 0.188 }],
+  }
+  assert.deepEqual(IMAGE_MODELS.filter((m) => m.provider === 'higgsfield').map((m) => m.id), Object.keys(want))
+  for (const [id, [endpoint, ratios, usd]] of Object.entries(want)) {
+    const m = IMAGE_MODELS.find((x) => x.id === id)
+    assert.deepEqual([m.provider, m.endpoint, m.verified, m.caps.maxImages, m.price.per], ['higgsfield', endpoint, false, 1, 'image'], id)
+    assert.deepEqual(m.caps.ratios, ratios, id)
+    assert.deepEqual(m.caps.resolutions, Object.keys(usd), id)
+    assert.deepEqual(Object.keys(m.caps.resUnits), Object.keys(usd), id)
+    for (const [res, price] of Object.entries(usd)) assert.equal(imageCost(m, res, 1), toJetons(price), `${id} ${res}`)
+    assert.ok(m.tagline && m.tags.length >= 2, id)
+    assert.deepEqual(lowestRate(m), { usd: Object.values(usd)[0], from: false }, id)
+  }
+  // Soul 2 et Soul Cinema : 0,1 et 0,2 cauri (arrondi au dixième de cauri, comme sur main).
+  for (const id of ['soul-2', 'soul-cinema']) assert.deepEqual(['720p', '1080p'].map((r) => imageCost(IMAGE_MODELS.find((x) => x.id === id), r, 1)), [0.1, 0.2], id)
+  assert.deepEqual(['720p', '1080p'].map((r) => imageCost(IMAGE_MODELS.find((x) => x.id === 'soul-standard'), r, 1)), [3.4, 6.8])
+  assert.match(priceLabel(IMAGE_MODELS.find((m) => m.id === 'soul-standard')), /^≈ 3,4 cauris \/ image$/)
 })

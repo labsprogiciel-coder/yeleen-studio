@@ -92,6 +92,7 @@ function priceVideo(req, model, isFile) {
 
   const needsText = c.audioRef !== 'required'
   if (needsText && !plans.some((p) => p.text?.trim()) && !refs.length) return { ok: false, error: 'invalid_text' }
+  if (c.promptRequired && !plans.some((p) => p.text?.trim())) return { ok: false, error: 'invalid_text' } // des références ne remplacent pas le texte (Cinema Studio 4.0)
 
   const secs = req.secs
   if (badDuration(c, secs, task)) return { ok: false, error: 'invalid_duration' }
@@ -101,6 +102,11 @@ function priceVideo(req, model, isFile) {
   if (c.ratios && !c.ratios.includes(req.ratio)) return { ok: false, error: 'unsupported_ratio' }
 
   const files = { start: req.startImageUrl, end: req.endImageUrl, audio: req.audioUrl }
+  // Cinema Studio 4.0 (`strictFiles`) : son API n'a ni image de départ, ni image de fin, ni piste audio. On refuse la demande plutôt
+  // que de la facturer en laissant tomber ces fichiers (les images et l'audio y passent par les références).
+  if (c.strictFiles && files.start) return { ok: false, error: 'start_unsupported' }
+  if (c.strictFiles && files.end) return { ok: false, error: 'end_unsupported' }
+  if (c.strictFiles && files.audio) return { ok: false, error: 'audio_unsupported' }
   if (c.startFrame === 'required' && !files.start) return { ok: false, error: 'missing_start_image' }
   if (c.endFrame === 'withStart' && files.end && !files.start) return { ok: false, error: 'missing_start_image' } // sinon l'image de fin serait ignorée
   if (c.audioRef === 'required' && !files.audio) return { ok: false, error: 'missing_audio' }

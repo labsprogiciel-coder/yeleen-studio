@@ -408,6 +408,32 @@ export const TOOLS = [
     usd: (v, secs) => per({ '480p': 0.318, '720p': 0.681 })(v.resolution) * secs,
     build: (v) => ({ video_url: v.video, image_urls: v.images, resolution: v.resolution, ...(v.prompt ? { prompt: v.prompt } : {}) }),
   })),
+  // Genjutsu Light (Higgsfield) : les mêmes outils en version légère et bien moins chère ; seules les 15 premières secondes de la
+  // source servent (on refuse donc une source plus longue) et son audio est gardé. Mêmes champs que Genjutsu (video_url, image_urls
+  // obligatoires, prompt, resolution 480p, 720p ou 1080p : vérifiés sur POST /estimate/<point d'accès>, qui refuse 9 photos).
+  // PRIX À CONFIRMER : 0,0739 $ / 0,1471 $ / 0,2936 $ la seconde produite en 480p / 720p / 1080p, lu sur l'estimation publique (sans
+  // compte, description sans montant) ; pas de page de documentation. Durée minimale de la source non documentée : 4 s, comme Genjutsu.
+  ...[
+    { id: 'motion-transfer-light', name: 'Transfert de mouvement · Light', endpoint: 'higgsfield/genjutsu-light/motion-transfer/v1.0', video: 'Vidéo du mouvement', images: 'Photo du personnage', prompt: 'Ex. : garder le décor de la vidéo' },
+    { id: 'object-swap-light', name: 'Remplacer un objet · Light', endpoint: 'higgsfield/genjutsu-light/object-swap/v1.0', video: 'Vidéo source', images: 'Photo du nouvel objet', prompt: 'Ex. : remplacer la bouteille par mon produit' },
+  ].map((g) => ({
+    id: g.id,
+    name: g.name,
+    output: 'video',
+    provider: 'higgsfield',
+    endpoint: g.endpoint,
+    minSecs: 4,
+    maxSecs: 15,
+    bySecs: 'video',
+    inputs: [
+      { key: 'video', type: 'video', label: g.video },
+      { key: 'images', type: 'images', label: g.images, min: 1, max: 8 },
+      { key: 'prompt', type: 'text', max: 2000, label: 'Consigne (facultatif)', placeholder: g.prompt },
+      { key: 'resolution', type: 'select', label: 'Résolution', options: [opt('480p', '480p'), opt('720p', '720p'), opt('1080p', '1080p')] },
+    ],
+    usd: (v, secs) => per({ '480p': 0.0739, '720p': 0.1471, '1080p': 0.2936 })(v.resolution) * secs,
+    build: (v) => ({ video_url: v.video, image_urls: v.images, resolution: v.resolution, ...(v.prompt ? { prompt: v.prompt } : {}) }),
+  })),
   {
     id: 'video-depth',
     name: 'Carte de profondeur',
@@ -552,6 +578,12 @@ export function toolValues(tool, inputs = {}) {
   }
   return v
 }
+
+/** Les valeurs saisies qui restent valables pour un autre outil (changement de version) : un choix absent de ses options est oublié. */
+export const toolCarry = (tool, values = {}) => Object.fromEntries(Object.entries(values).filter(([k, v]) => {
+  const f = tool.inputs.find((x) => x.key === k)
+  return !f?.options || f.options.some((o) => o.id === v)
+}))
 
 /** Ce qui ne va pas (code), une fois chaque entrée valide : règles entre plusieurs champs (ex. début avant fin). */
 export const toolCheck = (tool, inputs) => tool.check?.(toolValues(tool, inputs)) ?? null

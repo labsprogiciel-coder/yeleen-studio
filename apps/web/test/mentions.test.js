@@ -127,3 +127,14 @@ test('Seedance : les mentions par nom deviennent aussi des références numérot
   const r = resolveMentions({ plans: [{ text: 'de @flux-3 vers @clip avec @voix' }], refs, assets, caps: seedance })
   assert.equal(r.texts[0], 'de @Image1 vers @Video1 avec @Audio1')
 })
+
+test('Cinema Studio 4.0 : images et audio joints deviennent des références, une vidéo jointe n’est pas utilisée, aucune image de départ', async () => {
+  const { VIDEO_MODELS } = await import('@studio/catalog')
+  const caps = VIDEO_MODELS.find((m) => m.id === 'cinema-studio-4').caps
+  const attached = labelAttachments([{ id: 'x1', assetId: 'a1' }, { id: 'x2', assetId: 'a3' }, { id: 'x3', assetId: 'a4' }, { id: 'x4', assetId: 'a2' }], assets)
+  const r = resolveAttachments({ attached, texts: ['@Image 2 rejoint @Image 1, avec @Audio 1 et @Vidéo 1'], caps })
+  assert.deepEqual(r.items.map((i) => [i.token, i.role, i.n]), [['Image 1', 'reference', 1], ['Vidéo 1', 'unused', undefined], ['Audio 1', 'reference', 1], ['Image 2', 'reference', 2]])
+  assert.deepEqual(r.texts, ['@Image2 rejoint @Image1, avec @Audio1 et Clip'])
+  assert.deepEqual(r.references.map((x) => [x.kind, x.asset.id]), [['image', 'a1'], ['audio', 'a4'], ['image', 'a2']])
+  assert.deepEqual(r.slots, {})
+})
