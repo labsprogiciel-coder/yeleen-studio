@@ -36,10 +36,12 @@ export default function Menu({ items, value, onChange, label, heading, menuWidth
     const bar = window.innerWidth <= 900 && [...document.querySelectorAll('.ep-gen')].map((e) => (/fixed|sticky/.test(getComputedStyle(e).position) ? e.getBoundingClientRect() : null)).find((b) => b && b.height > 0 && b.top >= r.bottom && b.top < window.innerHeight)
     const below = (bar ? bar.top : window.innerHeight) - r.bottom
     const above = r.top
+    // Au moins 160 px de liste quand la place existe ; jamais plus haut que la place du côté choisi (téléphone couché), sinon le haut de la liste sort de l'écran.
+    const room = (space) => Math.max(Math.min(160, space - 12), space - 18)
     // Ouvre vers le haut quand le bas manque de place (ex. barre de prompt collée en bas de l'écran).
     setPos(below < 300 && above > below
-      ? { bottom: window.innerHeight - r.top + 6, left, width, maxHeight: Math.max(160, above - 18) }
-      : { top: r.bottom + 6, left, width, maxHeight: Math.max(160, below - 18) })
+      ? { bottom: window.innerHeight - r.top + 6, left, width, maxHeight: room(above) }
+      : { top: r.bottom + 6, left, width, maxHeight: room(below) })
   }
 
   // Un ancêtre transformé (barre flottante) décale un élément `fixed` : on ramène le menu dans l'écran s'il en sort.

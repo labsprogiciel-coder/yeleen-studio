@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import useEdgeFade from '../../lib/useEdgeFade.js'
+import useMedia from '../../lib/useMedia.js'
 import Icon from '../../lib/icons.jsx'
 import Menu from '../Menu.jsx'
 import AssetThumb from '../AssetThumb.jsx'
@@ -95,6 +96,8 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
 
   // Rangée de filtres qui défile de côté (fenêtre étroite) : un bord s'estompe seulement s'il reste des filtres de ce côté-là.
   const [strip, fade] = useEdgeFade([open, tab])
+  // Au téléphone les bibliothèques sont en rangée (même seuil que assetModal.css) : l'orientation annoncée suit.
+  const sideRow = useMedia('(max-width:640px)')
 
   // Fichier à montrer (« Voir dans la bibliothèque ») : amené au centre et encadré.
   useEffect(() => {
@@ -163,7 +166,7 @@ export default function AssetModal({ open, onClose, onAdd, taken = [], initialSu
   return (
     <dialog ref={ref} className="am-dlg" onClose={onClose} onClick={(e) => e.target === ref.current && onClose()} aria-label={tab === 'styles' ? 'Choisir un style' : browse ? 'Bibliothèque' : 'Ajouter des références'}>
       <nav className="am-side" aria-label="Bibliothèques">
-        <div role="tablist" aria-orientation="vertical" aria-label="Bibliothèque" onKeyDown={onTabKeys}>
+        <div role="tablist" aria-orientation={sideRow ? 'horizontal' : 'vertical'} aria-label="Bibliothèque" onKeyDown={onTabKeys}>
           {tabs.map((t) => (
             <button key={t.id} type="button" role="tab" id={`am-tab-${t.id}`} aria-selected={tab === t.id} aria-controls="am-main" title={t.label} tabIndex={tab === t.id ? 0 : -1} className={tab === t.id ? 'on' : undefined} onClick={() => setTab(t.id)}>
               <Icon name={t.icon} size={18} />

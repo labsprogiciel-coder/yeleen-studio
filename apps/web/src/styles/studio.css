@@ -306,6 +306,8 @@ dialog.cx-drawer[open]::backdrop{animation:cx-drawer-fade .2s ease-out}
   .cx-panel .ep-opts.auto[data-fade="r"]{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
   .cx-panel .ep-opts.auto[data-fade="l"]{-webkit-mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(270deg,#000 calc(100% - 24px),transparent)}
   .cx-panel .ep-opts.auto[data-fade="lr"]{-webkit-mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)}
+  /* Un menu ouvert dans la rangée (Format, Résolution, Durée) serait masqué avec elle : le fondu s'efface le temps du menu. */
+  .cx-panel .ep-opts.auto:has(.mn-btn.open){-webkit-mask-image:none;mask-image:none}
   .cx-panel .ep-opts.auto .ep-chip{flex:1 0 auto;gap:5px;padding:0 8px}
   .cx-panel .ep-opts.auto .mn-btn>svg:last-child{display:none}
   .cx-panel .ep-opts.auto .ep-chip-ic{flex:0 0 40px;padding:0}
