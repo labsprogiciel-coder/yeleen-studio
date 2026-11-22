@@ -6,8 +6,11 @@ export const knownFailure = (code, failures = {}) => (failures[code] ? code : 'p
  * enregistrée (nouvel essai avec la même clé) : échouée, elle l'est ici tout de suite, avec le remboursement du serveur ; sinon
  * le suivi habituel prend le relais (terminée ou annulée comprises, la génération locale étant encore active).
  */
-export function createPatch(r, failures = {}, now = Date.now()) {
+export function createPatch(r, failures = {}, now = Date.now(), queued = false) {
   if (r?.status === 'FAILED') return { remoteId: r.jobId, status: 'FAILED', failure: knownFailure(r.failure, failures), refund: r.refund ?? 0, finishedAt: now }
+  // Déjà démarrée chez le fournisseur dès l'envoi (Runware : jamais en file) : la génération locale passe en cours, pour que la
+  // question d'arrêt ne promette pas un remboursement que le serveur ne fera pas. `queued` : l'état local, seul à pouvoir avancer.
+  if (r?.status === 'IN_PROGRESS' && queued) return { remoteId: r.jobId, status: 'IN_PROGRESS' }
   return { remoteId: r?.jobId }
 }
 

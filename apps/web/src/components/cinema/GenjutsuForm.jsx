@@ -33,6 +33,7 @@ export default function GenjutsuForm({ template: t, onClose, onDone }) {
     })
     if (!r.ok) return setError(`Solde insuffisant : il manque ${jetons(r.missing)} cauris.`)
     onDone?.()
+    return true
   }
 
   return (

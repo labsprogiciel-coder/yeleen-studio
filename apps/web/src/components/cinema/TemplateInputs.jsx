@@ -3,6 +3,8 @@ import AssetThumb from '../AssetThumb.jsx'
 import MentionTextarea from '../MentionTextarea.jsx'
 import Icon from '../../lib/icons.jsx'
 import { jetons } from '../../lib/jobs.jsx'
+import { busyProps, useLaunch } from '../../lib/useLaunch.js'
+import BusySpin from '../BusySpin.jsx'
 import { acceptFor, canGenerate, inputTitle, inputTokens } from '../../lib/templateRun.js'
 import './templateInputs.css'
 
@@ -18,6 +20,21 @@ function FixedTile({ input, title }) {
       <span>{title}</span>
       <em className="ti-by">Fourni par Qreativ</em>
     </div>
+  )
+}
+
+/**
+ * Bouton « Créer l'image de début » et son prix : une génération payante, donc « Envoi… » dès le premier appui et un seul envoi
+ * (lib/useLaunch.js) ; l'image lancée, il reste éteint le temps de sa création (`making`).
+ */
+function MakeButton({ making, disabled, onMake, label, cost, title }) {
+  const [sending, run] = useLaunch(onMake)
+  return (
+    <button type="button" className="ep-chip ep-start" disabled={disabled || (making && !sending)} {...busyProps(sending)} onClick={() => run()} title={title}>
+      {sending ? <BusySpin /> : <Icon name="sparkle" size={16} />}
+      {sending ? 'Envoi…' : making ? 'Création de l’image…' : label}
+      <span className="ep-price">{jetons(cost)} cauris</span>
+    </button>
   )
 }
 
@@ -94,12 +111,8 @@ export default function TemplateInputs({ inputs, given, onGiven, prompts, onProm
               enhance={{ value: text, onChange: (v) => onPrompt(i.idx, v), kind: src ? 'edit' : 'image', modelId: 'krea-3' }}>
               <MentionTextarea mentions={false} value={text} onChange={(v) => onPrompt(i.idx, v)} aria-labelledby={`ti-k-${i.idx}`} rows={3} />
             </PromptBox>
-            <button type="button" className="ep-chip ep-start" disabled={Boolean(busy[i.idx]) || !ready} onClick={() => onMake(i.idx)}
-              title={!ready && src && !given[src.idx] ? `Ajoutez d’abord : ${inputTitle(src, inputs).charAt(0).toLowerCase()}${inputTitle(src, inputs).slice(1)}` : undefined}>
-              <Icon name="sparkle" size={16} />
-              {busy[i.idx] ? 'Création de l’image…' : `${made ? 'Recréer' : 'Créer'} ${what}`}
-              <span className="ep-price">{jetons(costs[i.idx] ?? 0)} cauris</span>
-            </button>
+            <MakeButton making={Boolean(busy[i.idx])} disabled={!ready} onMake={() => onMake(i.idx)} label={`${made ? 'Recréer' : 'Créer'} ${what}`} cost={costs[i.idx] ?? 0}
+              title={!ready && src && !given[src.idx] ? `Ajoutez d’abord : ${inputTitle(src, inputs).charAt(0).toLowerCase()}${inputTitle(src, inputs).slice(1)}` : undefined} />
           </div>
         )
       })}

@@ -19,10 +19,10 @@
 .shell .tabs button:hover:not(.on),.shell .seg button:hover:not(.on){color:var(--ink)}
 .shell .gen,.shell .gen2{border:0;font-family:inherit;cursor:pointer;width:100%;transition:filter .15s,transform .1s}
 .shell .gen2{width:144px}
-.shell .gen:hover:not(:disabled),.shell .gen2:hover:not(:disabled){filter:brightness(.94)}
-.shell .gen:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--lime-edge)}
-.shell .gen2:active:not(:disabled){transform:translateY(1px)}
-.shell .gen:disabled,.shell .gen2:disabled{background:var(--fill);color:var(--ink-3);box-shadow:none;cursor:not-allowed}
+.shell .gen:hover:not(:disabled,[aria-disabled=true]),.shell .gen2:hover:not(:disabled,[aria-disabled=true]){filter:brightness(.94)}
+.shell .gen:active:not(:disabled,[aria-disabled=true]){transform:translateY(2px);box-shadow:0 1px 0 var(--lime-edge)}
+.shell .gen2:active:not(:disabled,[aria-disabled=true]){transform:translateY(1px)}
+.shell .gen:disabled,.shell .gen2:disabled,.shell .gen[aria-disabled=true],.shell .gen2[aria-disabled=true]{background:var(--fill);color:var(--ink-3);box-shadow:none;cursor:not-allowed}
 .shell .pl a,.shell .bar a,.shell .pb{transition:background-color .15s,border-color .15s}
 .shell .pl a:hover,.shell .bar a:hover{border-color:var(--line-strong);color:var(--ink)}
 .image .pbx:focus-within{border-color:var(--lime)}

@@ -38,3 +38,8 @@ test('suivi introuvable : rien avant trois réponses 404 de suite étalées sur 
   assert.equal(lostPatch(9, 1_000, 30_000), null)
   assert.deepEqual(lostPatch(9, 1_000, 31_000), { status: 'FAILED', failure: 'lost', refund: 0, finishedAt: 31_000 })
 })
+
+test('createPatch : déjà démarrée chez le fournisseur dès l’envoi, la génération locale encore en file passe en cours', () => {
+  assert.deepEqual(createPatch({ jobId: 'j1', status: 'IN_PROGRESS' }, {}, 5, true), { remoteId: 'j1', status: 'IN_PROGRESS' })
+  assert.deepEqual(createPatch({ jobId: 'j1', status: 'IN_PROGRESS' }, {}, 5, false), { remoteId: 'j1' }) // annulée pendant l'envoi : rien n'est écrasé
+})

@@ -111,6 +111,8 @@
 .ep-step button:disabled{color:var(--ink-4);cursor:not-allowed}
 .ep-start{width:100%;margin-top:8px;min-height:44px}
 .ep-start .ep-price{margin-left:auto}
+.ep-chip.ep-start[aria-disabled=true]{color:var(--ink-4);cursor:default;background:var(--field)}
+.ep-start .busy-spin{width:16px;height:16px;border-width:2px}
 .ep-from{position:relative;display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px 36px 8px 8px;border:1px solid var(--line);border-radius:12px;background:var(--field)}
 .ep-from video{flex:none;width:72px;aspect-ratio:16/9;border-radius:8px;object-fit:cover;background:#000}
 .ep-from span{display:flex;flex-direction:column;min-width:0}

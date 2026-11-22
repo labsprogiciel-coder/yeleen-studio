@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { currentProject } from './projects.js'
 import { dueJobs } from './pollDelay.js'
 import { cancelPatch as cancelReply, createPatch, knownFailure, lostPatch } from './jobReply.js'
+import { createLaunchGuard, launchKey } from './launchGuard.js'
 import { useAuthState } from './auth.jsx'
 import { api, apiEnabled } from './api.js'
 import { track } from './posthog.js'
@@ -156,10 +157,10 @@ function reducer(state, action) {
       const j = state.jobs.find((x) => x.id === action.id)
       if (!j || (j.status !== 'IN_QUEUE' && j.status !== 'IN_PROGRESS')) return state
       if (j.live) {
-        // Réel : annulée en file = remboursée en entier ; déjà en cours chez le fournisseur = facturée. Le solde exact vient du serveur.
-        const refund = j.status === 'IN_QUEUE' ? j.cost : 0
-        const jobs = state.jobs.map((x) => (x.id === j.id ? { ...x, status: 'CANCELED', finishedAt: action.now, refund, logs: x.logs.concat({ msg: 'Annulé par l’utilisateur' }) } : x))
-        return { ...state, jobs, message: refund ? `${j.title} annulée. ${jetons(refund)} cauris remboursés.` : `${j.title} annulée. La génération avait déjà commencé : elle est facturée.` }
+        // Réel : annulée en file = remboursée en entier ; déjà en cours chez le fournisseur = facturée. C'est le serveur qui le dit :
+        // tant qu'il n'a pas répondu (`cancelPending`), la carte n'annonce ni remboursement ni facturation (voir `sendCancel`).
+        const jobs = state.jobs.map((x) => (x.id === j.id ? { ...x, status: 'CANCELED', finishedAt: action.now, refund: 0, cancelPending: true, canceledBy: 'user', canceledFrom: j.status, logs: x.logs.concat({ msg: 'Annulé par l’utilisateur' }) } : x))
+        return { ...state, jobs, message: `${j.title} : arrêt demandé.` }
       }
       // En file : tout est remboursé. En cours : seule la part non consommée l'est.
       const refund = j.status === 'IN_QUEUE' ? j.cost : Math.round(j.cost * (1 - j.progress / 100) * 10) / 10
@@ -197,6 +198,9 @@ export function JobsProvider({ children }) {
   ref.current = state
   const seq = useRef(0)
   const analytics = useRef(new Map()) // propriétés de mesure de chaque génération lancée ici (type, outil, prix), pour les événements de fin
+  const guard = useRef(null) // lancements récents : une demande identique répétée (double appui) n'est pas lancée deux fois
+  if (!guard.current) guard.current = createLaunchGuard()
+  const sent = useRef(null) // envoi au service du dernier lancement (promesse : `false` s'il a été refusé), pour le bouton (lib/useLaunch.js)
 
   const active = state.jobs.some((j) => j.status === 'IN_QUEUE' || j.status === 'IN_PROGRESS')
   useEffect(() => {
@@ -288,7 +292,34 @@ export function JobsProvider({ children }) {
     }
   }, [])
 
+  // Arrêt d'une génération réelle : la carte n'annonce un remboursement (ou son absence) qu'avec la réponse du serveur. Sans réponse
+  // (panne, coupure), rien n'a été arrêté ni rendu : la génération reprend son état et son suivi. Rend `false` si elle continue.
+  const sendCancel = useCallback((id, remoteId) => api.cancelJob(remoteId)
+    .then((r) => {
+      const j = ref.current.jobs.find((x) => x.id === id)
+      const stopped = !r?.status || r.status === 'CANCELED'
+      const goesOn = r?.status === 'IN_QUEUE' || r?.status === 'IN_PROGRESS' // le serveur ne l'a pas arrêtée (ses fichiers s'enregistrent)
+      const patch = { ...cancelPatch(r), cancelPending: false }
+      if (goesOn) { patch.canceledBy = undefined; patch.logs = [{ msg: 'Arrêt impossible : la génération continue' }] }
+      dispatch({ type: 'REMOTE', id, balance: r.balance, patch, message: !j ? undefined : goesOn ? `L’arrêt n’a pas abouti : ${j.title} continue.` : !stopped ? undefined : r.refund > 0 ? `${j.title} annulée. ${jetons(r.refund)} cauris remboursés.` : `${j.title} annulée, sans remboursement.` })
+      return !goesOn
+    })
+    .catch(() => {
+      const j = ref.current.jobs.find((x) => x.id === id)
+      if (j?.status === 'CANCELED' && j.cancelPending) dispatch({ type: 'REMOTE', id, patch: { status: j.canceledFrom, finishedAt: null, cancelPending: false, canceledBy: undefined, logs: [{ msg: 'Arrêt impossible : la génération continue' }] }, message: `L’arrêt n’a pas abouti : ${j.title} continue.` })
+      return false
+    }), [])
+
   const submit = useCallback((spec, replaces) => {
+    // Même demande déjà en cours d'envoi, ou lancée à l'instant : on rend la première sans rien lancer ni débiter. Vérifié avant le
+    // solde, que la première vient d'entamer. Une première déjà échouée ou annulée ne retient rien : on peut relancer.
+    const key = launchKey(spec, replaces)
+    const first = guard.current.find(key, Date.now())
+    if (first) {
+      const j = ref.current.jobs.find((x) => x.id === first.job.id)
+      if (!j || (j.status !== 'FAILED' && j.status !== 'CANCELED')) { sent.current = first.sent; return first }
+      guard.current.drop(key, first)
+    }
     const missing = spec.cost - ref.current.balance
     if (missing > 0) return { ok: false, missing }
     const attempt = replaces ? (ref.current.jobs.find((j) => j.id === replaces)?.attempt ?? 1) + 1 : 1
@@ -307,26 +338,30 @@ export function JobsProvider({ children }) {
     }
     analytics.current.set(job.id, props)
     track('generation_submitted', { ...props, retry: Boolean(replaces) })
+    // `sent` : l'envoi au service ; rend `false` s'il est refusé (solde, modération, panne), `true` sinon. Le moteur simulé n'envoie rien.
+    const result = { ok: true, job, sent: Promise.resolve(true) }
+    guard.current.record(key, result, Date.now(), job.live)
     if (job.live) {
-      startLive(job, spec.live)
+      result.sent = startLive(job, spec.live)
         .then((r) => {
+          guard.current.settle(key, result, Date.now())
           // Le serveur peut rendre une génération déjà enregistrée (nouvel essai, même clé) : échouée et remboursée, elle s'arrête ici.
-          const patch = createPatch(r, FAILURES, Date.now())
+          const patch = createPatch(r, FAILURES, Date.now(), ref.current.jobs.find((j) => j.id === job.id)?.status === 'IN_QUEUE')
           if (patch.status === 'FAILED') {
             dispatch({ type: 'REMOTE', id: job.id, balance: r.balance, patch: { ...patch, logs: [{ msg: `Erreur : ${FAILURES[patch.failure].message}`, error: true }] }, message: `Échec : ${job.title}.${patch.refund ? ` ${jetons(patch.refund)} cauris remboursés.` : ''}` })
             track('generation_failed', { ...analytics.current.get(job.id), failure: patch.failure, stage: 'submit', refund: patch.refund })
-            return
+            return false
           }
           dispatch({ type: 'REMOTE', id: job.id, balance: r.balance, patch: { ...patch, logs: [{ msg: 'Demande acceptée' }] } })
           // Annulée pendant l'envoi : on prévient le serveur dès qu'il a un identifiant.
-          if (ref.current.jobs.find((j) => j.id === job.id)?.status === 'CANCELED') {
-            api.cancelJob(r.jobId).then((c) => dispatch({ type: 'REMOTE', id: job.id, balance: c.balance, patch: cancelPatch(c) })).catch(() => {})
-          }
+          if (ref.current.jobs.find((j) => j.id === job.id)?.status === 'CANCELED') sendCancel(job.id, r.jobId)
+          return true
         })
-        .catch((e) => failLive(job.id, e))
+        .catch((e) => { guard.current.drop(key, result); failLive(job.id, e); return false })
     }
-    return { ok: true, job }
-  }, [make, failLive, startLive])
+    sent.current = result.sent
+    return result
+  }, [make, failLive, startLive, sendCancel])
 
   // Solde réel au démarrage (et à la connexion : sans session, l'API refuse).
   const { ready, signedIn } = useAuthState()
@@ -385,8 +420,9 @@ export function JobsProvider({ children }) {
   const cancel = useCallback((id) => {
     const j = ref.current.jobs.find((x) => x.id === id)
     dispatch({ type: 'CANCEL', id, now: Date.now() })
-    if (j?.live && j.remoteId) api.cancelJob(j.remoteId).then((r) => dispatch({ type: 'REMOTE', id, balance: r.balance, patch: cancelPatch(r) })).catch(() => {})
-  }, [])
+    // Encore en cours d'envoi (pas d'identifiant) : `submit` prévient le serveur dès qu'il en a un.
+    return j?.live && j.remoteId ? sendCancel(id, j.remoteId) : Promise.resolve(true)
+  }, [sendCancel])
 
   const value = useMemo(() => ({
     jobs: state.jobs,
@@ -397,6 +433,7 @@ export function JobsProvider({ children }) {
     retry: (job) => submit(job.spec, job.id),
     rerun: (job) => submit(job.spec),
     cancel,
+    lastSent: () => sent.current,
     dismiss: (id) => dispatch({ type: 'DISMISS', id }),
     clearDone: (kind) => dispatch({ type: 'CLEAR_DONE', kind }),
     syncBalance: (balance) => { if (typeof balance === 'number') dispatch({ type: 'SYNC_WALLET', balance }) }, // solde réel rendu par l'API (recharges)

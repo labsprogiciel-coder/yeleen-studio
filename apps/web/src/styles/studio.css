@@ -4,6 +4,7 @@
  */
 /* Page : l'espace de travail prend toute la hauteur ; la barre latérale (Rail.jsx) est la seule barre de l'écran. */
 .cx-page{display:flex;flex-direction:column;height:100vh;height:100dvh;background:var(--page)}
+.cx-shield{position:fixed;inset:0;z-index:var(--z-toast)} /* absorbe le second appui d'un double appui, le temps que la vue change (Cinema.jsx) */
 .cx{--panel:var(--panel-bg);--card:var(--card-bg);--chip:var(--fill-hover);flex:1;min-height:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;padding:10px;box-sizing:border-box;background:var(--page)}
 .cx button{font-family:inherit}
 
@@ -147,8 +148,8 @@
 .cx-panel .ep-opts .ep-chip{flex:none;min-height:34px;padding:0 12px;border-radius:999px}
 .cx-panel .ep-gen .gen{justify-content:space-between;padding:0 18px}
 .cx-panel .ep-gen .gen{height:50px;border:0;border-radius:14px;background:var(--lime);color:var(--on-lime);font-size:16px;font-weight:700;align-items:center;cursor:pointer}
-.cx-panel .ep-gen .gen:hover:not(:disabled){filter:brightness(.92)}
-.cx-panel .ep-gen .gen:disabled{background:var(--card);border:1px solid var(--edge);color:var(--ink-3);cursor:not-allowed}
+.cx-panel .ep-gen .gen:hover:not(:disabled,[aria-disabled=true]){filter:brightness(.92)}
+.cx-panel .ep-gen .gen:disabled,.cx-panel .ep-gen .gen[aria-disabled=true]{background:var(--card);border:1px solid var(--edge);color:var(--ink-3);cursor:not-allowed}
 
 /* Zone principale */
 .cx-main{min-height:0;min-width:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:18px;background:var(--panel);overflow:hidden}

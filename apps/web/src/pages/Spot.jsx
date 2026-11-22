@@ -24,6 +24,8 @@ import '../styles/library.css'
 import '../styles/edit-panel.css'
 import '../styles/spot.css'
 import Cauri from '../components/Cauri.jsx'
+import BusySpin from '../components/BusySpin.jsx'
+import { useLaunch } from '../lib/useLaunch.js'
 
 const BLANK = { name: '', offer: '', price: '', whatsapp: '', tone: 'warm', lang: 'fr', voice: 'Rachel' }
 const LINE_LABELS = ['Accroche', 'Message', 'Appel à l’action']
@@ -135,7 +137,10 @@ export default function Spot() {
     if (bad >= 0) { go(bad, false); focusInvalid(); return }
     if (short > 0) return
     start({ brief, lines, productAssetId: photoId, brand: { apply: brand.apply, style, colors, logoId: brand.logoId } })
+    return true
   }
+  // Un double appui sur « Créer le spot » ne crée pas deux spots, et le second ne tombe pas sur « Annuler la création ».
+  const [sending, launchOnce] = useLaunch(launch)
 
   const share = async () => {
     const m = result.spot
@@ -191,7 +196,7 @@ export default function Spot() {
             ))}
           </div>
 
-          <form className="ep" role="tabpanel" id="spot-panel" aria-labelledby={`spt-${step}`} onSubmit={(e) => { e.preventDefault(); step < STEPS.length - 1 ? advance() : launch() }} noValidate>
+          <form className="ep" role="tabpanel" id="spot-panel" aria-labelledby={`spt-${step}`} onSubmit={(e) => { e.preventDefault(); step < STEPS.length - 1 ? advance() : launchOnce() }} noValidate>
             <div className="mc" style={{ background: gradient(9, 'video') }}>
               <h1>Spot pub</h1>
               <span>Étape {step + 1} sur {STEPS.length} · {STEPS[step].hint}</span>
@@ -289,7 +294,9 @@ export default function Spot() {
                 </details>
               )}
               {step > 0 && !active && <button type="button" className="sp-back" onClick={() => go(step - 1, false)}><Icon name="chevL" size={14} />Retour</button>}
-              {active ? (
+              {sending ? (
+                <button type="button" className="gen" aria-disabled="true" aria-busy="true"><span className="gen-send"><BusySpin />Envoi…</span><span><Cauri size={18} />{jetons(est.total)}</span></button>
+              ) : active ? (
                 <button type="button" className="gen" onClick={cancel}>Annuler la création</button>
               ) : step < STEPS.length - 1 ? (
                 <button type="submit" className="gen">Continuer<span>{STEPS[step + 1].label}<Icon name="chevR" size={16} /></span></button>
