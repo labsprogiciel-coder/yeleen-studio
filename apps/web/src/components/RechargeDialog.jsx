@@ -188,7 +188,11 @@ function History({ items, onOpen }) {
 export default function RechargeDialog({ open, request, onClose }) {
   const dlg = useRef(null)
   const panel = useRef(null)
-  const { balance, syncBalance } = useJobs()
+  const { balance, syncBalance, wallet, reloadWallet } = useJobs()
+  // Solde inconnu : « … » pendant la lecture ; illisible : « — » et un bouton pour le relire.
+  const shownBalance = balance != null ? <Amount n={balance} word /> : wallet === 'error'
+    ? <>— <button type="button" className="rc-retry" onClick={reloadWallet}>Réessayer</button></>
+    : '…'
   const toast = useToast()
   const [pack, setPack] = useState('createur')
   const [country, setCountry] = useState(COUNTRY_LIST[0])
@@ -434,9 +438,9 @@ export default function RechargeDialog({ open, request, onClose }) {
         <div>
           <h2 id="rc-title">Recharger</h2>
           {flow ? (
-            <p><b className="rc-now">{STEPS[step]}</b> · étape {step + 1} sur {STEPS.length} · solde <b><Amount n={balance} word /></b></p>
+            <p><b className="rc-now">{STEPS[step]}</b> · étape {step + 1} sur {STEPS.length} · solde <b>{shownBalance}</b></p>
           ) : (
-            <p>Solde : <b><Amount n={balance} word /></b></p>
+            <p>Solde : <b>{shownBalance}</b></p>
           )}
         </div>
         <button type="button" className="rc-x" onClick={onClose} aria-label="Fermer"><Icon name="close" size={18} /></button>

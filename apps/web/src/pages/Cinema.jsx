@@ -426,7 +426,7 @@ export default function Cinema() {
     setRerror('')
     const r = recipeById(recipeId)
     const cost = recipeCost(recipeId)
-    if (cost > balance) return setRerror(`Solde insuffisant : il manque ${jetons(Math.ceil((cost - balance) * 10) / 10)} cauris.`)
+    if (balance != null && cost > balance) return setRerror(`Solde insuffisant : il manque ${jetons(Math.ceil((cost - balance) * 10) / 10)} cauris.`)
     let inputFiles
     try {
       inputFiles = Object.fromEntries(await Promise.all(r.photos.map(async (p) => [p.key, p.list ? [await getFile(photos[p.key])] : await getFile(photos[p.key])])))

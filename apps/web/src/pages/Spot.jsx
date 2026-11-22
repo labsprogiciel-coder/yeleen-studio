@@ -91,7 +91,7 @@ export default function Spot() {
   const active = run && (run.status === 'running' || run.status === 'blocked')
   const result = run?.resultAssetId ? assets.find((a) => a.id === run.resultAssetId) : null
   const voiceAsset = run?.stages.voice.assetId ? assets.find((a) => a.id === run.stages.voice.assetId) : null
-  const short = est.total - balance
+  const short = balance == null ? 0 : est.total - balance // solde inconnu : le serveur tranche
   const set = (k) => (e) => setBrief((b) => ({ ...b, [k]: e.target.value }))
   const blur = (k) => () => setTouched((t) => ({ ...t, [k]: true }))
   const err = (k) => (touched[k] || touched.all) && errors[k]

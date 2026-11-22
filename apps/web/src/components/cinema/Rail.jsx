@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import Icon from '../../lib/icons.jsx'
 import { features } from '../../lib/features.js'
-import { jetons, useJobs } from '../../lib/jobs.jsx'
+import { useJobs } from '../../lib/jobs.jsx'
 import { useLibrary } from '../../lib/libraryDialog.jsx'
 import { useRecharge } from '../../lib/rechargeDialog.jsx'
 import { useTheme } from '../../lib/theme.jsx'
 import Cauri from '../Cauri.jsx'
+import { BalanceNumber, useBalance } from '../BalanceValue.jsx'
 import AccountPopover from './AccountPopover.jsx'
 import markPlain from '../../assets/brand/qreativ-mark.svg'
 import markReversed from '../../assets/brand/qreativ-mark-reversed.svg'
@@ -30,15 +31,17 @@ const FILES = [
  * sur téléphone. `onPick` : appelé avant d'ouvrir la recharge (le volet du téléphone se ferme).
  */
 export function RailBalance({ onPick }) {
-  const { balance, running, queued } = useJobs()
+  const { running, queued } = useJobs()
+  const view = useBalance()
   const { openRecharge } = useRecharge()
   const busy = running + queued
-  const label = `Solde : ${jetons(balance)} cauris${busy ? `, ${busy} génération${busy > 1 ? 's' : ''} en cours` : ''}. Recharger`
+  // Solde illisible : le bouton le relit au lieu d'ouvrir la recharge.
+  const label = view.failed ? 'Solde indisponible. Réessayer' : `Solde : ${view.spoken}${busy ? `, ${busy} génération${busy > 1 ? 's' : ''} en cours` : ''}. Recharger`
   return (
-    <button type="button" className="cx-bal" aria-haspopup="dialog" aria-label={label} title={label} onClick={() => { onPick?.(); openRecharge() }}>
+    <button type="button" className={`cx-bal${view.failed ? ' is-failed' : ''}`} aria-haspopup={view.failed ? undefined : 'dialog'} aria-label={label} title={label} onClick={() => { if (view.failed) return view.reload(); onPick?.(); openRecharge() }}>
       <span className="cx-bal-ic"><Cauri size={18} />{busy > 0 && <i className="cx-bal-dot" aria-hidden="true" />}</span>
-      <b>{jetons(balance)}</b>
-      <span className="cx-lbl">cauris{busy > 0 ? ` · ${busy} en cours` : ''}</span>
+      <b><BalanceNumber view={view} /></b>
+      <span className="cx-lbl">{view.failed ? 'Réessayer' : `cauris${busy > 0 ? ` · ${busy} en cours` : ''}`}</span>
     </button>
   )
 }

@@ -161,3 +161,5 @@ button.rc-st:hover{color:var(--ink)}
   .rc-foot .rc-pay,.rc-foot .rc-ghost{padding:0 12px;white-space:nowrap}
   .rc-foot>.rc-link{flex:none}
 }
+/* Solde illisible dans la fenêtre de recharge : « — » et un lien pour le relire. */
+.rc-retry{border:0;padding:0;background:none;color:var(--danger-ink);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
