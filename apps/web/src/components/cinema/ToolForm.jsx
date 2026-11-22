@@ -4,7 +4,7 @@ import Segmented from '../Segmented.jsx'
 import MentionTextarea from '../MentionTextarea.jsx'
 import { Section, DropTile, GenerateButton, PromptBox } from '../GenPanel.jsx'
 import { jetons, useJobs } from '../../lib/jobs.jsx'
-import { findTool, isFileField, toolCheck, toolCost } from '@studio/catalog/tools'
+import { findTool, isFileField, toolCarry, toolCheck, toolCost } from '@studio/catalog/tools'
 import { findEditModel } from '@studio/catalog/edit-models'
 import ModelLogo from '../ModelLogo.jsx'
 import Icon from '../../lib/icons.jsx'
@@ -13,8 +13,14 @@ import { logoFor } from '../../lib/modelLogos.js'
 const ICON = { image: 'img', images: 'img', video: 'vid', videos: 'vid', audio: 'mus' }
 const one = (type) => type.replace(/s$/, '') // images → image
 const lower = (label) => label.charAt(0).toLowerCase() + label.slice(1) // « Vidéo SDR » → « vidéo SDR »
-// Un outil de l'interface peut regrouper plusieurs outils du catalogue (Parler : depuis un texte ou depuis un audio).
-const VARIANTS = { speak: [{ id: 'speak-text', title: 'Script' }, { id: 'speak-audio', title: 'Ajouter un audio' }] }
+// Un outil de l'interface peut regrouper plusieurs outils du catalogue (Parler : depuis un texte ou depuis un audio ; Genjutsu : la
+// version complète, par défaut, ou Genjutsu Light, moins chère, pour une source de 15 s au plus).
+const VARIANTS = {
+  speak: [{ id: 'speak-text', title: 'Script' }, { id: 'speak-audio', title: 'Ajouter un audio' }],
+  'motion-transfer': [{ id: 'motion-transfer', title: 'Genjutsu' }, { id: 'motion-transfer-light', title: 'Genjutsu Light' }],
+  'object-swap': [{ id: 'object-swap', title: 'Genjutsu' }, { id: 'object-swap-light', title: 'Genjutsu Light' }],
+}
+const VARIANT_LABEL = { speak: 'Source' } // titre du choix ; « Version » sinon
 export const toolJobs = (id) => VARIANTS[id] ?? (findTool(id) ? [{ id }] : null)
 
 /** Durée (s) et plus petit côté (px, vidéo) d'un fichier, lus dans le navigateur pour refuser tôt ce que le serveur refuserait. */
@@ -162,8 +168,8 @@ export default function ToolForm({ tool: uiTool, onDone }) {
   return (
     <div className="ep">
       {variants.length > 1 && (
-        <Section id="tf-variant" title="Source">
-          <Segmented items={variants} value={variant} onChange={(v) => { setVariant(v); setError('') }} label="Source" />
+        <Section id="tf-variant" title={VARIANT_LABEL[uiTool] ?? 'Version'}>
+          <Segmented items={variants} value={variant} onChange={(v) => { setVariant(v); setValues((o) => toolCarry(findTool(v), o)); setError('') }} label={VARIANT_LABEL[uiTool] ?? 'Version'} />
         </Section>
       )}
 

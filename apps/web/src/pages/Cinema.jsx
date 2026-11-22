@@ -246,7 +246,8 @@ export default function Cinema() {
   const items = hasIn
     ? tplTokens.map((x) => ({ key: `tpl-${x.idx}`, token: x.token, label: x.token, sub: x.title, asset: tin[x.idx] }))
     : attached.map((x) => ({ key: x.id, token: x.token, label: x.token, sub: x.asset.name, asset: x.asset }))
-  const native = Boolean(caps.references) // le modèle prolonge ou modifie lui-même une vidéo jointe
+  // Le modèle prolonge ou modifie lui-même une vidéo jointe (Seedance 2.5) ; des références seules (Cinema Studio 4.0) n'y suffisent pas.
+  const native = Boolean(caps.references && caps.tasks?.some((t) => t !== 'reference'))
   const activeTask = native && !hasIn ? task : 'refs' // une vidéo à refaire part de ses entrées
   // Réglages sous le texte (téléphone) : la rangée défile de côté quand elle déborde ; son bord s'estompe du côté où il en reste.
   const [optsRef, fadeOpts] = useEdgeFade([phone, pview, tool, vmodel.id, imodel.id, activeTask])

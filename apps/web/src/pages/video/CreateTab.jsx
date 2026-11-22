@@ -33,7 +33,7 @@ const PANEL_MODES = {
     title: 'Modifier la vidéo',
     tiles: { source: 'required', start: 'off', end: 'off', audio: 'off' },
     plans: false, duration: false,           // output length follows the source clip
-    modelFilter: (m) => Boolean(m.caps.references || m.caps.edit),
+    modelFilter: (m) => Boolean(m.caps.tasks?.includes('editing') || m.caps.edit), // des références seules (Cinema Studio 4.0) ne modifient pas une vidéo
     hint: 'Décrivez le changement visuel souhaité, par exemple « Il neige » ou « Il fait nuit ».',
   },
 }
@@ -115,8 +115,8 @@ export function CreateLeft({ mode = 'generate', panel, banner = true, addLabel =
             <DropTile icon="vid" label="Vidéo source" accept="video/*" file={files.source ?? null} onFile={setFile('source')} required />
           ) : (
             <>
-              <DropTile icon="img" label="Départ" accept="image/*" file={files.start ?? null} onFile={setFile('start')} required={caps.startFrame === 'required'} disabled={caps.startFrame === 'none'} reason="Ce modèle part du texte seul : pas d’image de départ" />
-              <DropTile icon="img" label="Fin" accept="image/*" file={files.end ?? null} onFile={setFile('end')} disabled={!caps.endFrame} reason={caps.startFrame === 'none' ? 'Texte seul : pas d’images en entrée' : 'Ce modèle n’accepte pas d’image de fin'} />
+              <DropTile icon="img" label="Départ" accept="image/*" file={files.start ?? null} onFile={setFile('start')} required={caps.startFrame === 'required'} disabled={caps.startFrame === 'none'} reason={caps.references ? 'Pas d’image de départ : citez vos images de référence avec @ dans le texte' : 'Ce modèle part du texte seul : pas d’image de départ'} />
+              <DropTile icon="img" label="Fin" accept="image/*" file={files.end ?? null} onFile={setFile('end')} disabled={!caps.endFrame} reason={caps.startFrame === 'none' && !caps.references ? 'Texte seul : pas d’images en entrée' : 'Ce modèle n’accepte pas d’image de fin'} />
               <DropTile icon="mus" label="Piste audio" accept={range ? MEASURED_AUDIO : 'audio/*'} file={files.audio ?? null} onFile={setFile('audio')} required={caps.audioRef === 'required'} disabled={!caps.audioRef} reason="Ce modèle n’accepte pas de piste audio en entrée" />
             </>
           )}

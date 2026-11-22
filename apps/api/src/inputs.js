@@ -1,6 +1,8 @@
 /**
  * Entrée envoyée à fal pour chaque modèle. Les champs viennent des schémas OpenAPI publiés par fal
  * (https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=…) ; on n'envoie que ce que le modèle accepte.
+ * Les modèles servis par Higgsfield (`provider: 'higgsfield'` : Soul 2, Soul Cinema, Soul Standard, Cinema Studio 4.0, outils Genjutsu) passent aussi par
+ * `buildInput` ; leurs champs viennent de la documentation de son API (https://docs.higgsfield.ai/docs/models/…).
  */
 import { splitLines } from '@studio/catalog/workflows'
 import { toolInput } from '@studio/catalog/tools'
@@ -39,9 +41,11 @@ export function buildInput(kind, model, req) {
     if (model.id === 'flux-3') {
       return { prompt, aspect_ratio: ratio(req.ratio), resolution: res.toLowerCase(), output_format: 'png' }
     }
-    if (model.id === 'soul-2') { // Higgsfield : une image par demande, format et résolution parmi ceux du catalogue
+    if (model.provider === 'higgsfield') { // une image par demande, format et résolution parmi ceux du catalogue ; champs documentés seulement
       const r = model.caps.ratios.includes(req.ratio) ? req.ratio : model.caps.ratios[0]
-      return { prompt, aspect_ratio: r, resolution: model.caps.resolutions.includes(res) ? res : model.caps.resolutions[0] }
+      const size = model.caps.resolutions.includes(res) ? res : model.caps.resolutions[0]
+      // Soul 2, Soul Cinema, Soul Standard : même schéma ; style, graine et lot (batch_size) laissés à leur valeur par défaut.
+      return { prompt, aspect_ratio: r, resolution: size }
     }
     if (model.id === 'krea-3') { // taille exacte au format choisi : le prix (au mégapixel) est celui calculé à l'envoi
       const r = model.caps.ratios.includes(req.ratio) ? req.ratio : model.caps.ratios[0]
@@ -102,7 +106,7 @@ const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !=
  */
 
 /**
- * Le point d'accès d'un modèle : chez fal, son endpoint ; chez Runware, son identifiant (AIR). Un modèle à deux points d'accès
+ * Le point d'accès d'un modèle : chez fal et Higgsfield, son endpoint ; chez Runware, son identifiant (AIR). Un modèle à deux points d'accès
  * (Kling 4.0, Wan 3.0) passe par `textEndpoint` quand la demande n'a pas d'image de départ.
  */
 export const endpointFor = (model, req = {}) => (model.provider === 'runware' ? model.air : model.textEndpoint && !req.startImageUrl ? model.textEndpoint : model.endpoint)
@@ -113,6 +117,24 @@ function videoInput(model, req) {
   const res = req.resolution
   const sound = req.sound !== false
 
+  if (model.id === 'cinema-studio-4') {
+    // Higgsfield, Cinema Studio 4.0 (https://docs.higgsfield.ai/docs/models/cinema-studio-4/generate.md) : le schéma refuse tout autre
+    // champ. Sans référence : texte vers vidéo ; avec des images ou de l'audio : références, citées « <<<image_1>>> », « <<<audio_1>>> »
+    // (on traduit nos « @Image1 », « @Audio1 » ; un numéro sans fichier reste tel quel, l'API refuserait un jeton sans média).
+    // Les réglages de mise en scène (genre, lumière, caméra…) ne sont pas envoyés : le modèle les choisit.
+    const refs = req.references ?? []
+    const urls = { image: refs.filter((r) => r.kind === 'image').map((r) => r.url), audio: refs.filter((r) => r.kind === 'audio').map((r) => r.url) }
+    const cite = (t) => t.replace(/@(Image|Audio)(\d+)/g, (all, k, n) => (Number(n) >= 1 && Number(n) <= urls[k.toLowerCase()].length ? `<<<${k.toLowerCase()}_${Number(n)}>>>` : all))
+    return clean({
+      prompt: cite(text),
+      duration: Math.round(secs),
+      resolution: res,
+      aspect_ratio: req.ratio,
+      generate_audio: sound, // vrai par défaut chez Higgsfield : toujours envoyé, pour qu'une vidéo muette le reste
+      image_urls: listOrNone(urls.image),
+      audio_urls: listOrNone(urls.audio),
+    })
+  }
   if (model.id === 'h3-max' || model.id === 'h3-max-turbo') {
     return clean({
       prompt: text,

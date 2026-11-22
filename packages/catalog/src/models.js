@@ -9,7 +9,8 @@
  *
  * Fournisseur : fal par défaut. `provider: 'runware'` + `air` (identifiant du modèle chez Runware) : la génération passe par
  * Runware (https://runware.ai/docs/models/…), moins cher pour ces modèles. `fal` garde alors le point d'accès et le prix fal,
- * pour les chaînes, qui s'exécutent en workflow fal (voir chainDefs.js).
+ * pour les chaînes, qui s'exécutent en workflow fal (voir chainDefs.js). `provider: 'higgsfield'` : la génération passe par l'API
+ * Higgsfield (apps/api/src/higgsfield.js) et `endpoint` est son chemin ; les modèles ainsi servis ne figurent pas dans les chaînes.
  *
  * Prix (`price`, en USD) : `usd` ou `byRes` (par résolution) ; `silentUsd` / `silentByRes` : tarif sans piste sonore, quand le
  * fournisseur le facture moins cher ; `videoByRes` : tarif quand une vidéo est fournie en entrée (référence, modification).
@@ -124,6 +125,47 @@ export const VIDEO_MODELS = [
       elements: false,
       multiShot: false,
       cameraMotion: false,
+    },
+  },
+  {
+    id: 'cinema-studio-4',
+    input: 'text',
+    provider: 'higgsfield', // API Higgsfield (apps/api/src/higgsfield.js) ; `endpoint` est son chemin
+    endpoint: 'higgsfield/cinema-studio/4.0',
+    name: 'Cinema Studio 4.0',
+    tagline: 'Le réalisateur de Higgsfield : il choisit cadrage, lumière et rythme, jusqu’à 25 s',
+    badge: 'NOUVEAU',
+    tags: ['Rendu cinéma', 'Références', 'Audio natif', 'Jusqu’à 25 s'],
+    // Higgsfield facture au jeton vidéo (description rendue par POST /estimate/higgsfield/cinema-studio/4.0) : jetons = durée produite
+    // × largeur × hauteur × 24 / 1024, à 0,0214 $ les 1 000 jetons, même tarif en 480p et en 720p, avec ou sans son ; les images et
+    // l'audio de référence ne comptent pas.
+    // PRIX À CONFIRMER : la taille exacte de la sortie n'est pas documentée. En attendant une estimation authentifiée ou une première
+    // facture, les tarifs à la seconde ci-dessous retiennent la plus grande taille plausible de chaque résolution : le petit côté à
+    // 720 ou 480 px au format le plus large, 21:9 (720p : 1680 × 720 → 0,6067 $/s ; 480p : 1120 × 480 → 0,2696 $/s). La marge du
+    // catalogue tient donc pour tous les formats ; avec les tailles de Seedance 2.5 (DIMS dans apps/api/src/inputs.js), le coût
+    // serait de 0,4652 et 0,2150 $/s au plus : à baisser une fois la taille connue.
+    // Les vidéos de référence (video_urls) ne sont pas proposées : le tarif change alors (0,6 ×, durée des vidéos fournies facturée).
+    price: { per: 's', byRes: { '480p': 0.27, '720p': 0.607 } },
+    verified: false, // schéma lu en entier dans la documentation de l'API, mais aucun appel réel n'a été fait et le prix est dérivé
+    caps: {
+      // duration : entier de 4 à 30 s chez Higgsfield (5 par défaut). Plafonné ici à 25 s : au tarif retenu, 30 s en 720p coûteraient
+      // 655 cauris, plus que le plafond d'une génération (MAX_JOB_COST, 600 par défaut) ; l'application ne propose donc jamais une
+      // durée que le serveur refuserait (25 s en 720p : 545,9 cauris). À relever si le prix confirmé le permet.
+      duration: { min: 4, max: 25, integer: true },
+      resolutions: ['480p', '720p'], // ni 1080p ni 4K (refusés par l'API)
+      ratios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'], // aspect_ratio ; pas de « auto »
+      audio: 'toggle', // generate_audio (vrai par défaut chez Higgsfield : on l'envoie toujours), même prix
+      startFrame: 'none', // ni image de départ ni image de fin : une image jointe est une référence (image_urls)
+      endFrame: false,
+      audioRef: false,
+      strictFiles: true, // une demande portant une image de départ, de fin ou une piste audio est refusée (voir apps/api/src/pricing.js)
+      elements: false,
+      multiShot: false,
+      cameraMotion: false,
+      // « @Image1 », « @Audio1 » dans le prompt, traduits en « <<<image_1>>> », « <<<audio_1>>> » (voir inputs.js). Sans `tasks` : le
+      // modèle ne prolonge ni ne modifie une vidéo.
+      references: { images: 30, videos: 0, audios: 10 },
+      promptRequired: true, // `prompt` est obligatoire, même avec des références
     },
   },
   {
@@ -496,6 +538,7 @@ export const EXTEND_MODEL = {
 }
 
 const RATIOS_IMG = ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9']
+const RATIOS_SOUL = ['9:16', '16:9', '4:3', '3:4', '1:1', '2:3', '3:2'] // aspect_ratio des modèles Soul de Higgsfield ; pas de « auto »
 
 export const IMAGE_MODELS = [
   {
@@ -538,7 +581,35 @@ export const IMAGE_MODELS = [
     tags: ['Portraits', 'Mode', 'Économique'],
     price: { usd: 0.004, per: 'image' }, // estimation de l'API Higgsfield : 0,004 $ en 720p, 0,006 $ en 1080p
     verified: false,
-    caps: { ratios: ['9:16', '16:9', '4:3', '3:4', '1:1', '2:3', '3:2'], resolutions: ['720p', '1080p'], resUnits: { '720p': 1, '1080p': 1.5 }, maxImages: 1 },
+    caps: { ratios: RATIOS_SOUL, resolutions: ['720p', '1080p'], resUnits: { '720p': 1, '1080p': 1.5 }, maxImages: 1 },
+  },
+  {
+    id: 'soul-cinema',
+    provider: 'higgsfield',
+    endpoint: 'higgsfield-ai/soul/cinema', // absent de GET /models, mais documenté et reconnu par POST /estimate ; accès de la clé à confirmer
+    name: 'Soul Cinema',
+    tagline: 'Images au rendu de film, lumière et grain de cinéma, très bon marché',
+    tags: ['Rendu cinéma', 'Style fixe', 'Économique'],
+    // Estimation de l'API Higgsfield, quel que soit le format : 0,004 $ en 720p (0,050 crédit), 0,006 $ en 1080p (0,088 crédit). Le prix
+    // suit les montants en dollars de l'estimation (arrondis au-dessus des crédits à 0,0625 $), d'où 1,5 pour le 1080p.
+    // À 0,1 cauri en 720p (0,2 en 1080p), la marge est d'environ 1,4 × et non 2 ×, comme pour Soul 2 : arrondi au dixième de cauri.
+    price: { usd: 0.004, per: 'image' },
+    verified: false, // schéma et prix lus (documentation, POST /estimate), aucun appel réel
+    caps: { ratios: RATIOS_SOUL, resolutions: ['720p', '1080p'], resUnits: { '720p': 1, '1080p': 1.5 }, maxImages: 1 }, // pas de style_id : style fixe
+  },
+  {
+    id: 'soul-standard',
+    provider: 'higgsfield',
+    endpoint: 'higgsfield-ai/soul/standard',
+    name: 'Soul Standard',
+    tagline: 'Le premier Soul : portraits et mode au rendu photo, bien plus cher que Soul 2',
+    tags: ['Portraits', 'Mode', 'Rendu photo'],
+    price: { usd: 0.094, per: 'image' }, // estimation de l'API Higgsfield : 0,094 $ en 720p, 0,188 $ en 1080p, quel que soit le format
+    verified: false,
+    // Le style par défaut de Higgsfield s'applique (style_id non envoyé) ; image_reference_url (aide à la réécriture du prompt) non proposé.
+    // D'après la documentation, un prompt court au style général peut être enrichi automatiquement même avec enhance_prompt à faux
+    // (non envoyé) : l'image peut s'écarter du texte tapé ; l'estimation ne montre aucun effet sur le prix.
+    caps: { ratios: RATIOS_SOUL, resolutions: ['720p', '1080p'], resUnits: { '720p': 1, '1080p': 2 }, maxImages: 1 },
   },
   {
     id: 'krea-3',
