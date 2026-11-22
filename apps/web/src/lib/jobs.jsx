@@ -379,12 +379,17 @@ export function JobsProvider({ children }) {
 
   // Solde réel au démarrage (et à la connexion : sans session, l'API refuse).
   const { ready, signedIn } = useAuthState()
+  // Chaque lecture du solde et chaque solde rendu par une recharge prend un numéro : une lecture partie avant une écriture plus
+  // récente (recharge confirmée pendant qu'elle était en route) est ignorée à son retour, elle ne remet pas un solde périmé.
+  const walletSeq = useRef(0)
   const loadWallet = useCallback(() => {
     if (!apiEnabled || !ready || !signedIn) return
+    const seq = ++walletSeq.current
+    const latest = () => seq === walletSeq.current
     dispatch({ type: 'WALLET', wallet: 'loading' })
     api.wallet()
-      .then((w) => (typeof w?.balance === 'number' ? dispatch({ type: 'SYNC_WALLET', balance: w.balance }) : dispatch({ type: 'WALLET', wallet: 'error' })))
-      .catch(() => dispatch({ type: 'WALLET', wallet: 'error' })) // illisible : « — » et une flèche pour réessayer, jamais un chiffre inventé
+      .then((w) => { if (latest()) dispatch(typeof w?.balance === 'number' ? { type: 'SYNC_WALLET', balance: w.balance } : { type: 'WALLET', wallet: 'error' }) })
+      .catch(() => { if (latest()) dispatch({ type: 'WALLET', wallet: 'error' }) }) // illisible : « — » et une flèche pour réessayer, jamais un chiffre inventé
   }, [ready, signedIn])
   useEffect(() => { loadWallet() }, [loadWallet])
   // Solde illisible : nouvel essai quand la fenêtre revient au premier plan (réseau revenu, téléphone rallumé).
@@ -465,7 +470,7 @@ export function JobsProvider({ children }) {
     lastSent: () => sent.current,
     dismiss: (id) => dispatch({ type: 'DISMISS', id }),
     clearDone: (kind) => dispatch({ type: 'CLEAR_DONE', kind }),
-    syncBalance: (balance) => { if (typeof balance === 'number') dispatch({ type: 'SYNC_WALLET', balance }) }, // solde réel rendu par l'API (recharges)
+    syncBalance: (balance) => { if (typeof balance === 'number') { walletSeq.current++; dispatch({ type: 'SYNC_WALLET', balance }) } }, // solde réel rendu par l'API (recharges) : il prime sur une lecture en route
   }), [state.jobs, state.balance, state.wallet, loadWallet, submit, cancel])
 
   return (

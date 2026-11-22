@@ -139,8 +139,10 @@ export default function AccountPopover({ collapsed, onPick }) {
           <div className="cx-am-bal" role="group" aria-label={`Solde : ${bal.spoken}`}>
             <span className="cx-am-bal-tx" aria-hidden="true">
               <small>Solde</small>
-              <span className="cx-am-bal-n"><Cauri size={18} /><b><BalanceNumber view={bal} /></b> cauris</span>
+              <span className="cx-am-bal-n"><Cauri size={18} />{bal.failed ? <b>—</b> : <><b><BalanceNumber view={bal} /></b> cauris</>}</span>
             </span>
+            {/* Solde illisible : on peut le relire d'ici, sans fermer le menu ; la recharge reste à côté. */}
+            {bal.failed && <button type="button" role="menuitem" tabIndex={-1} className="cx-am-retry" aria-label="Relire le solde" title="Relire le solde" onClick={() => bal.reload()}><Icon name="revert" size={16} /></button>}
             <button type="button" role="menuitem" tabIndex={-1} className="cx-am-top" aria-haspopup="dialog" onClick={pick(() => openRecharge())}>Recharger</button>
           </div>
           <div className="cx-am-list">
