@@ -13,7 +13,7 @@ Cloudflare Worker (Hono). Point d'entrée unique pour tout ce qui coûte de l'ar
 - `src/mirror.js` : copie dans D1 du grand livre des jetons (`ledger`), des recharges (`topups`), des générations (`jobs`) et des fichiers générés (`assets`), idempotente.
 - `src/library.js` : lectures de D1 pour Ma bibliothèque, les favoris et la Bibliothèque Yeleen (`catalog_items`).
 - `src/account-do.js` : Durable Object, un compte = portefeuille + générations + recharges.
-- `src/index.js` : routes `GET /wallet`, `POST /jobs`, `GET /jobs/:id`, `POST /jobs/:id/cancel`, `GET /topups/options`, `GET|POST /topups`, `GET /topups/:reference`, `POST /webhooks/payments`, `POST /webhooks/fal`, `POST /enhance`, `GET /ledger`, `GET|POST /assets`, `DELETE /assets/:id`, `GET|PUT|DELETE /favorites`, `GET /catalog` (publique).
+- `src/index.js` : routes `GET /wallet`, `POST /jobs`, `GET /jobs/:id`, `POST /jobs/:id/cancel`, `POST /topups/options`, `GET|POST /topups`, `GET /topups/:reference`, `POST /webhooks/payments`, `POST /webhooks/fal`, `POST /enhance`, `GET /ledger`, `GET|POST /assets`, `DELETE /assets/:id`, `GET|PUT|DELETE /favorites`, `GET /catalog` (publique).
 - `src/worker.js` : point d'entrée du Worker (`main`), l'API et le Durable Object enveloppés par Sentry si `SENTRY_DSN` est réglé (`src/sentry.js`).
 - `src/jobs.js` : suivi d'une génération (état chez fal ou Runware, copie dans R2, remboursement d'un échec), partagé par `GET /jobs/:id`, `/webhooks/fal` et le réveil du compte.
 - `wrangler.jsonc` : liaisons (D1, R2, Queues en commentaire jusqu'à création des ressources).
@@ -28,7 +28,7 @@ Seedance 2.5 (texte, image de départ et de fin, ou références d'images, de vi
 
 Chaque génération réelle est facturée par son fournisseur (fal, Runware ou Higgsfield). `MAX_JOB_COST` (600 cauris par défaut : une vidéo Genjutsu de 20 s en 720p passe) refuse une demande unique trop chère tant qu'il n'y a pas de plafond par compte. Une génération avance de trois façons, toutes par `advanceJob` (src/jobs.js) :
 - l'interface interroge `GET /jobs/:id` (toutes les 1,5 s) tant que la page est ouverte ;
-- fal appelle `POST /webhooks/fal` à la fin, si le secret `WEBHOOK_SECRET` est réglé : l'adresse porte le compte, la génération et un jeton HMAC ; le corps n'est pas lu, l'état et le résultat sont relus chez fal ;
+- fal appelle `POST /webhooks/fal` à la fin, si le secret `WEBHOOK_SECRET` est réglé : l'adresse ne porte qu'un jeton opaque `k` (compte et génération chiffrés et authentifiés en AES-GCM, clé tirée de `WEBHOOK_SECRET`), ni le compte ni la génération en clair ; l'ancienne forme `a`, `j`, `t` (HMAC) reste acceptée pour les générations envoyées avant, jusqu'à `LEGACY_UNTIL` (31 décembre 2026, `src/legacy.js`) ; le corps n'est pas lu, l'état et le résultat sont relus chez fal ;
 - le Durable Object du compte se réveille toutes les minutes (alarme) tant qu'il a une génération active, pour fal comme pour Runware.
 
 Ainsi une génération se termine, est copiée dans R2 ou remboursée même si l'utilisateur a fermé la page. Le remboursement est idempotent, et une seule copie dans R2 se fait à la fois.
@@ -37,7 +37,7 @@ Ainsi une génération se termine, est copiée dans R2 ou remboursée même si l
 
 Les jetons s'achètent par packs en FCFA (`@studio/catalog/packs`), par Orange, Moov ou Wave, via paygate (`PAYGATE_URL`, `PAYGATE_KEY`, `PAYGATE_WEBHOOK_SECRET`).
 
-1. `GET /topups/options?country=BF&operator=orange&phone=…&pack=…` : disponibilité, limites et `authType` (à demander avant d'afficher le bouton).
+1. `POST /topups/options` avec `{ country: 'BF', operator: 'orange', phone: '…', pack: '…' }` (le numéro dans le corps, jamais dans l'adresse, gardée par les journaux du Worker ; l'ancien `GET` avec paramètres reste accepté jusqu'à `LEGACY_UNTIL`, 31 décembre 2026, puis 410 ; le site ne s'en sert qu'en repli si l'API répond 404 ou 405 au `POST`) : disponibilité, limites et `authType` (à demander avant d'afficher le bouton).
 2. `POST /topups { pack, country, operator, phone }` : le prix vient du catalogue. Selon `authType` : `PROVIDER_AUTH` (valider sur le téléphone, `instructions`), `REDIRECT_AUTH` (Wave : aller sur `authUrl`), `PREAUTH` (Orange Burkina : la recharge revient en `awaiting_code` avec `codeInstructions` ; renvoyer la même demande avec `reference` et `preAuthCode`).
 3. `GET /topups/:reference` toutes les 3–4 s jusqu'à `completed`, `failed` ou `expired` (un paiement échoué ou expiré peut encore aboutir en retard : il est crédité).
 

@@ -5,7 +5,6 @@ import { setTokenGetter } from './api.js'
 import { setSentryUser } from './sentry.js'
 import { setAnalyticsUser } from './posthog.js'
 import { displayName } from './accountMenu.js'
-import stacked from '../assets/brand/qreativ-lockup-stacked-primary.svg'
 
 /**
  * Connexion avec Clerk. Sans `VITE_CLERK_PUBLISHABLE_KEY` (développement local), il n'y a pas de garde : l'API locale
@@ -111,14 +110,12 @@ export function Protected({ children }) {
 }
 
 /**
- * Pages de connexion et d'inscription : la porte d'entrée tant que la page d'accueil est éteinte (drapeau `home`). Fond Fog,
- * logo Qreativ empilé, phrase de la marque, puis le formulaire Clerk. Après connexion : le studio (ou la page demandée).
+ * Pages de connexion et d'inscription : la porte d'entrée tant que la page d'accueil est éteinte (drapeau `home`). Fond Fog
+ * et le formulaire Clerk seul, centré (le logo est déjà dans la carte Clerk). Après connexion : le studio (ou la page demandée).
  */
 function AuthGate({ children }) {
   return (
     <main className="auth-gate">
-      <img className="auth-logo" src={stacked} alt="Qreativ" width="180" height="153" />
-      <p className="auth-tag">Vos idées, en mouvement.</p>
       {children}
     </main>
   )

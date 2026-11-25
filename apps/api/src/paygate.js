@@ -1,3 +1,5 @@
+import { errorDetail } from './redact.js'
+
 /**
  * Client minimal de paygate (notre passerelle de paiement), sans dépendance : il tourne tel quel dans un Worker.
  * Les montants sont des FCFA entiers (XOF). Voir paygate/docs/api.md.
@@ -5,7 +7,7 @@
 export class PaygateError extends Error {
   constructor(status, body, where) {
     const code = body?.error?.code
-    super(`paygate ${where} ${status}: ${code ?? JSON.stringify(body ?? '').slice(0, 200)}`)
+    super(`paygate ${where} ${status}: ${code ?? errorDetail(body ?? '').slice(0, 200)}`) // sans numéro renvoyé : le message part dans les journaux
     this.status = status
     this.code = code ?? (status >= 500 ? 'provider' : 'invalid_request')
     this.detail = body?.error ?? {}

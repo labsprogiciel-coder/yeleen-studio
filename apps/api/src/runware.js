@@ -1,3 +1,5 @@
+import { errorDetail } from './redact.js'
+
 /**
  * Client minimal de l'API Runware (REST), sans dépendance : il tourne tel quel dans un Worker.
  * Une génération vidéo est une tâche `videoInference` asynchrone : on l'envoie avec un identifiant (`taskUUID`) choisi ici, puis on
@@ -8,7 +10,7 @@ const API = 'https://api.runware.ai/v1'
 
 export class RunwareError extends Error {
   constructor(status, body, where) {
-    const detail = typeof body === 'string' ? body : JSON.stringify(body)
+    const detail = errorDetail(body) // sans l'entrée renvoyée (consigne) : le message part dans les journaux
     super(`runware ${where} ${status}: ${detail.slice(0, 300)}`)
     this.status = status
     this.body = body

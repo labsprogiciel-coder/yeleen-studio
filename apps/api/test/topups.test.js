@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Account } from '../src/account-do.js'
 import app from '../src/index.js'
+import { LEGACY_UNTIL } from '../src/legacy.js'
 import { signBody, verifySignature } from '../src/paygate.js'
 import { applyPayment, newReference } from '../src/topups.js'
 
@@ -214,11 +215,25 @@ test('erreurs paygate : limites renvoyées, panne gardée en attente, trop de re
 test('options : interroge paygate avec le numéro normalisé et le prix du pack', async () => {
   const t = setup((path, _b, u) => ({ body: { rail: 'mobile_money', direction: 'collect', available: true, authType: 'PREAUTH', min: 100, max: 1_000_000, instructions: null, codeInstructions: { fr: ['…'] }, seen: Object.fromEntries(u.searchParams) } }))
   try {
-    const { status, body } = await t.json('/topups/options?country=BF&operator=orange&phone=70123456&pack=studio')
+    const { status, body } = await t.json('/topups/options', post({ country: 'BF', operator: 'orange', phone: '70123456', pack: 'studio' }))
     assert.equal(status, 200)
     assert.equal(body.authType, 'PREAUTH')
     assert.deepEqual(t.calls[0].query, { rail: 'mobile_money', direction: 'collect', operator: 'orange', phone: '+22670123456', amount: '20000' })
-    assert.equal((await t.json('/topups/options?country=SN&operator=orange&phone=770000000')).body.error, 'unsupported_country') // seul BF par défaut
+    assert.equal((await t.json('/topups/options', post({ country: 'SN', operator: 'orange', phone: '770000000' }))).body.error, 'unsupported_country') // seul BF par défaut
+    assert.equal((await t.json('/topups/options', post({ operator: 'orange', phone: 12345678 }))).body.error, 'invalid_phone') // numéro qui n'est pas du texte
+    assert.equal((await t.json('/topups/options', { method: 'POST', body: 'pas du json' })).body.error, 'invalid_operator') // corps illisible : rien
+    // Ancienne forme (numéro dans l'adresse), gardée pour un site d'avant ce changement : même réponse.
+    const old = await t.json('/topups/options?country=BF&operator=orange&phone=70123456&pack=studio')
+    assert.deepEqual(old, { status, body: { ...body, seen: old.body.seen } })
+    // Après LEGACY_UNTIL, l'ancienne forme est refusée d'elle-même (410), sans appeler paygate ; la nouvelle marche toujours.
+    const now = Date.now
+    Date.now = () => LEGACY_UNTIL
+    try {
+      const calls = t.calls.length
+      assert.deepEqual(await t.json('/topups/options?country=BF&operator=orange&phone=70123456&pack=studio'), { status: 410, body: { error: 'gone' } })
+      assert.equal(t.calls.length, calls)
+      assert.equal((await t.json('/topups/options', post({ country: 'BF', operator: 'orange', phone: '70123456', pack: 'studio' }))).status, 200)
+    } finally { Date.now = now }
   } finally { t.restore() }
 })
 

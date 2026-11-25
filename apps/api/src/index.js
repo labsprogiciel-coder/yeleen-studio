@@ -4,7 +4,8 @@ import { cors } from 'hono/cors'
 import { AuthError, verifyClerkToken } from './auth.js'
 import { falClient } from './fal.js'
 import { buildInput, endpointFor, runwareInput } from './inputs.js'
-import { STORING, advanceJob, isActive, providerCancel, sameToken, webhookToken } from './jobs.js'
+import { legacyOpen } from './legacy.js'
+import { STORING, advanceJob, isActive, openWebhook, providerCancel, sameToken, sealWebhook, webhookToken } from './jobs.js'
 import { TOPUP_COUNTRIES, findPack, toE164 } from '@studio/catalog/packs'
 import { VIDEO_MODELS, audioBilledSecs } from '@studio/catalog'
 import { findTool } from '@studio/catalog/tools'
@@ -577,11 +578,24 @@ app.post('/jobs/:id/cancel', async (c) => {
   return c.json(view(r.job ?? job, { balance: r.balance ?? (await balance()) }))
 })
 
-/** Adresse du webhook fal d'une génération, signée pour ce compte et cette génération ; sans WEBHOOK_SECRET, pas de webhook. */
+/**
+ * Adresse du webhook fal d'une génération : `?k=<jeton opaque>` (compte et génération chiffrés, voir sealWebhook dans jobs.js), pour
+ * que ni fal ni les journaux qui gardent l'adresse ne voient le compte. Sans WEBHOOK_SECRET, pas de webhook.
+ */
 async function falWebhook(c, origin, jobId) {
   if (!c.env.WEBHOOK_SECRET) return undefined
-  const q = new URLSearchParams({ a: accountId(c), j: jobId, t: await webhookToken(c.env.WEBHOOK_SECRET, accountId(c), jobId) })
-  return `${origin}/webhooks/fal?${q}`
+  return `${origin}/webhooks/fal?${new URLSearchParams({ k: await sealWebhook(c.env.WEBHOOK_SECRET, accountId(c), jobId) })}`
+}
+
+/**
+ * Compte et génération d'un appel du webhook fal, ou null : jeton opaque `k`, ou ancienne forme `a`, `j`, `t` (HMAC) des générations
+ * envoyées avant ce changement, acceptée jusqu'à LEGACY_UNTIL seulement (legacy.js).
+ */
+async function falHookTarget(secret, { k, a, j, t }) {
+  if (!secret) return null
+  if (k) return openWebhook(secret, k)
+  if (legacyOpen() && a && j && sameToken(t, await webhookToken(secret, a, j))) return { accountId: a, jobId: j }
+  return null
 }
 
 /**
@@ -590,8 +604,9 @@ async function falWebhook(c, origin, jobId) {
  * La suite (copie dans R2, remboursement) se fait après la réponse ; si elle échoue, le réveil du compte la reprendra.
  */
 app.post('/webhooks/fal', async (c) => {
-  const { a, j, t } = c.req.query()
-  if (!c.env.WEBHOOK_SECRET || !a || !j || !sameToken(t, await webhookToken(c.env.WEBHOOK_SECRET, a, j))) return c.json({ error: 'unauthorized' }, 401)
+  const hook = await falHookTarget(c.env.WEBHOOK_SECRET, c.req.query())
+  if (!hook) return c.json({ error: 'unauthorized' }, 401)
+  const { accountId: a, jobId: j } = hook
   const stub = accountStub(c.env, a)
   const acct = async (path, body) => (await stub.fetch(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) })).json()
   const job = await stub.fetch(`https://account/job/get?id=${encodeURIComponent(j)}`).then((r) => r.json())
@@ -633,10 +648,16 @@ function returnUrls(env, reference) {
 const ours = (e) => !(e instanceof PaygateError) || e.status >= 500 || e.status === 401 || e.status === 404
 
 // Avant d'afficher le bouton de paiement : ce moyen marche-t-il pour ce numéro, avec quelles limites et quelle validation (`authType`).
-app.get('/topups/options', notBlocked, async (c) => {
+// Le numéro voyage dans le corps (POST) : une adresse est gardée par les journaux du Worker, un corps non. Le GET avec le numéro
+// dans l'adresse reste accepté le temps qu'un site déjà chargé (d'avant ce changement) soit remplacé, jusqu'à LEGACY_UNTIL (legacy.js),
+// puis 410 ; à retirer à la version suivante.
+app.post('/topups/options', notBlocked, async (c) => topupOptions(c, await c.req.json().catch(() => ({}))))
+app.get('/topups/options', async (c, next) => (legacyOpen() ? next() : c.json({ error: 'gone' }, 410)), notBlocked, async (c) => topupOptions(c, c.req.query()))
+
+async function topupOptions(c, q) {
+  if (!q || typeof q !== 'object') q = {}
   const pg = paygate(c)
   if (!pg) return c.json({ error: 'payments_not_configured' }, 503)
-  const q = c.req.query()
   const who = payer(c, q)
   if (who.error) return c.json({ error: who.error }, 400)
   const amount = q.pack ? findPack(q.pack)?.fcfa : q.amount ? Number(q.amount) : undefined
@@ -647,7 +668,7 @@ app.get('/topups/options', notBlocked, async (c) => {
     if (ours(e)) { console.error('moyens paygate', e.message); return c.json({ error: 'provider' }, 502) }
     return c.json({ error: e.code }, e.status)
   }
-})
+}
 
 app.get('/topups', async (c) => c.json({ topups: (await account(c).fetch('https://account/topup/list').then((r) => r.json())).map(topupView) }))
 
