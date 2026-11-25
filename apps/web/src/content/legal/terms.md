@@ -107,7 +107,7 @@ Il est aussi interdit de contourner nos limites, de perturber le service ou de t
 
 **Liens publics :** toute personne qui a l'adresse d'un fichier peut l'ouvrir.
 
-**Suppression :** un fichier supprimé de « Ma bibliothèque » est effacé de notre stockage (après un incident, à la demande suivante). Son nom, sa consigne et l'historique de la création restent chez nous ; des copies peuvent rester chez les prestataires ou dans des caches.
+**Suppression :** un fichier supprimé de « Ma bibliothèque » est effacé de notre stockage (après un incident, à la demande suivante), sauf s'il sert encore à un autre élément visible de votre bibliothèque. Son nom, sa consigne et l'historique de la création restent chez nous ; des copies peuvent rester chez les prestataires ou dans des caches.
 
 **Conservation :** gardez vos copies. [À DÉCIDER : durée de conservation garantie].
 

@@ -6,6 +6,9 @@ import { useLocation, useNavigationType } from 'react-router-dom'
  * à la section (#tarifs, #mentions-legales…) une fois la page affichée. Arrivée sur une nouvelle page : saut direct, sans
  * l'animation de html{scroll-behavior:smooth} ; ancre dans la même page : défilement doux. Un simple lien ouvre la page en haut.
  */
+/** Ancre décodée, ou null si elle est mal formée (« #% ») : traitée comme une ancre absente. */
+const safeDecode = (id) => { try { return decodeURIComponent(id) } catch { return null } }
+
 export default function useHashScroll() {
   const { pathname, hash, key } = useLocation()
   const navType = useNavigationType()
@@ -14,7 +17,7 @@ export default function useHashScroll() {
     // Nouvelle page : autre chemin, ou même adresse traitée à nouveau (composant remonté, StrictMode en développement).
     const arrived = shown.current?.pathname !== pathname || shown.current.key === key
     shown.current = { pathname, key }
-    const el = hash && document.getElementById(decodeURIComponent(hash.slice(1)))
+    const el = hash && document.getElementById(safeDecode(hash.slice(1)))
     if (!el) {
       if (navType === 'PUSH') window.scrollTo({ top: 0, behavior: 'instant' })
       return undefined
