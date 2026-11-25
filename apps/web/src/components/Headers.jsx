@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import Icon from '../lib/icons.jsx'
 import BalanceChip from './BalanceChip.jsx'
 import Cauri from './Cauri.jsx'
@@ -90,14 +90,16 @@ function HomeAccount() {
 }
 
 /** En-tête de la page d'accueil. La navigation (Explorer, Cinéma, Bibliothèque) mène à des écrans réservés : elle n'est montrée qu'une fois connecté. */
-export function HomeHeader() {
+/** En-tête public. `home` : posé par l'accueil, « Tarifs » reste sur place ; ailleurs (/terms, /privacy), il y ramène, à la bonne section. */
+export function HomeHeader({ home = false }) {
   const { signedIn } = useAuthState()
   return (
     <header className="nv">
       <Logo />
       {signedIn && <NavLinks />}
       <div className="rt">
-        <a href="#tarifs" className="pb"><Cauri size={16} />Tarifs</a>
+        {/* Sans page d'accueil (drapeau `home` éteint), « / » mène au studio : pas de lien « Tarifs ». */}
+        {home ? <a href="#tarifs" className="pb"><Cauri size={16} />Tarifs</a> : features.home && <Link to="/#tarifs" className="pb"><Cauri size={16} />Tarifs</Link>}
         <HomeAccount />
       </div>
     </header>

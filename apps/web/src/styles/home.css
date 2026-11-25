@@ -81,7 +81,7 @@
 .home .pricing,.home .lend{margin-top:72px}
 .home .lend{padding:56px 24px;border-radius:16px;background:var(--raised);text-align:center;display:flex;flex-direction:column;align-items:center;gap:20px}
 .home .lend h2{font-size:clamp(28px,3.4vw,46px)}
-.home .faq{margin-top:72px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:24px 48px;align-items:start}
+.home .faq{margin-top:72px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:24px 48px;align-items:start;scroll-margin-top:88px}
 .home .faq h2{font-family:var(--font-body);text-transform:none;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-size:clamp(26px,3vw,38px)}
 .home .faq details{border-bottom:1px solid var(--fill)}
 .home .faq details:first-child{border-top:1px solid var(--fill)}
@@ -90,25 +90,6 @@
 .home .faq summary::after{content:'+';flex:none;font-size:22px;line-height:1;color:var(--ink-3)}
 .home .faq details[open] summary::after{content:'–'}
 .home .faq details p{margin:0 0 18px;max-width:60ch;color:var(--ink-2);line-height:1.6}
-.home .ft{margin-top:72px;padding:40px 0 32px;border-top:1px solid var(--fill);color:var(--ink-3);font-size:14px}
-.home .fti{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:24px 48px}
-.home .ftb b{font-size:16px;color:var(--ink)}
-.home .ftb p{margin:8px 0 0;max-width:38ch;line-height:1.5}
-.home .ft nav{display:flex;flex-direction:column;align-items:flex-start;gap:0}
-.home .ft nav a{display:inline-flex;align-items:center;min-height:44px;color:var(--ink-2)}
-.home .ft nav a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
-.home .fti.has-contact{grid-template-columns:minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1.1fr)}
-.home .ftc{display:flex;flex-direction:column;gap:20px}
-.home .ftc>div{display:flex;flex-direction:column;align-items:flex-start}
-.home .ftc b{margin-bottom:2px;font-size:13px;font-weight:600;color:var(--ink-4);text-transform:uppercase;letter-spacing:.04em}
-.home .ftc>div>a{display:inline-flex;align-items:center;min-height:44px;color:var(--ink-2);overflow-wrap:anywhere}
-.home .ftc>div>a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
-.home .soc{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px}
-.home .soc a{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;color:var(--ink-2);transition:background-color .15s,color .15s}
-.home .soc a:hover{background:var(--fill);color:var(--ink)}
-.home .ft small a{text-decoration:underline;text-underline-offset:3px}
-.home .ft small a:hover{color:var(--ink-2)}
-.home .ft small{grid-column:1/-1;padding-top:20px;border-top:1px solid var(--fill);font-size:13px;color:var(--ink-4)}
 
 /* Tablette et téléphone */
 @media (max-width:900px){
@@ -141,14 +122,12 @@
 .home .md>b{padding-top:12px}
 .home .mb{font-size:13px}
 .home .lend{padding:40px 16px}
-.home .pricing,.home .lend,.home .faq,.home .ft{margin-top:56px}
-.home .fti,.home .fti.has-contact{grid-template-columns:1fr}
+.home .pricing,.home .lend,.home .faq{margin-top:56px}
 }
 @media (pointer:coarse){
 .home .pb,.home .lim,.home .nl{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 }
-@media (max-width:900px){.home .fti.has-contact{grid-template-columns:repeat(2,minmax(0,1fr))}.home .fti.has-contact .ftb{grid-column:1/-1}}
-@media (prefers-reduced-motion:reduce){.home .soc a,.home .md,.home .chips button,.home .goals button>img{transition:none}.home .goals button:hover>img{transform:none}}
+@media (prefers-reduced-motion:reduce){.home .md,.home .chips button,.home .goals button>img{transition:none}.home .goals button:hover>img{transform:none}}
 
 /* Pricing */
 .home .pricing{position:relative;scroll-margin-top:88px}

@@ -1,0 +1,19 @@
+/* Pages légales (/terms, /privacy) : une colonne de lecture sous l'en-tête de l'accueil. Les blancs à remplir gardent leurs couleurs claires dans les deux thèmes. */
+.legal .lgp{max-width:760px;padding-top:8px}
+.legal .lg-doc{padding:8px 0 0;color:var(--ink-2);font-size:16px;line-height:1.65}
+.legal .lg-doc h1{text-transform:none;letter-spacing:-.02em;font-family:var(--font-body);font-weight:700;color:var(--ink);font-size:32px;line-height:1.15;margin:24px 0 8px;text-wrap:balance}
+.legal .lg-doc h2{text-transform:none;font-family:var(--font-body);font-weight:700;letter-spacing:-.01em;color:var(--ink);font-size:20px;line-height:1.25;margin:36px 0 8px;scroll-margin-top:96px;text-wrap:balance}
+.legal .lg-doc h3{text-transform:none;letter-spacing:0;font-family:var(--font-body);font-weight:700;color:var(--ink);font-size:16px;margin:24px 0 6px}
+.legal .lg-doc p,.legal .lg-doc li{max-width:68ch}
+.legal .lg-doc strong{color:var(--ink)}
+.legal .lg-doc a{color:var(--lime-ink);text-decoration:underline;text-underline-offset:3px}
+.legal .lg-doc ul{padding-left:1.2em}
+.legal .lg-doc li{margin:4px 0}
+.legal .lg-doc hr{border:0;border-top:1px solid var(--fill);margin:40px 0}
+.legal .lg-tbl{overflow-x:auto;margin:12px 0}
+.legal .lg-doc table{border-collapse:collapse;font-size:15px;min-width:100%}
+.legal .lg-doc th,.legal .lg-doc td{border:1px solid var(--fill);padding:8px 10px;text-align:left;vertical-align:top}
+.legal .lg-doc th{color:var(--ink);background:var(--surface)}
+.legal mark.lg-todo{background:#fff1c7;color:#6b4a00;border-radius:4px;padding:0 3px}
+.legal mark.lg-dec{background:#e8e2ff;color:#3d2a8a;border-radius:4px;padding:0 3px}
+@media (max-width:720px){.legal .lg-doc h1{font-size:26px}}

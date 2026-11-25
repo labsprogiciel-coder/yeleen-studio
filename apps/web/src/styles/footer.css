@@ -1,0 +1,33 @@
+/* Pied de page public (accueil, /terms, /privacy) : marque, réseaux et paiement à gauche, colonnes de liens titrées, barre du bas (droits, éditeur, crédit). */
+.sf{margin-top:72px;border-top:1px solid var(--fill);color:var(--ink-3);font-size:14px;font-family:var(--font-body)}
+.sf-in,.sf-bar{max-width:1440px;margin:0 auto;padding:0 24px;box-sizing:border-box}
+.sf-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.4fr);gap:32px 56px;padding-top:44px;padding-bottom:36px}
+.sf-name{font-size:18px;color:var(--ink)}
+.sf-brand p{margin:8px 0 0;max-width:36ch;line-height:1.5}
+.sf-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:24px 32px}
+.sf-cols>div{display:flex;flex-direction:column;align-items:flex-start;min-width:0}
+.sf .sf-cols h2{margin:0 0 6px;font:600 12px/1.4 var(--font-body);color:var(--ink-4);text-transform:uppercase;letter-spacing:.06em}
+.sf-cols a{display:inline-flex;align-items:center;min-height:34px;color:var(--ink-2);overflow-wrap:anywhere}
+.sf-cols a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.sf-soc{list-style:none;margin:12px 0 0 -10px;padding:0;display:flex;gap:2px}
+.sf-soc a{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;color:var(--ink-2)}
+.sf-soc a:hover{background:var(--fill)}
+/* Filet du haut dessiné en fond pour suivre les marges intérieures (il s'arrête au bord du texte, pas de l'écran). */
+.sf-bar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 24px;padding-top:16px;padding-bottom:28px;font-size:13px;color:var(--ink-4);background-image:linear-gradient(var(--fill),var(--fill));background-size:calc(100% - 48px) 1px;background-position:24px 0;background-repeat:no-repeat}
+.sf-bar a{text-decoration:underline;text-underline-offset:3px}
+@media (max-width:900px){.sf-in{grid-template-columns:1fr}}
+@media (max-width:560px){
+  .sf{margin-top:56px}
+  .sf-in,.sf-bar{padding-left:16px;padding-right:16px}
+  .sf-bar{background-size:calc(100% - 32px) 1px;background-position:16px 0;flex-direction:column}
+  .sf-cols{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 16px}
+  .sf-cols a{min-height:44px}
+}
+.sf-cols a.sf-all{color:var(--lime-ink);font-weight:600}
+.sf-pay{display:flex;align-items:center;gap:10px;margin-top:16px;font-size:13px;color:var(--ink-3)}
+.sf-ops{display:inline-flex}
+.sf-op{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;box-shadow:0 0 0 1px var(--fill);border-radius:50%;border:2px solid var(--bg);box-sizing:border-box;font-style:normal;font-weight:800;font-size:14px;color:#fff}
+.sf-op+.sf-op{margin-left:-7px}
+.sf-op-orange{background:#000;overflow:hidden}
+.sf-op-moov{background:#0060a9;overflow:hidden}
+.sf-op-wave{background:#1dc8f2;overflow:hidden}

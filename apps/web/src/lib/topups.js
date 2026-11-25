@@ -15,6 +15,15 @@ export const topupCountries = (value) => {
   return list.length ? list : ['BF']
 }
 
+/** Opérateurs des pays ouverts, sans doublon, dans l'ordre des pays (même règle que la fenêtre de recharge) : Wave n'apparaît qu'avec la Côte d'Ivoire ou le Sénégal. */
+export const topupOperators = (value) => [...new Set(topupCountries(value).flatMap((k) => TOPUP_COUNTRIES[k].operators))]
+
+/** « Orange Money, Moov Money et Wave » : les noms des opérateurs, joints à la française. */
+export const operatorsText = (ops) => {
+  const names = ops.map((o) => OPERATORS[o] ?? o)
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}` : names[0] ?? ''
+}
+
 /** Pays d'un numéro E.164 parmi `countries` (indicatif et nombre de chiffres), ou undefined. Sert à reprendre une recharge : l'API ne renvoie pas son pays. */
 export const countryOfPhone = (e164, countries) => {
   const d = String(e164 ?? '').replace(/\D/g, '')

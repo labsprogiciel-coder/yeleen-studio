@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { countdown, countryOfPhone, errorMessage, expiryMs, failureText, isFinal, isOpen, limitError, lines, maskPhone, telHref, topupCountries, ussdCodes } from '../src/lib/topups.js'
+import { countdown, operatorsText, topupOperators, countryOfPhone, errorMessage, expiryMs, failureText, isFinal, isOpen, limitError, lines, maskPhone, telHref, topupCountries, ussdCodes } from '../src/lib/topups.js'
 
 test('consignes de paygate : français d’abord, liste ou texte', () => {
   assert.deepEqual(lines({ fr: ['Composez *144*4*6*5000#', ' '], en: ['Dial'] }), ['Composez *144*4*6*5000#'])
@@ -64,4 +64,15 @@ test('countryOfPhone : pays d’une recharge reprise d’après son numéro E.16
   assert.equal(countryOfPhone('+2250712345678', ['BF']), undefined) // pays non ouvert
   assert.equal(countryOfPhone('+2267012345', ['BF']), undefined) // mauvais nombre de chiffres
   assert.equal(countryOfPhone(null, ['BF']), undefined)
+})
+
+test('opérateurs du pied de page : ceux des pays ouverts, sans doublon, joints à la française', () => {
+  assert.deepEqual(topupOperators(undefined), ['orange', 'moov'])
+  assert.deepEqual(topupOperators('BF,CI'), ['orange', 'moov', 'wave'])
+  assert.deepEqual(topupOperators('SN'), ['orange', 'wave'])
+  assert.deepEqual(topupOperators('XX'), ['orange', 'moov'])
+  assert.equal(operatorsText(['orange', 'moov']), 'Orange Money et Moov Money')
+  assert.equal(operatorsText(['orange', 'moov', 'wave']), 'Orange Money, Moov Money et Wave')
+  assert.equal(operatorsText(['wave']), 'Wave')
+  assert.equal(operatorsText([]), '')
 })
