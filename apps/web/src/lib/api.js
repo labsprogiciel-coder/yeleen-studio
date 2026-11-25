@@ -3,7 +3,7 @@
  * qui calcule le prix, débite les jetons, appelle fal et rembourse en cas d'échec.
  * Sans `VITE_API_URL`, `apiEnabled` est faux et l'application reste sur le moteur simulé.
  */
-const BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, '')
+const BASE = import.meta.env?.VITE_API_URL?.replace(/\/$/, '')
 export const apiEnabled = Boolean(BASE)
 /** Adresse publique d'un fichier du bucket servi par l'API (`/files/<clé>`), ou null sans API. */
 export const fileUrl = (key) => (BASE ? `${BASE}/files/${key}` : null)
@@ -44,8 +44,12 @@ export const api = {
   createJob: (spec) => request('/jobs', { method: 'POST', body: JSON.stringify(spec) }),
   job: (id) => request(`/jobs/${id}`),
   cancelJob: (id) => request(`/jobs/${id}/cancel`, { method: 'POST' }),
-  /** Recharges Mobile Money : moyen disponible pour ce numéro, lancement (ou nouvel essai avec `reference` et `preAuthCode`), suivi, historique. */
-  topupOptions: (q) => request(`/topups/options?${new URLSearchParams(q)}`),
+  /**
+   * Recharges Mobile Money : moyen disponible pour ce numéro, lancement (ou nouvel essai avec `reference` et `preAuthCode`), suivi, historique.
+   * Le numéro part dans le corps, pas dans l'adresse (gardée par les journaux de l'API), sauf repli vers une API d'avant ce changement
+   * (`postOrLegacy`).
+   */
+  topupOptions: (q) => postOrLegacy('/topups/options', q, () => `/topups/options?${new URLSearchParams(q)}`),
   createTopup: (spec) => request('/topups', { method: 'POST', body: JSON.stringify(spec) }),
   topup: (reference) => request(`/topups/${encodeURIComponent(reference)}`),
   topups: () => request('/topups'),
@@ -69,7 +73,8 @@ export const api = {
    * dans son corps JSON une clé d'idempotence `adm_…` (une par ouverture de fenêtre) et un motif ; l'en-tête resterait perdu (voir `request`).
    */
   adminMe: () => request('/admin/me'),
-  adminUsers: (q = '') => request(`/admin/users?${new URLSearchParams({ q })}`),
+  /** Recherche (e-mail, numéro…) : le texte part dans le corps, pas dans l'adresse (gardée par les journaux de l'API), sauf repli (`postOrLegacy`). */
+  adminUsers: (q = '') => postOrLegacy('/admin/users/search', { q }, () => `/admin/users?${new URLSearchParams({ q })}`),
   adminUser: (uid) => request(`/admin/users/${enc(uid)}`),
   adminAdjust: (uid, { key, direction, amount, reason }) => post(`/admin/users/${enc(uid)}/adjust`, { key, direction, amount, reason }),
   adminRefund: (uid, jobId, { key, amount, reason }) => post(`/admin/users/${enc(uid)}/jobs/${enc(jobId)}/refund`, { key, ...(amount != null ? { amount } : {}), reason }),
@@ -109,6 +114,21 @@ export const api = {
 
 const enc = encodeURIComponent
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) })
+
+/**
+ * POST avec les données dans le corps ; si l'API ne connaît pas encore cette route (404 ou 405 : API d'avant ce changement, le site
+ * et l'API se publient séparément, sans ordre, et l'API peut être revenue en arrière), une seule nouvelle demande par l'ancienne
+ * forme GET (`legacy()`, données dans l'adresse). Repli à retirer à la version suivante, avec les anciennes routes de l'API
+ * (refusées par elle après LEGACY_UNTIL, voir apps/api/src/legacy.js).
+ */
+async function postOrLegacy(path, body, legacy) {
+  try {
+    return await post(path, body)
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 405)) return request(legacy())
+    throw e
+  }
+}
 
 async function sendFile(path, file) {
   let res

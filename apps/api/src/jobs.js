@@ -123,7 +123,45 @@ export async function advanceJob({ env, acct, accountId, origin, job }) {
   return { job: stale ?? next }
 }
 
-/** Jeton du webhook fal d'une génération : HMAC-SHA256 de « compte:génération » avec WEBHOOK_SECRET, en base64url. */
+const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+const unb64url = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (ch) => ch.charCodeAt(0))
+
+/** Clé AES-GCM du webhook, dérivée de WEBHOOK_SECRET (HKDF) : distincte de la clé HMAC de l'ancienne forme. */
+async function sealKey(secret) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'HKDF', false, ['deriveKey'])
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('yeleen fal webhook v2') },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+}
+
+/**
+ * Jeton opaque du webhook fal (`k`) : compte et génération chiffrés et authentifiés (AES-256-GCM, vecteur aléatoire) avec une clé
+ * tirée de WEBHOOK_SECRET. L'adresse donnée à fal ne montre donc ni le compte ni la génération ; seule l'API sait l'ouvrir, et un
+ * jeton fabriqué ou retouché ne s'ouvre pas (le contrôle d'intégrité de GCM échoue), comme un HMAC faux.
+ */
+export async function sealWebhook(secret, accountId, jobId) {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await sealKey(secret), new TextEncoder().encode(JSON.stringify([accountId, jobId]))))
+  const out = new Uint8Array(iv.length + ct.length)
+  out.set(iv)
+  out.set(ct, iv.length)
+  return b64url(out)
+}
+
+/** Ouvre un jeton de `sealWebhook` : { accountId, jobId }, ou null s'il est faux, retouché ou d'un autre secret. */
+export async function openWebhook(secret, token) {
+  if (typeof token !== 'string' || !/^[\w-]{40,600}$/.test(token)) return null
+  try {
+    const raw = unb64url(token)
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, await sealKey(secret), raw.slice(12))
+    const [accountId, jobId] = JSON.parse(new TextDecoder().decode(plain))
+    return typeof accountId === 'string' && accountId && typeof jobId === 'string' && jobId ? { accountId, jobId } : null
+  } catch { return null }
+}
+
+/**
+ * Ancienne forme du jeton (adresse `?a=<compte>&j=<génération>&t=<jeton>`, qui montrait le compte) : HMAC-SHA256 de
+ * « compte:génération » avec WEBHOOK_SECRET, en base64url. Plus émise ; acceptée pour les générations envoyées avant, jusqu'à LEGACY_UNTIL (legacy.js).
+ */
 export async function webhookToken(secret, accountId, jobId) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${accountId}:${jobId}`)))

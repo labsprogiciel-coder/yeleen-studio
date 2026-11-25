@@ -4,6 +4,7 @@ import { Account } from '../src/account-do.js'
 import { advanceJob } from '../src/jobs.js'
 import { resetAuthCache } from '../src/auth.js'
 import app from '../src/index.js'
+import { LEGACY_UNTIL } from '../src/legacy.js'
 import { signBody } from '../src/paygate.js'
 import { resetUserCache } from '../src/users.js'
 import { testD1 } from './d1.js'
@@ -76,6 +77,7 @@ function setup(vars = {}) {
     return { status: res.status, body: json }
   }
   t.admin = (path, init) => t.as('user_admin', path, init)
+  t.forgetTokens = () => { for (const k of Object.keys(tokens)) delete tokens[k] } // jetons à resigner (horloge déplacée)
   t.rows = (sql, ...args) => db.raw.prepare(sql).all(...args)
   t.restore = () => { globalThis.fetch = real }
   return t
@@ -90,7 +92,7 @@ test('administration : réservée à ADMIN_USER_IDS (403 sinon), liste vide = pe
   const t = setup()
   try {
     assert.equal((await t.as('user_alice', '/wallet')).status, 200)
-    for (const [path, init] of [['/admin/me'], ['/admin/users'], ['/admin/users/user_alice'], ['/admin/topups'], ['/admin/jobs'], ['/admin/users/user_alice/adjust', post({ key: key(), direction: 'credit', amount: 10, reason: 'geste' })]]) {
+    for (const [path, init] of [['/admin/me'], ['/admin/users'], ['/admin/users/search', post({ q: 'alice' })], ['/admin/users/user_alice'], ['/admin/topups'], ['/admin/jobs'], ['/admin/users/user_alice/adjust', post({ key: key(), direction: 'credit', amount: 10, reason: 'geste' })]]) {
       const r = await t.as('user_alice', path, init)
       assert.equal(r.status, 403, path)
       assert.equal(r.body.error, 'forbidden')
@@ -127,13 +129,25 @@ test('administration : recherche par identifiant, e-mail, numéro, génération 
     const recent = await t.admin('/admin/users')
     assert.deepEqual(recent.body.users.map((u) => u.id).sort(), ['user_admin', 'user_alice', 'user_bob'])
     assert.deepEqual(Object.keys(recent.body.users[0]).sort(), ['avatarUrl', 'blockedAt', 'country', 'createdAt', 'email', 'id', 'lastSeenAt', 'name'])
-    assert.deepEqual((await t.admin('/admin/users?q=user_bob')).body.users.map((u) => u.id), ['user_bob'])
-    assert.deepEqual((await t.admin('/admin/users?q=ALICE@EXAMPLE')).body.users.map((u) => u.id), ['user_alice'])
-    assert.deepEqual((await t.admin('/admin/users?q=%25')).body.users, []) // % et _ sont pris à la lettre
+    const search = async (q) => (await t.admin('/admin/users/search', post({ q }))).body.users.map((u) => u.id)
+    assert.deepEqual(await search('user_bob'), ['user_bob'])
+    assert.deepEqual(await search('ALICE@EXAMPLE'), ['user_alice'])
+    assert.deepEqual(await search('%'), []) // % et _ sont pris à la lettre
+    assert.deepEqual((await search('')).sort(), ['user_admin', 'user_alice', 'user_bob']) // sans texte : les plus récents
     await t.as('user_bob', '/topups', post(topupReq))
-    assert.deepEqual((await t.admin('/admin/users?q=70123456')).body.users.map((u) => u.id), ['user_bob'])
+    assert.deepEqual(await search('70123456'), ['user_bob'])
     const job = await t.as('user_alice', '/jobs', post(image))
-    assert.deepEqual((await t.admin(`/admin/users?q=${job.body.jobId}`)).body.users.map((u) => u.id), ['user_alice'])
+    assert.deepEqual(await search(job.body.jobId), ['user_alice'])
+    // Ancienne forme (texte dans l'adresse), gardée pour un site d'avant ce changement : même réponse.
+    assert.deepEqual((await t.admin('/admin/users?q=ALICE@EXAMPLE')).body.users.map((u) => u.id), ['user_alice'])
+    // Après LEGACY_UNTIL, elle est refusée d'elle-même (410) ; la recherche par le corps marche toujours.
+    const now = Date.now
+    Date.now = () => LEGACY_UNTIL
+    t.forgetTokens()
+    try {
+      assert.deepEqual(await t.admin('/admin/users?q=ALICE@EXAMPLE').then((r) => [r.status, r.body.error]), [410, 'gone'])
+      assert.deepEqual(await search('ALICE@EXAMPLE'), ['user_alice'])
+    } finally { Date.now = now; t.forgetTokens() }
 
     assert.equal((await t.admin('/admin/users/user_inconnu')).status, 404)
     assert.equal(t.stores.has('user_inconnu'), false) // son Durable Object n'a pas été touché
@@ -412,6 +426,7 @@ test('blocage : plus de génération, de recharge, d\'import ni d\'« Améliorer
       ['/jobs', post({ ...image, requestId: 'meme-demande-123' })],
       ['/topups', post(topupReq)],
       ['/topups', post({ ...topupReq, reference: top.body.topup.reference })], // nouvel essai d'une recharge existante
+      ['/topups/options', post({ operator: 'moov', phone: '70123456' })],
       ['/topups/options?operator=moov&phone=70123456'],
       ['/enhance', post({ text: 'un chat qui danse sous la pluie', kind: 'image' })],
       ['/uploads?name=a.png', { method: 'POST', headers: { 'content-type': 'image/png' }, body: 'x' }],
@@ -434,7 +449,7 @@ test('blocage : plus de génération, de recharge, d\'import ni d\'« Améliorer
     assert.equal((await t.as('user_alice', `/jobs/${job.body.jobId}/cancel`, { method: 'POST' })).body.status, 'CANCELED')
 
     // Copie dans D1 pour les listes ; fiche : bloqué.
-    assert.equal((await t.admin('/admin/users?q=user_alice')).body.users[0].blockedAt, b.body.blocked.at)
+    assert.equal((await t.admin('/admin/users/search', post({ q: 'user_alice' }))).body.users[0].blockedAt, b.body.blocked.at)
     const page = await t.admin('/admin/users/user_alice')
     assert.deepEqual([page.body.blocked.reason, page.body.user.blockedReason], ['Fraude suspectée', 'Fraude suspectée'])
 
@@ -442,7 +457,7 @@ test('blocage : plus de génération, de recharge, d\'import ni d\'« Améliorer
     assert.deepEqual([u.status, u.body.blocked], [200, null])
     assert.equal((await t.as('user_alice', '/jobs', post(image))).status, 202)
     assert.equal((await t.as('user_alice', '/me')).body.blocked, false)
-    assert.equal((await t.admin('/admin/users?q=user_alice')).body.users[0].blockedAt, null)
+    assert.equal((await t.admin('/admin/users/search', post({ q: 'user_alice' }))).body.users[0].blockedAt, null)
     assert.deepEqual(t.rows('SELECT action FROM admin_actions ORDER BY at').map((r) => r.action), ['block', 'unblock'])
     assert.equal((await t.admin('/admin/users/user_alice/block', post({ key: key(), blocked: 'oui', reason: 'Fraude suspectée' }))).status, 400)
   } finally { t.restore() }
@@ -839,7 +854,7 @@ test('liste des comptes suspendus (D1) : un blocage dont l\'écriture arrive apr
     assert.equal((await blocking).status, 200)
     assert.equal((await t.as('user_alice', '/me')).body.blocked, false)
     assert.deepEqual(t.rows('SELECT * FROM user_blocks'), []) // pas « suspendu » dans la liste
-    assert.equal((await t.admin('/admin/users?q=user_alice')).body.users[0].blockedAt, null)
+    assert.equal((await t.admin('/admin/users/search', post({ q: 'user_alice' }))).body.users[0].blockedAt, null)
 
     // Écriture dans D1 perdue : le Durable Object bloque, la liste ne le sait pas ; la fiche la répare.
     t.db.prepare = (sql) => (sql.startsWith('INSERT INTO user_blocks') ? { bind: () => ({ run: async () => { throw new Error('D1 indisponible') } }) } : prepare(sql))
@@ -849,7 +864,7 @@ test('liste des comptes suspendus (D1) : un blocage dont l\'écriture arrive apr
     const page = await t.admin('/admin/users/user_alice')
     assert.ok(page.body.user.blockedAt)
     assert.equal(t.rows('SELECT reason FROM user_blocks WHERE user_id = ?', 'user_alice')[0].reason, 'Fraude')
-    assert.ok((await t.admin('/admin/users?q=user_alice')).body.users[0].blockedAt)
+    assert.ok((await t.admin('/admin/users/search', post({ q: 'user_alice' }))).body.users[0].blockedAt)
   } finally { console.error = realError; t.restore() }
 })
 

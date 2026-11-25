@@ -1,3 +1,5 @@
+import { errorDetail } from './redact.js'
+
 /**
  * Client minimal de la file fal.ai (REST), sans dépendance : il tourne tel quel dans un Worker.
  * Flux : submit → status (IN_QUEUE, IN_PROGRESS, COMPLETED) → result. Les adresses de suivi viennent de la réponse
@@ -10,7 +12,7 @@ const STORAGE = 'https://rest.alpha.fal.ai/storage/upload/initiate?storage_type=
 
 export class FalError extends Error {
   constructor(status, body, where) {
-    const detail = typeof body === 'string' ? body : JSON.stringify(body)
+    const detail = errorDetail(body) // sans l'entrée renvoyée (consigne) : le message part dans les journaux
     super(`fal ${where} ${status}: ${detail.slice(0, 300)}`)
     this.status = status
     this.body = body

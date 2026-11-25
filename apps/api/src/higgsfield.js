@@ -1,3 +1,5 @@
+import { errorDetail } from './redact.js'
+
 /**
  * Client minimal de l'API Higgsfield (REST), sans dépendance : il tourne tel quel dans un Worker.
  * Une génération : POST https://api.higgsfield.ai/<point d'accès> avec l'entrée JSON, puis GET /requests/<id>/status jusqu'à un état
@@ -9,7 +11,7 @@ const API = 'https://api.higgsfield.ai'
 
 export class HiggsfieldError extends Error {
   constructor(status, body, where) {
-    const detail = typeof body === 'string' ? body : JSON.stringify(body)
+    const detail = errorDetail(body) // sans l'entrée renvoyée (consigne) : le message part dans les journaux
     super(`higgsfield ${where} ${status}: ${(detail ?? '').slice(0, 300)}`)
     this.status = status
     this.body = body

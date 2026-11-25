@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { legacyOpen } from './legacy.js'
 import { STORING, advanceJob, isActive } from './jobs.js'
 import { ledgerOf } from './mirror.js'
 import { OPEN_STATUSES, recheckTopup, topupView } from './topups.js'
@@ -133,8 +134,16 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
   a.get('/me', (c) => c.json({ admin: true, uid: c.get('uid') }))
 
   // Recherche : identifiant exact, e-mail (morceau, sans casse), numéro d'une recharge, référence de recharge ou identifiant de génération.
-  a.get('/users', async (c) => {
-    const q = (c.req.query('q') ?? '').trim().slice(0, 200)
+  // Le texte cherché (e-mail, numéro) arrive dans le corps de POST /users/search : une adresse est gardée par les journaux du Worker,
+  // un corps non. GET /users?q= reste accepté le temps qu'un site déjà chargé soit remplacé, jusqu'à LEGACY_UNTIL (legacy.js), puis 410 ;
+  // à retirer à la version suivante.
+  a.post('/users/search', async (c) => {
+    const body = await c.req.json().catch(() => ({}))
+    return searchUsers(c, typeof body?.q === 'string' ? body.q : '')
+  })
+  a.get('/users', (c) => (legacyOpen() ? searchUsers(c, c.req.query('q') ?? '') : c.json({ error: 'gone' }, 410)))
+  const searchUsers = async (c, text) => {
+    const q = text.trim().slice(0, 200)
     const cols = 'u.id, u.email, u.name, u.country, u.created_at AS createdAt, u.last_seen_at AS lastSeenAt, b.blocked_at AS blockedAt, a.url AS avatarUrl'
     const from = 'users u LEFT JOIN user_blocks b ON b.user_id = u.id LEFT JOIN user_avatars a ON a.user_id = u.id'
     const db = c.env.DB
@@ -149,7 +158,7 @@ export function adminApp({ accountStub, paygate, providerCancel }) {
         ORDER BY u.created_at DESC LIMIT 50`).bind(q, like, digits.length >= 8 ? `%${digits}` : null).all())
     }
     return c.json({ users: rows })
-  })
+  }
 
   // Fiche d'un utilisateur : profil (D1), solde et blocage (Durable Object), recharges (Durable Object), générations, grand livre, actions.
   a.get('/users/:uid', async (c) => {
