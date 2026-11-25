@@ -24,6 +24,8 @@ const Cinema = lazy(() => import('./pages/Cinema.jsx'))
 const Admin = lazy(() => import('./pages/Admin.jsx'))
 // Page d'accueil derrière le drapeau `home` : éteinte, « / » mène au studio Cinéma, protégé, donc à la connexion Clerk pour un visiteur.
 const Home = lazy(() => import('./pages/Home.jsx'))
+// Conditions générales et confidentialité : publiques, chargées à part (elles embarquent marked).
+const Legal = lazy(() => import('./pages/Legal.jsx'))
 const start = features.home ? <Home /> : <Navigate to="/cinema" replace />
 
 // Les liens `href="#"` sont des emplacements : ils ne doivent pas ramener la page en haut.
@@ -59,6 +61,8 @@ export default function App() {
       <Route path="/cinema" element={<Protected><Cinema /></Protected>} />
       <Route path="/admin" element={<Protected><AdminOnly><Admin /></AdminOnly></Protected>} />
       <Route path="/recharge/*" element={<Protected><RechargeRoute /></Protected>} />
+      <Route path="/terms" element={<Legal page="terms" />} />
+      <Route path="/privacy" element={<Legal page="privacy" />} />
       <Route path="/sign-in/*" element={<SignInPage />} />
       <Route path="/sign-up/*" element={<SignUpPage />} />
       <Route path="*" element={start} />
