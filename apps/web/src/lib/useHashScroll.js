@@ -17,7 +17,8 @@ export default function useHashScroll() {
     // Nouvelle page : autre chemin, ou même adresse traitée à nouveau (composant remonté, StrictMode en développement).
     const arrived = shown.current?.pathname !== pathname || shown.current.key === key
     shown.current = { pathname, key }
-    const el = hash && document.getElementById(safeDecode(hash.slice(1)))
+    const id = hash ? safeDecode(hash.slice(1)) : null
+    const el = id ? document.getElementById(id) : null
     if (!el) {
       if (navType === 'PUSH') window.scrollTo({ top: 0, behavior: 'instant' })
       return undefined
